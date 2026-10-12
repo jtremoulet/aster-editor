@@ -92,3 +92,15 @@
 - Revue : 1 remarque (`selectAll` bloqué en lecture seule), non bloquante.
 - Deux frictions de mon côté avant le check complet : un `*/` dans un commentaire JSDoc de mon script playground, et les globals Node absents de la config ESLint pour `.mjs`.
 - Bump **0.1.0**, changelog. Vague 1 close à 23:25, soit 33 min après le lancement des agents, contre 3h prévues.
+
+### 23:25 — Vague 2 lancée : L5 angular+démo (`af7b93f6`), L6 tables/images (`abc0fc4a`), L8 docs (`a4b4b6df`)
+- L7 (recherche, vue source, plein écran) volontairement différé après L6 : les deux toucheraient `create-aster.ts`, les dictionnaires UI et les CSS. Le temps ne manque pas, la sérialisation coûte moins que les conflits.
+- `preview_start` du playground a lancé le mauvais serveur (launch.json du workspace parent `C:\workspace`, « escrime-site »). Contournement : serveur esbuild lancé à la main en arrière-plan sur 4300.
+
+### 23:28 — Vérification navigateur du playground vanilla (0.1.0)
+- Rendu complet toolbar `full` (31 items), contenu stylé, compteur de mots. Captures dans `docs/captures/`.
+- Vérifié par JS dans le vrai navigateur : collage Word listes imbriquées (`<ol type="a">` conservé), collage table Word (`th`, `colspan`), collage Google Docs, **import .docx réel via le bundle navigateur de mammoth** (titres, listes 3 niveaux, image base64 + alt, note de bas de page), gras par bouton, menu titres, grille de table 2×3, undo, bascule fr/en des tooltips, lecture seule grise les boutons, roving tabindex (1 seul tabbable), thème `night`.
+- **Bug trouvé** : bouton Lien toujours grisé. Le dialogue testait `canRun('link.set', { href: '' })` et le core rejette l'URL vide. Deux agents conformes à leurs briefs, incompatibles à l'intégration : c'est exactement le type de bug que seul un test de bout en bout attrape. Corrigé côté UI, commit `52cbd31`.
+- Point d'attention : insérer une table avec la sélection dans un titre coupe le titre en deux (comportement Tiptap). À documenter, pas bloquant.
+- 23:33 — Clavier vérifié en vrai navigateur : frappe, `Ctrl+A`/`Ctrl+B`, `Enter`, `Ctrl+Shift+8`, `Tab` pour imbriquer, `Ctrl+Alt+2`. Note : `Ctrl+Alt+2` dans un item de liste sort l'item en titre (comportement Tiptap `toggleHeading`), acceptable.
+- Brief L7 rédigé dans `docs/briefs/L7-should.md`, en attente de L6.
