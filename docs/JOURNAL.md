@@ -166,3 +166,10 @@
 - Méthode du relecteur à retenir : un fichier de preuves `proofs.scratch.spec.ts` avec un test par finding assertant le comportement **obtenu**, qui passera au rouge une fois corrigé. Zéro finding sans entrée concrète.
 - Passes DOM mesurées linéaires jusqu'à 3 Mo. Lot L9b lancé (`a?`) pour les 15 findings.
 - Note : `export/` (L10) non relu par R-word, livré pendant la revue → revue dédiée à prévoir.
+
+### 00:30 — L12 e2e Playwright rendu et intégré (agent 19 min, 223k tokens, 67 outils)
+- 21 tests e2e (16 playground, 5 démo), 3 runs verts, rejoués par l'orchestrateur : **21/21 en 15 s**. Captures dans `e2e/output/` (gitignoré) et 2 copiées dans `docs/captures/`.
+- 2 bugs trouvés que jsdom ne pouvait pas voir : Échap en plein écran inerte depuis l'éditeur (ProseMirror capture la touche et `preventDefault`), menu contextuel de table `position: fixed` sans clamp dans le viewport. → L9c après R-ui.
+- Piège Vite à froid : le premier `importDocx` sur `ng serve` déclenche l'optimisation de `mammoth` et recharge la page. Contourné par un retry dans le test ; à noter dans le guide d'intégration.
+- Scripts `e2e` corrigés (`-c e2e/playwright.config.ts`), `e2e/tsconfig.json` ajouté au `typecheck` racine.
+- `data-testid` proposés pour découpler les e2e des libellés FR : à faire en V1.1.
