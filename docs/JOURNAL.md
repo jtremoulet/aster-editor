@@ -178,3 +178,10 @@
 - 9 bloquants, tous d'accessibilité ou de focus : `aria-pressed` sur des boutons non-toggle, focus perdu au re-clic du déclencheur et au passage en lecture seule, Tab ne ferme pas les menus, `getIcon('constructor')` renvoie une fonction (pollution DOM, pas de XSS), menu contextuel jamais resynchronisé, vue source laissée en lecture seule définitive si la toolbar est détruite, panneau coupé en plein écran, contraste du surlignage night à 4,05. Aucune fuite d'écouteur, aucun `innerHTML` non constant, variables CSS toutes consommées.
 - Lot L9c lancé sur ui avec ces 9 bloquants + les 2 bugs des e2e (Échap plein écran, clamp du menu contextuel) + un test de contraste automatisé sur les thèmes.
 - Observation REX : les trois revues ont chacune trouvé 3 à 9 bloquants dans du code à 94-99 % de couverture. Les TU des agents testent ce qu'ils ont construit ; la revue adverse teste ce qu'ils n'ont pas imaginé. Les deux sont nécessaires.
+
+### 00:40 — Revue R-core rendue (agent 35 min, sondes exécutées puis supprimées)
+- 3 bloquants : `setReadOnly` émet `change` (Tiptap `setEditable` émet `update` par défaut) → le wrapper Angular salit le formulaire à chaque `disabled` ; politique de liens non appliquée au parsing des `<img>` (`javascript:` et `data:text/html` conservés) alors que le README promettait le contraire ; `paragraph`/`heading` via `setNode` mutent le document même en échouant (`run` → `false` mais l'item de liste est éjecté).
+- Perf mesurée : `getHTML()` 45 ms sur 500 paragraphes + 10 tables (62 % dans le reparse de `normalizeOutputHtml`), appelé à chaque frappe par Angular → cache par identité de `state.doc`.
+- Diagnostic du flake confirmé : `FileReader` jsdom = 3 `setImmediate` imbriqués contre 2 `setTimeout(0)` ; 30/30 pertes sous charge. Mon correctif `vi.waitFor` est valide, le relecteur propose `waitForEvent` : équivalent.
+- Décisions produit prises par l'orchestrateur pour L9d : pas de titre dans les items de liste en V1, pas de tables imbriquées en V1, `clearFormatting` conserve les liens.
+- Lot L9d lancé. Les 4 lots de correctifs L9a-d couvrent 54 findings au total.
