@@ -91,17 +91,19 @@ function readLE(bytes: Uint8Array, offset: number, size: 2 | 4): number {
 }
 
 /**
- * Extrait une entrée d'une archive zip en lisant le répertoire central : lecteur
- * minimal pour les tests, sans dépendre de JSZip (dépendance interne de `docx`).
- * Méthodes 0 (stocké) et 8 (deflate) uniquement, ce que JSZip produit.
+ * Parcourt le répertoire central d'une archive zip et rend, pour chaque entrée, son
+ * nom et un lecteur paresseux de son contenu décodé : lecteur minimal pour les tests,
+ * sans dépendre de JSZip (dépendance interne de `docx`). Méthodes 0 (stocké) et
+ * 8 (deflate) uniquement, ce que JSZip produit.
  */
-export function readZipEntry(archive: Uint8Array, name: string): string {
+function walkZip(archive: Uint8Array): Array<{ name: string; read: () => string }> {
   let eocd = archive.length - 22;
   while (eocd >= 0 && readLE(archive, eocd, 4) !== 0x06054b50) eocd -= 1;
   if (eocd < 0) throw new Error('zip: répertoire central introuvable');
   const entries = readLE(archive, eocd + 10, 2);
   let offset = readLE(archive, eocd + 16, 4);
   const decoder = new TextDecoder();
+  const result: Array<{ name: string; read: () => string }> = [];
   for (let i = 0; i < entries; i += 1) {
     const method = readLE(archive, offset + 10, 2);
     const compressedSize = readLE(archive, offset + 20, 4);
@@ -109,19 +111,43 @@ export function readZipEntry(archive: Uint8Array, name: string): string {
     const extraLength = readLE(archive, offset + 30, 2);
     const commentLength = readLE(archive, offset + 32, 2);
     const localOffset = readLE(archive, offset + 42, 4);
-    const entryName = decoder.decode(archive.subarray(offset + 46, offset + 46 + nameLength));
-    if (entryName === name) {
-      const dataStart =
-        localOffset +
-        30 +
-        readLE(archive, localOffset + 26, 2) +
-        readLE(archive, localOffset + 28, 2);
-      const data = archive.subarray(dataStart, dataStart + compressedSize);
-      return decoder.decode(method === 8 ? inflateRawSync(data) : data);
-    }
+    const name = decoder.decode(archive.subarray(offset + 46, offset + 46 + nameLength));
+    result.push({
+      name,
+      read: () => {
+        const dataStart =
+          localOffset +
+          30 +
+          readLE(archive, localOffset + 26, 2) +
+          readLE(archive, localOffset + 28, 2);
+        const data = archive.subarray(dataStart, dataStart + compressedSize);
+        return decoder.decode(method === 8 ? inflateRawSync(data) : data);
+      },
+    });
     offset += 46 + nameLength + extraLength + commentLength;
   }
-  throw new Error(`zip: entrée ${name} absente`);
+  return result;
+}
+
+/** Extrait une entrée d'une archive zip par son nom (`word/document.xml`…). */
+export function readZipEntry(archive: Uint8Array, name: string): string {
+  const entry = walkZip(archive).find((candidate) => candidate.name === name);
+  if (!entry) throw new Error(`zip: entrée ${name} absente`);
+  return entry.read();
+}
+
+/**
+ * Toutes les entrées textuelles d'un .docx (`word/document.xml`, `word/numbering.xml`,
+ * `word/_rels/document.xml.rels`, `docProps/core.xml`…) indexées par nom. Les médias
+ * (`word/media/*`) sont laissés de côté : ce sont des octets, pas du XML.
+ */
+export async function toZipEntries(blob: Blob): Promise<ReadonlyMap<string, string>> {
+  const archive = new Uint8Array(await blob.arrayBuffer());
+  const entries = new Map<string, string>();
+  for (const entry of walkZip(archive)) {
+    if (!entry.name.startsWith('word/media/')) entries.set(entry.name, entry.read());
+  }
+  return entries;
 }
 
 /**

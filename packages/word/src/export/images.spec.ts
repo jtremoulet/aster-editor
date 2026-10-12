@@ -11,7 +11,7 @@ async function context(overrides: Partial<ExportContext> = {}): Promise<ExportCo
     fetchImage: undefined,
     maxImageWidth: 600,
     warnings: [],
-    nextListInstance: 1,
+    lists: [],
     ...overrides,
   };
 }

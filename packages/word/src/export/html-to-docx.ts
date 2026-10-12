@@ -2,6 +2,7 @@ import type { Document as DocxDocument } from 'docx';
 import { ROOT_SCOPE, convertChildren } from './blocks';
 import type { ExportContext } from './context';
 import type { DocxModule } from './docx-module';
+import { sanitizeXmlText } from './sanitize';
 import {
   PAGE_MARGIN,
   buildCharacterStyles,
@@ -34,16 +35,18 @@ export async function buildDocx(
     fetchImage: options.fetchImage,
     maxImageWidth: contentWidthPx(pageSize),
     warnings: [],
-    nextListInstance: 1,
+    lists: [],
   };
   let children = await convertChildren(dom.body, ROOT_SCOPE, ctx);
   // Word exige au moins un paragraphe par section.
   if (children.length === 0) children = [new docx.Paragraph({ children: [] })];
   const page = pageDimensions(pageSize);
   const document = new docx.Document({
-    title: options.title,
-    creator: options.creator,
-    numbering: buildNumbering(docx),
+    // Les propriétés vont dans `docProps/core.xml` : même règle XML que le corps.
+    title: options.title === undefined ? undefined : sanitizeXmlText(options.title),
+    creator: options.creator === undefined ? undefined : sanitizeXmlText(options.creator),
+    // Les références de numérotation sont connues après la conversion : une par liste.
+    numbering: buildNumbering(docx, ctx.lists),
     styles: {
       paragraphStyles: buildParagraphStyles(),
       characterStyles: buildCharacterStyles(),

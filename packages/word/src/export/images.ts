@@ -1,6 +1,7 @@
 import type { ImageRun } from 'docx';
 import { warn, type ExportContext } from './context';
 import { parsePixels } from './css';
+import { sanitizeXmlText } from './sanitize';
 
 /** Formats raster que Word embarque sans repli. */
 export type RasterType = 'png' | 'jpg' | 'gif' | 'bmp';
@@ -178,8 +179,9 @@ export async function imageRun(img: Element, ctx: ExportContext): Promise<ImageR
     parsePixels(img.getAttribute('height')),
     ctx.maxImageWidth,
   );
-  const alt = img.getAttribute('alt') ?? '';
-  const title = img.getAttribute('title') ?? alt;
+  // `alt`/`title` finissent dans les attributs de `wp:docPr` : même règle XML que le texte.
+  const alt = sanitizeXmlText(img.getAttribute('alt') ?? '');
+  const title = sanitizeXmlText(img.getAttribute('title') ?? alt);
   return new ctx.docx.ImageRun({
     type,
     data: bytes,

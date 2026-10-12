@@ -1,4 +1,5 @@
 import type { ICharacterStyleOptions, INumberingOptions, IParagraphStyleOptions } from 'docx';
+import type { ListDefinition } from './context';
 import type { DocxModule } from './docx-module';
 import type { DocxPageSize } from './types';
 
@@ -30,11 +31,6 @@ export const STYLE_IDS = {
 export type ListKind =
   'bullet' | 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman';
 
-/** Référence `numbering` d'une liste, une par format. */
-export function numberingReference(kind: ListKind): string {
-  return `aster-${kind}`;
-}
-
 /** Attribut `type` d'un `<ol>` → format de niveau. Décimal par défaut. */
 export function listKindFromType(type: string | null): ListKind {
   switch (type) {
@@ -55,11 +51,16 @@ export function listKindFromType(type: string | null): ListKind {
 const BULLET_GLYPHS = [String.fromCharCode(0x2022), 'o', String.fromCharCode(0x25aa)] as const;
 
 /**
- * Numérotations du document : une par `ListKind`, chacune sur `LIST_LEVELS` niveaux
- * avec un retrait croissant. Les numéros reprennent le format à chaque niveau
- * (`%1.`, `%2.`…) pour rester lisibles dans Word.
+ * Numérotations du document : une par liste HTML rencontrée (voir `ListDefinition`),
+ * chacune sur `LIST_LEVELS` niveaux avec un retrait croissant. Les numéros reprennent
+ * le format à chaque niveau (`%1.`, `%2.`…) pour rester lisibles dans Word. Le `start`
+ * de la liste est posé sur le niveau qu'elle occupe ; `docx` le recopie en
+ * `startOverride` de l'instance quand c'est le niveau 0.
  */
-export function buildNumbering(docx: DocxModule): INumberingOptions {
+export function buildNumbering(
+  docx: DocxModule,
+  lists: readonly ListDefinition[],
+): INumberingOptions {
   const { AlignmentType, LevelFormat } = docx;
   const formats: Record<ListKind, (typeof LevelFormat)[keyof typeof LevelFormat]> = {
     bullet: LevelFormat.BULLET,
@@ -69,15 +70,15 @@ export function buildNumbering(docx: DocxModule): INumberingOptions {
     lowerRoman: LevelFormat.LOWER_ROMAN,
     upperRoman: LevelFormat.UPPER_ROMAN,
   };
-  const kinds = Object.keys(formats) as ListKind[];
   return {
-    config: kinds.map((kind) => ({
-      reference: numberingReference(kind),
+    config: lists.map((list) => ({
+      reference: list.reference,
       levels: Array.from({ length: LIST_LEVELS }, (_, level) => ({
         level,
-        format: formats[kind],
+        format: formats[list.kind],
+        start: level === list.level ? list.start : 1,
         text:
-          kind === 'bullet'
+          list.kind === 'bullet'
             ? (BULLET_GLYPHS[level % BULLET_GLYPHS.length] ?? BULLET_GLYPHS[0])
             : `%${String(level + 1)}.`,
         alignment: AlignmentType.LEFT,

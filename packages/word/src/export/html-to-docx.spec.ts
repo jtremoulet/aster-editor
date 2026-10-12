@@ -141,6 +141,43 @@ describe('buildDocx — mapping XML', () => {
     expect(a4.xml).toContain('w:w="11906"');
   });
 
+  it('conserve les espaces insécables et Unicode, seuls les blancs HTML sont réduits (X-2)', async () => {
+    const nbsp = String.fromCharCode(160);
+    const emSpace = String.fromCharCode(0x2003);
+    const { xml } = await toDocumentXml(
+      `<p>a&nbsp;&nbsp;b</p><p>${nbsp}tête</p><p>Bonjour&nbsp;!</p><p>${nbsp}</p><p>x${emSpace}${emSpace}y  z</p>`,
+    );
+    expect(xml).toContain(`>a${nbsp}${nbsp}b</w:t>`);
+    expect(xml).toContain(`>${nbsp}tête</w:t>`);
+    expect(xml).toContain(`>Bonjour${nbsp}!</w:t>`);
+    // Un paragraphe qui ne contient qu'un NBSP n'est pas vide.
+    expect(xml).toContain(`>${nbsp}</w:t>`);
+    expect(xml).toContain(`>x${emSpace}${emSpace}y z</w:t>`);
+  });
+
+  it('retire les <br> terminaux d’un paragraphe qui a d’autre contenu (M-3)', async () => {
+    const { xml } = await toDocumentXml(
+      '<p>a<br></p><p>b<br><br></p><p><br></p><p><br><br></p><p>c<br>d</p>',
+    );
+    // `a` et `b` : plus aucun saut ; `<p><br></p>` et `<p><br><br></p>` gardent les leurs ; `c<br>d` en garde un.
+    expect(count(xml, '<w:br/>')).toBe(4);
+    expect(xml).toContain('>a</w:t></w:r></w:p>');
+    expect(xml).toContain('>b</w:t></w:r></w:p>');
+    expect(xml).toContain('>c</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">d</w:t>');
+  });
+
+  it('isole par des sauts de ligne un bloc égaré en contexte inline (M-5)', async () => {
+    // Le `<p>` intermédiaire sépare les deux `span` en deux paragraphes distincts.
+    const { xml } = await toDocumentXml(
+      '<span>x<div>y</div>z</span><p>sep</p><span><div>seul</div></span>',
+    );
+    expect(count(xml, '<w:br/>')).toBe(2);
+    expect(xml).toContain('>x</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">y</w:t>');
+    expect(xml).toContain('>y</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">z</w:t>');
+    // Un bloc seul ne produit ni saut en tête ni saut terminal.
+    expect(xml).toContain('<w:p><w:r><w:t xml:space="preserve">seul</w:t></w:r></w:p>');
+  });
+
   it('numérote un li qui commence par une sous-liste ou un titre', async () => {
     const { xml } = await toDocumentXml(
       '<ul><li><ul><li>inner</li></ul></li><li><h2>Titre</h2><p>après</p></li><li>  </li></ul>',

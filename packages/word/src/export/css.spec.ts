@@ -32,6 +32,17 @@ describe('parseColor', () => {
     expect(parseColor('rgb(1 2 3 / 50%)')).toBe('010203');
   });
 
+  it('accepte rgb() en pourcentages et hsl()/hsla() (M-6)', () => {
+    expect(parseColor('rgb(100%, 0%, 0%)')).toBe('FF0000');
+    expect(parseColor('rgb(0% 50% 100%)')).toBe('0080FF');
+    expect(parseColor('hsl(0, 100%, 50%)')).toBe('FF0000');
+    expect(parseColor('hsl(120deg 100% 25%)')).toBe('008000');
+    expect(parseColor('hsla(240, 100%, 50%, 0.5)')).toBe('0000FF');
+    expect(parseColor('hsl(0, 0%, 100%)')).toBe('FFFFFF');
+    expect(parseColor('hsl(-120, 100%, 50%)')).toBe('0000FF');
+    expect(parseColor('hsl(0, 100, 50)')).toBeNull();
+  });
+
   it('accepte les noms courants et rejette le reste', () => {
     expect(parseColor('Red')).toBe('FF0000');
     expect(parseColor('transparent')).toBeNull();
@@ -50,10 +61,19 @@ describe('parseFontSize', () => {
     expect(parseFontSize('1rem')).toBe(24);
   });
 
-  it('ignore les mots-clés, pourcentages et valeurs nulles', () => {
-    expect(parseFontSize('large')).toBeNull();
-    expect(parseFontSize('120%')).toBeNull();
+  it('lit les pourcentages et mots-clés absolus relativement à 11 pt (M-6)', () => {
+    expect(parseFontSize('100%')).toBe(22);
+    expect(parseFontSize('200%')).toBe(44);
+    expect(parseFontSize('medium')).toBe(22);
+    expect(parseFontSize('Large')).toBe(26);
+    expect(parseFontSize('small')).toBe(20);
+    expect(parseFontSize('xx-large')).toBe(44);
+  });
+
+  it('ignore les mots-clés relatifs et valeurs nulles', () => {
+    expect(parseFontSize('larger')).toBeNull();
     expect(parseFontSize('0px')).toBeNull();
+    expect(parseFontSize('0%')).toBeNull();
     expect(parseFontSize(undefined)).toBeNull();
   });
 });

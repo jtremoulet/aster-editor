@@ -193,26 +193,37 @@ Le JSON passe par `jsonToHtml`, sérialiseur minimal limité au schéma d'Aster 
 
 ### Mapping HTML → Word
 
-| HTML                                           | Word                                                                                                                                       |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `h1`..`h6`                                     | Styles `Heading 1`..`Heading 6`                                                                                                            |
-| `p`, `text-align`                              | Paragraphe, alignement `center`/`right`/`justify` (`left` est le défaut)                                                                   |
-| `strong`/`b`, `em`/`i`, `u`, `s`               | Gras, italique, souligné, barré (aussi lus depuis `font-weight`, `font-style`, `text-decoration`)                                          |
-| `sub`, `sup`                                   | Indice, exposant                                                                                                                           |
-| `code`, `kbd`, `samp`                          | Style de caractère `Code`, police Consolas                                                                                                 |
-| `mark`, `background-color`                     | Surlignage jaune                                                                                                                           |
-| `span style="color / font-family / font-size"` | Couleur (`#hex`, `rgb()`, noms courants), police, taille (`px`, `pt`, `em`, `rem`)                                                         |
-| `a href`                                       | Lien externe (`http`, `https`, `mailto`, `tel`, `ftp` ; autres schémas → texte simple)                                                     |
-| `ul`, `ol`, `ol type="a/A/i/I"`                | Numérotation Word sur 9 niveaux : puces, décimal, lettres, romains. Chaque liste repart à 1. Le premier bloc d'un `li` porte la puce.      |
-| `blockquote`                                   | Style de paragraphe `Quote` (italique, indenté)                                                                                            |
-| `pre`                                          | Une ligne = un paragraphe de style `HTML Preformatted` (Consolas)                                                                          |
-| `hr`                                           | Paragraphe vide à bordure basse                                                                                                            |
-| `br`                                           | Saut de ligne                                                                                                                              |
-| `img`                                          | Image inline PNG/JPEG/GIF/BMP, dimensions lues dans `width`/`height` ou l'en-tête du fichier, plafonnées à la largeur de page              |
-| `table`, `thead`, `th`, `colspan`, `rowspan`   | Table 100 % avec bordures, lignes d'en-tête marquées (`thead` ou ligne entièrement en `th`) et en gras, fusions horizontales et verticales |
-| `div`, `section`, `article`…                   | Traversés ; les inline nus deviennent des paragraphes                                                                                      |
+| HTML                                           | Word                                                                                                                                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `h1`..`h6`                                     | Styles `Heading 1`..`Heading 6`                                                                                                                                                                                    |
+| `p`, `text-align`                              | Paragraphe, alignement `center`/`right`/`justify` (`left` est le défaut)                                                                                                                                           |
+| `strong`/`b`, `em`/`i`, `u`, `s`               | Gras, italique, souligné, barré (aussi lus depuis `font-weight`, `font-style`, `text-decoration`)                                                                                                                  |
+| `sub`, `sup`                                   | Indice, exposant                                                                                                                                                                                                   |
+| `code`, `kbd`, `samp`                          | Style de caractère `Code`, police Consolas                                                                                                                                                                         |
+| `mark`, `background-color`                     | Surlignage jaune                                                                                                                                                                                                   |
+| `span style="color / font-family / font-size"` | Couleur (`#hex`, `rgb()` en nombres ou `%`, `hsl()`, noms courants), police, taille (`px`, `pt`, `em`, `rem`, `%` et mots-clés `small`, `large`… relatifs à 11 pt)                                                 |
+| `a href`                                       | Lien externe (`http`, `https`, `mailto`, `tel`, `ftp` ; autres schémas → texte simple). Espaces, `\|` et non-ASCII sont percent-encodés dans la cible, les `%xx` existants conservés.                              |
+| `ul`, `ol`, `ol type="a/A/i/I"`, `ol start`    | Numérotation Word sur 9 niveaux : puces, décimal, lettres, romains. Chaque liste (racine ou imbriquée) a sa propre numérotation et repart à 1, ou au `start` de l'`<ol>`. Le premier bloc d'un `li` porte la puce. |
+| `blockquote`                                   | Style de paragraphe `Quote` (italique, indenté)                                                                                                                                                                    |
+| `pre`                                          | Une ligne = un paragraphe de style `HTML Preformatted` (Consolas)                                                                                                                                                  |
+| `hr`                                           | Paragraphe vide à bordure basse                                                                                                                                                                                    |
+| `br`                                           | Saut de ligne. Les `<br>` terminaux d'un paragraphe qui a d'autre contenu sont ignorés, comme en HTML (`<p><br></p>` garde le sien).                                                                               |
+| `img`                                          | Image inline PNG/JPEG/GIF/BMP, dimensions lues dans `width`/`height` ou l'en-tête du fichier, plafonnées à la largeur de page                                                                                      |
+| `table`, `thead`, `th`, `colspan`, `rowspan`   | Table 100 % avec bordures, lignes d'en-tête marquées (`thead` ou ligne entièrement en `th`) et en gras, fusions horizontales et verticales                                                                         |
+| `div`, `section`, `article`…                   | Traversés ; les inline nus deviennent des paragraphes                                                                                                                                                              |
 
 Les styles `Quote`, `HTML Preformatted` et `Code` portent les noms que la style map d'`importDocx` reconnaît : un aller-retour `exportDocx` → `importDocx` restitue titres, marques, lien, listes imbriquées, citation, bloc de code, image et table. Les alignements, couleurs et polices ne survivent pas à l'import (mammoth les jette volontairement).
+
+Le texte est assaini avant d'entrer dans le XML : les caractères de contrôle que XML 1.0 interdit (U+0000-U+0008, U+000B, U+000C, U+000E-U+001F) et les non-caractères U+FFFE/U+FFFF sont retirés des runs, des `alt`/`title` d'image, des `href` et des propriétés `title`/`creator`. Sans ça, Word refuse d'ouvrir le fichier. Tabulations, sauts de ligne, espaces insécables et Unicode étendu sont conservés tels quels ; seuls les blancs HTML (espace, tabulation, LF, CR, FF) sont réduits selon les règles du HTML.
+
+#### Limites connues de l'export
+
+- **Liste dans une citation** : exportée fidèlement (paragraphes de style `Quote` numérotés, lisibles dans Word), mais **dégradée à la réimportation** par mammoth, qui suit le style et jette la numérotation : `<blockquote><ul><li>a</li></ul></blockquote>` revient en `<blockquote><p>a</p></blockquote>`.
+- **`li` multi-paragraphes avec sous-liste** : export Word standard (seul le premier paragraphe porte la puce, les suivants sont indentés). À la **réimportation**, mammoth sort les paragraphes non numérotés de la liste et la coupe en listes sœurs : `<ul><li><p>a</p><p>b</p><ul><li><p>c</p></li></ul></li></ul>` revient en `<ul><li><p>a</p></li></ul><p>b</p><ul><li><p></p><ul><li><p>c</p></li></ul></li></ul>`.
+- **`<ol start>`** : écrit dans `numbering.xml` (`w:start` et `startOverride`), honoré par Word, mais **non relu par mammoth** : l'aller-retour rend un `<ol>` sans `start`.
+- **Bloc dans un inline** (`<span><div>…</div></span>`) : le bloc ne peut plus devenir un paragraphe, son texte est isolé par des sauts de ligne dans le paragraphe courant.
+
+Ces trois dégradations sont figées par des tests d'aller-retour (`lists.spec.ts`) pour qu'une régression soit visible.
 
 ### Exemple avec un bouton
 
@@ -247,6 +258,7 @@ document.querySelector('#export')?.addEventListener('click', async () => {
 - **Notes de bas de page** : conservées dans `html` via `data-footnotes` / `data-footnote`, mais le schéma Tiptap ne garde pas ces attributs après `setHTML` ; seule la liste finale et les appels `[1]` restent.
 - **Styles custom** : un style de paragraphe inconnu remonte en avertissement `mammoth` et devient un `<p>`. Ajoute une règle dans `styleMap` pour le mapper.
 - **Google Docs** : les `li` gardent leur `<p>` ; les couleurs et tailles posées par Google sont jetées comme pour Word.
+- **Aller-retour export → import** : une liste dans une citation, un `li` multi-paragraphes avec sous-liste et `<ol start>` sont exportés fidèlement pour Word mais dégradés par mammoth à la réimportation. Détail et HTML obtenu dans [Limites connues de l'export](#limites-connues-de-lexport).
 
 ## ⚖️ Poids de mammoth et import dynamique
 

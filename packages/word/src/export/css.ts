@@ -50,10 +50,29 @@ function hex2(value: number): string {
     .toUpperCase();
 }
 
+/** Composante `rgb()` : nombre 0-255 ou pourcentage. */
+function rgbComponent(raw: string, percent: string): number {
+  const amount = Number(raw);
+  return percent === '%' ? (amount * 255) / 100 : amount;
+}
+
+/** `hsl()` → `RRGGBB`, teinte en degrés, saturation et luminosité en 0-1 (algorithme CSS Color 4). */
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const h = (((hue % 360) + 360) % 360) / 30;
+  const s = Math.max(0, Math.min(1, saturation));
+  const l = Math.max(0, Math.min(1, lightness));
+  const a = s * Math.min(l, 1 - l);
+  const channel = (n: number): number => {
+    const k = (n + h) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return `${hex2(channel(0) * 255)}${hex2(channel(8) * 255)}${hex2(channel(4) * 255)}`;
+}
+
 /**
  * Couleur CSS → hexadécimal `RRGGBB` sans `#`, format attendu par `docx`. Accepte
- * `#rgb`, `#rrggbb` (alpha ignoré), `rgb()`/`rgba()` et les noms courants. `null` si
- * la couleur est illisible ou transparente.
+ * `#rgb`, `#rrggbb` (alpha ignoré), `rgb()`/`rgba()` en nombres ou pourcentages,
+ * `hsl()`/`hsla()` et les noms courants. `null` si la couleur est illisible ou transparente.
  */
 export function parseColor(value: string | undefined): string | null {
   if (!value) return null;
@@ -72,25 +91,62 @@ export function parseColor(value: string | undefined): string | null {
     if (hex.length === 6 || hex.length === 8) return hex.slice(0, 6).toUpperCase();
     return null;
   }
-  const rgb = /^rgba?\(\s*([\d.]+)\s*[, ]\s*([\d.]+)\s*[, ]\s*([\d.]+)/.exec(color);
+  const rgb = /^rgba?\(\s*([\d.]+)(%?)\s*[, ]\s*([\d.]+)(%?)\s*[, ]\s*([\d.]+)(%?)/.exec(color);
   if (rgb) {
-    const [, r = '0', g = '0', b = '0'] = rgb;
-    return `${hex2(Number(r))}${hex2(Number(g))}${hex2(Number(b))}`;
+    const [, r = '0', rp = '', g = '0', gp = '', b = '0', bp = ''] = rgb;
+    return `${hex2(rgbComponent(r, rp))}${hex2(rgbComponent(g, gp))}${hex2(rgbComponent(b, bp))}`;
+  }
+  const hsl = /^hsla?\(\s*(-?[\d.]+)(?:deg)?\s*[, ]\s*([\d.]+)%\s*[, ]\s*([\d.]+)%/.exec(color);
+  if (hsl) {
+    const [, h = '0', s = '0', l = '0'] = hsl;
+    return hslToHex(Number(h), Number(s) / 100, Number(l) / 100);
   }
   return NAMED_COLORS[color] ?? null;
 }
 
+/** Taille de texte par défaut de Word (11 pt), base des pourcentages et des mots-clés. */
+const BASE_FONT_SIZE_PT = 11;
+
+/** Mots-clés `font-size` absolus → facteur par rapport à `medium` (échelle CSS). */
+const FONT_SIZE_KEYWORDS: Readonly<Record<string, number>> = {
+  'xx-small': 3 / 5,
+  'x-small': 3 / 4,
+  small: 8 / 9,
+  medium: 1,
+  large: 6 / 5,
+  'x-large': 3 / 2,
+  'xx-large': 2,
+  'xxx-large': 3,
+};
+
 /**
  * `font-size` CSS → demi-points (`size` de `docx`). `px` à 96 dpi, `pt`, `em`/`rem`
- * relatifs à 12 pt. Mots-clés et pourcentages ignorés (`null`).
+ * relatifs à 12 pt, `%` et mots-clés absolus (`small`, `large`…) relatifs à la taille
+ * par défaut de Word (11 pt). `smaller`/`larger` et le reste sont ignorés (`null`).
  */
 export function parseFontSize(value: string | undefined): number | null {
   if (!value) return null;
-  const match = /^([\d.]+)\s*(px|pt|em|rem)$/.exec(value.trim().toLowerCase());
+  const normalized = value.trim().toLowerCase();
+  const factor = FONT_SIZE_KEYWORDS[normalized];
+  if (factor !== undefined) return Math.round(BASE_FONT_SIZE_PT * factor * 2);
+  const match = /^([\d.]+)\s*(px|pt|em|rem|%)$/.exec(normalized);
   if (!match) return null;
   const amount = Number(match[1]);
   if (!Number.isFinite(amount) || amount <= 0) return null;
-  const points = match[2] === 'px' ? amount * 0.75 : match[2] === 'pt' ? amount : amount * 12;
+  let points: number;
+  switch (match[2]) {
+    case 'px':
+      points = amount * 0.75;
+      break;
+    case 'pt':
+      points = amount;
+      break;
+    case '%':
+      points = (BASE_FONT_SIZE_PT * amount) / 100;
+      break;
+    default:
+      points = amount * 12;
+  }
   return Math.round(points * 2);
 }
 

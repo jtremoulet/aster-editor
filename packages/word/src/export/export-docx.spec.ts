@@ -132,6 +132,27 @@ describe('exportDocx', () => {
     await expect(exportDocx(42 as unknown as string)).rejects.toThrow(/chaîne HTML/);
   });
 
+  it('exporte 2 000 paragraphes et 20 tables en moins de 2 s', async () => {
+    const paragraphs = Array.from(
+      { length: 2000 },
+      (_, i) =>
+        `<p>Paragraphe ${String(i)} avec du <strong>gras</strong> et un <a href="https://example.com/${String(i)}">lien</a></p>`,
+    );
+    const row = '<tr><td>a</td><td>b</td><td>c</td><td>d</td><td>e</td></tr>';
+    const tables = Array.from(
+      { length: 20 },
+      () =>
+        `<table><thead><tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>${row.repeat(5)}</tbody></table>`,
+    );
+    // Chauffe : l'import dynamique de `docx` et la compilation JIT ne comptent pas.
+    await exportDocx('<p>chauffe</p>');
+    const started = performance.now();
+    const blob = await exportDocx(paragraphs.join('') + tables.join(''));
+    const elapsed = performance.now() - started;
+    expect(blob.size).toBeGreaterThan(10_000);
+    expect(elapsed).toBeLessThan(2000);
+  });
+
   it('lève une erreur explicite sans DOMParser global ni option parse', async () => {
     const original = globalThis.DOMParser;
     Object.defineProperty(globalThis, 'DOMParser', { value: undefined, configurable: true });

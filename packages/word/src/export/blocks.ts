@@ -1,16 +1,24 @@
 import type { FileChild, IParagraphOptions, Paragraph } from 'docx';
-import type { ExportContext } from './context';
+import { registerList, type ExportContext } from './context';
 import { parseAlignment, parseStyle } from './css';
-import { BLOCK_TAGS, childElements, hasBlockChild, isElement, isText, tagOf } from './dom';
+import {
+  BLOCK_TAGS,
+  childElements,
+  hasBlockChild,
+  isElement,
+  isText,
+  positiveIntAttribute,
+  tagOf,
+} from './dom';
 import { inlineChildren, type InlineState } from './inline';
-import { LIST_INDENT, STYLE_IDS, listKindFromType, numberingReference } from './styles';
+import { sanitizeXmlText } from './sanitize';
+import { LIST_INDENT, STYLE_IDS, listKindFromType } from './styles';
 import { convertTable } from './tables';
 
-/** Position dans une liste : référence de numérotation, niveau et instance Word. */
+/** Position dans une liste : référence de numérotation dédiée à la liste et niveau Word. */
 export interface ListScope {
   readonly reference: string;
   readonly level: number;
-  readonly instance: number;
 }
 
 /** Contexte structurel hérité par les blocs : citation, liste, marques initiales (en-tête de table). */
@@ -64,11 +72,7 @@ function paragraphOptions(
   if (scope.quote) options.style = STYLE_IDS.quote;
   if (scope.list) {
     if (numbered) {
-      options.numbering = {
-        reference: scope.list.reference,
-        level: scope.list.level,
-        instance: scope.list.instance,
-      };
+      options.numbering = { reference: scope.list.reference, level: scope.list.level };
     } else {
       options.indent = { left: LIST_INDENT * (scope.list.level + 1) };
     }
@@ -108,7 +112,10 @@ async function heading(
  */
 function preformatted(element: Element, scope: BlockScope, ctx: ExportContext): Paragraph[] {
   const { Paragraph, TextRun } = ctx.docx;
-  const lines = (element.textContent ?? '').replace(/\n$/, '').split('\n');
+  const lines = sanitizeXmlText(element.textContent ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n$/, '')
+    .split('\n');
   return lines.map(
     (line) =>
       new Paragraph({
@@ -175,18 +182,19 @@ async function listItem(
   return children;
 }
 
-/** `<ul>`/`<ol>` : chaque liste reçoit sa propre instance pour que la numérotation reparte à 1. */
+/**
+ * `<ul>`/`<ol>` : chaque liste, racine ou imbriquée, reçoit sa propre référence de
+ * numérotation (donc son propre `abstractNum`) : la numérotation repart à 1 (ou au
+ * `start` de l'`<ol>`) et deux sous-listes de même format ne partagent jamais leur compteur.
+ */
 async function list(element: Element, scope: BlockScope, ctx: ExportContext): Promise<FileChild[]> {
-  const kind = tagOf(element) === 'ol' ? listKindFromType(element.getAttribute('type')) : 'bullet';
-  const instance = ctx.nextListInstance;
-  ctx.nextListInstance += 1;
+  const ordered = tagOf(element) === 'ol';
+  const kind = ordered ? listKindFromType(element.getAttribute('type')) : 'bullet';
+  const level = Math.min(scope.list ? scope.list.level + 1 : 0, 8);
+  const start = ordered ? (positiveIntAttribute(element, 'start') ?? 1) : 1;
   const listScope: BlockScope = {
     ...scope,
-    list: {
-      reference: numberingReference(kind),
-      level: Math.min(scope.list ? scope.list.level + 1 : 0, 8),
-      instance,
-    },
+    list: { reference: registerList(ctx, kind, level, start), level },
   };
   const children: FileChild[] = [];
   for (const child of childElements(element)) {
@@ -196,10 +204,13 @@ async function list(element: Element, scope: BlockScope, ctx: ExportContext): Pr
   return children;
 }
 
-/** Vrai pour un commentaire ou un texte blanc, sans valeur en contexte de bloc. */
+/** Blancs au sens HTML : espace, tabulation, LF, CR, FF. NBSP et espaces Unicode sont du contenu. */
+const HTML_BLANK = /^[ \t\n\r\f]*$/;
+
+/** Vrai pour un commentaire ou un texte blanc (au sens HTML), sans valeur en contexte de bloc. */
 function isIgnorable(node: Node): boolean {
   if (node.nodeType === 8) return true;
-  return isText(node) && node.data.trim() === '';
+  return isText(node) && HTML_BLANK.test(node.data);
 }
 
 /**

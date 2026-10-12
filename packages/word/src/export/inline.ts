@@ -1,8 +1,9 @@
 import type { IRunOptions, ImageRun, ParagraphChild } from 'docx';
 import { warn, type ExportContext } from './context';
 import { parseColor, parseFontFamily, parseFontSize, parseStyle } from './css';
-import { DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from './dom';
+import { BLOCK_TAGS, DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from './dom';
 import { imageRun } from './images';
+import { sanitizeXmlText } from './sanitize';
 import { CODE_FONT, STYLE_IDS } from './styles';
 
 /** Marques héritées le long de la descente dans les éléments inline. */
@@ -29,6 +30,21 @@ type Piece =
 
 /** Schémas de lien que Word accepte dans un `ExternalHyperlink`. */
 const LINK_PATTERN = /^(https?:|mailto:|tel:|ftp:)/i;
+
+/**
+ * Encode une URL pour les relations du .docx : Word refuse d'ouvrir un fichier dont une
+ * cible de relation contient un espace, `|` ou un caractère non ASCII. `encodeURI`
+ * laisse les délimiteurs d'URL en place ; les séquences `%xx` déjà présentes sont
+ * restaurées pour que l'encodage soit idempotent. Une URL inencodable (substitut isolé)
+ * est rendue telle quelle.
+ */
+export function encodeHref(href: string): string {
+  try {
+    return encodeURI(href).replace(/%25([0-9a-f]{2})/gi, '%$1');
+  } catch {
+    return href;
+  }
+}
 
 /** Applique au state les marques portées par un élément inline (balise + `style`). */
 export function applyElementState(element: Element, state: InlineState): InlineState {
@@ -67,8 +83,8 @@ export function applyElementState(element: Element, state: InlineState): InlineS
       next = { ...next, highlight: true };
       break;
     case 'a': {
-      const href = element.getAttribute('href')?.trim() ?? '';
-      if (LINK_PATTERN.test(href)) next = { ...next, href };
+      const href = sanitizeXmlText(element.getAttribute('href') ?? '').trim();
+      if (LINK_PATTERN.test(href)) next = { ...next, href: encodeHref(href) };
       break;
     }
     default:
@@ -121,6 +137,12 @@ export function runOptions(state: InlineState, text?: string): IRunOptions {
   return options;
 }
 
+/** Ajoute un saut de ligne sauf en tête de paragraphe ou juste après un autre saut. */
+function pushBreak(pieces: Piece[], state: InlineState): void {
+  const last = pieces[pieces.length - 1];
+  if (last && last.kind !== 'break') pieces.push({ kind: 'break', state });
+}
+
 /** Descente récursive : accumule les morceaux inline avec leur state. */
 async function collectPieces(
   node: Node,
@@ -129,7 +151,7 @@ async function collectPieces(
   pieces: Piece[],
 ): Promise<void> {
   if (isText(node)) {
-    const text = node.data;
+    const text = sanitizeXmlText(node.data);
     if (text !== '') pieces.push({ kind: 'text', text, state });
     return;
   }
@@ -150,13 +172,20 @@ async function collectPieces(
     return;
   }
   const next = applyElementState(node, state);
+  // Un bloc égaré en contexte inline (`<span><p>…</p></span>`) ne peut plus devenir un
+  // paragraphe : on isole son texte par des sauts de ligne pour ne pas le coller au reste.
+  const block = BLOCK_TAGS.includes(tag);
+  if (block) pushBreak(pieces, state);
   for (const child of Array.from(node.childNodes)) await collectPieces(child, next, ctx, pieces);
+  if (block) pushBreak(pieces, state);
 }
 
 /**
  * Applique les règles de blancs du HTML : suites d'espaces réduites à un, blancs de
  * début et de fin de bloc supprimés, espace doublé à la frontière de deux morceaux
- * supprimé. Les morceaux devenus vides disparaissent.
+ * supprimé. Seuls les blancs HTML (espace, tabulation, LF, CR, FF) sont concernés :
+ * NBSP et espaces Unicode sont du contenu. Les morceaux devenus vides disparaissent,
+ * ainsi que les sauts de ligne terminaux d'un paragraphe qui contient autre chose.
  */
 function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
   const result: Piece[] = [];
@@ -167,7 +196,7 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
       atBoundary = piece.kind === 'break';
       continue;
     }
-    let text = piece.text.replace(/\s+/g, ' ');
+    let text = piece.text.replace(/[ \t\n\r\f]+/g, ' ');
     if (atBoundary) text = text.replace(/^ /, '');
     if (text === '') continue;
     result.push({ ...piece, text });
@@ -184,6 +213,11 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
     }
     result[i] = { ...last, text: trimmed };
     break;
+  }
+  // `<br>` terminal : invisible en HTML quand le bloc a d'autre contenu, il ajouterait une
+  // ligne vide dans Word. `<p><br></p>` garde le sien : c'est tout ce qui donne corps au paragraphe.
+  if (result.some((piece) => piece.kind !== 'break')) {
+    while (result[result.length - 1]?.kind === 'break') result.pop();
   }
   return result;
 }
