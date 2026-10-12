@@ -23,3 +23,19 @@ export interface AsterInstance {
   setTheme(theme: AsterTheme): void;
   destroy(): void;
 }
+
+/**
+ * Composant monté dans la toolbar : un élément racine, resynchronisable sur les
+ * événements de l'éditeur et destructible. Boutons, dropdowns et widgets le partagent,
+ * ce qui permet à la toolbar de les traiter uniformément.
+ */
+export interface ToolbarWidget {
+  readonly element: HTMLElement;
+  /** Met à jour libellés, états actif/désactivé et contenu visible. */
+  update(): void;
+  /** Retire les écouteurs et ferme tout menu ouvert. L'élément n'est pas retiré du DOM. */
+  destroy(): void;
+}
+
+/** Fabrique d'un widget spécialisé (`heading`, `table`, `link`, …) à partir de l'éditeur. */
+export type WidgetFactory = (editor: AsterEditor) => ToolbarWidget;
