@@ -1,11 +1,69 @@
-import type { WordPasteOptions } from './types';
+import { cleanInlineStyles } from './passes/clean-inline-styles';
+import { collapseEmptyParagraphs } from './passes/collapse-empty-paragraphs';
+import { normalizeHeadings } from './passes/normalize-headings';
+import { normalizeTables } from './passes/normalize-tables';
+import { normalizeWhitespace } from './passes/normalize-whitespace';
+import { parseListFormats, rebuildLists } from './passes/rebuild-lists';
+import {
+  stripConditionalComments,
+  stripConditionalCommentsText,
+} from './passes/strip-conditional-comments';
+import { stripOfficeNamespaces } from './passes/strip-office-namespaces';
+import { resolvePasteOptions, type PastePass, type WordPasteOptions } from './types';
 
-/** Vrai si le HTML provient du presse-papier de Microsoft Word. Stub, lot L2. */
-export function isWordHtml(_html: string): boolean {
-  return false;
+/** Ordre des passes, celui documenté dans `docs/ARCHITECTURE.md`. */
+export const WORD_PASSES: readonly PastePass[] = [
+  stripConditionalComments,
+  stripOfficeNamespaces,
+  rebuildLists,
+  normalizeHeadings,
+  cleanInlineStyles,
+  normalizeTables,
+  collapseEmptyParagraphs,
+  normalizeWhitespace,
+];
+
+const START_FRAGMENT = '<!--StartFragment-->';
+const END_FRAGMENT = '<!--EndFragment-->';
+
+/**
+ * Isole le fragment réellement copié. Word et Chrome balisent la sélection avec
+ * `StartFragment`/`EndFragment` ; tout ce qui est autour (`<head>`, `<style>`, corps
+ * complet) n'est que de l'enrobage. Sans marqueurs, on garde tout le HTML.
+ */
+export function extractFragment(html: string): string {
+  const start = html.indexOf(START_FRAGMENT);
+  const end = html.indexOf(END_FRAGMENT);
+  if (start === -1 || end === -1 || end < start) {
+    return html;
+  }
+  return html.slice(start + START_FRAGMENT.length, end);
 }
 
-/** Nettoie le HTML Word en HTML sémantique. Stub, lot L2. */
-export function normalizeWordHtml(html: string, _options: WordPasteOptions = {}): string {
-  return html;
+/**
+ * Parseur par défaut : le `DOMParser` de l'environnement (navigateur, ou jsdom en test).
+ * Résolu à l'appel et non à l'import, pour que le module se charge sans DOM.
+ */
+export function defaultParse(html: string): Document {
+  return new DOMParser().parseFromString(html, 'text/html');
+}
+
+/**
+ * Nettoie le HTML du presse-papier Word en HTML sémantique prêt pour le schéma Aster.
+ * Fonction pure : le seul effet est sur le `Document` fraîchement parsé, jamais sur un
+ * `document` global. Les formats de liste sont lus dans le `<style>` du HTML complet
+ * avant extraction du fragment, car Word les déclare dans le `<head>`.
+ */
+export function normalizeWordHtml(html: string, options: WordPasteOptions = {}): string {
+  if (typeof html !== 'string' || html.length === 0) {
+    return '';
+  }
+  const parse = options.parse ?? defaultParse;
+  const cleaned = stripConditionalCommentsText(html);
+  const resolved = resolvePasteOptions(options, parseListFormats(cleaned));
+  const doc = parse(extractFragment(cleaned));
+  for (const pass of WORD_PASSES) {
+    pass(doc, resolved);
+  }
+  return doc.body.innerHTML.trim();
 }
