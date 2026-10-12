@@ -173,3 +173,8 @@
 - Piège Vite à froid : le premier `importDocx` sur `ng serve` déclenche l'optimisation de `mammoth` et recharge la page. Contourné par un retry dans le test ; à noter dans le guide d'intégration.
 - Scripts `e2e` corrigés (`-c e2e/playwright.config.ts`), `e2e/tsconfig.json` ajouté au `typecheck` racine.
 - `data-testid` proposés pour découpler les e2e des libellés FR : à faire en V1.1.
+
+### 00:35 — Revue R-ui rendue (agent 30 min, 9 specs de preuve)
+- 9 bloquants, tous d'accessibilité ou de focus : `aria-pressed` sur des boutons non-toggle, focus perdu au re-clic du déclencheur et au passage en lecture seule, Tab ne ferme pas les menus, `getIcon('constructor')` renvoie une fonction (pollution DOM, pas de XSS), menu contextuel jamais resynchronisé, vue source laissée en lecture seule définitive si la toolbar est détruite, panneau coupé en plein écran, contraste du surlignage night à 4,05. Aucune fuite d'écouteur, aucun `innerHTML` non constant, variables CSS toutes consommées.
+- Lot L9c lancé sur ui avec ces 9 bloquants + les 2 bugs des e2e (Échap plein écran, clamp du menu contextuel) + un test de contraste automatisé sur les thèmes.
+- Observation REX : les trois revues ont chacune trouvé 3 à 9 bloquants dans du code à 94-99 % de couverture. Les TU des agents testent ce qu'ils ont construit ; la revue adverse teste ce qu'ils n'ont pas imaginé. Les deux sont nécessaires.
