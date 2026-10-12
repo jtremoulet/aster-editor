@@ -37,21 +37,22 @@ Les questions auxquelles on veut répondre :
 
 ### Globales
 
-| Métrique                                         | Valeur |
-| ------------------------------------------------ | ------ |
-| Heure de début phase 0                           |        |
-| Heure du gel                                     |        |
-| Commits sur `develop`                            |        |
-| Versions publiées                                |        |
-| Lignes de code hors tests                        |        |
-| Lignes de tests                                  |        |
-| Nombre de tests                                  |        |
-| Couverture globale                               |        |
-| Temps orchestrateur en intégration (estimé)      |        |
-| Temps orchestrateur en attente d'agents (estimé) |        |
-| Agents relancés ou re-briefés                    |        |
-| Changements de contrat acceptés                  |        |
-| Compactions de contexte subies                   |        |
+| Métrique                                         | Valeur                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| Heure de début phase 0                           | 22:34                                                         |
+| Heure du gel                                     | 01:10 (features gelées à 01:05, 0.3.0)                        |
+| Commits sur `develop`                            | 37                                                            |
+| Versions publiées                                | 0.1.0 (23:23), 0.2.0 (23:53), 0.3.0 (01:05)                   |
+| Lignes de code hors tests                        | 13 200 (222 fichiers .ts) + 1 200 CSS                         |
+| Lignes de tests                                  | 10 500                                                        |
+| Nombre de tests                                  | 882 unitaires + 21 e2e                                        |
+| Couverture globale                               | core 95 %, word 98 %, ui 98 %, angular 94 %                   |
+| Temps orchestrateur en intégration (estimé)      | ≈ 1h45 cumulé (3 à 8 min par lot × 21 rendus)                 |
+| Temps orchestrateur en attente d'agents (estimé) | ≈ 1h, jamais à vide : briefs suivants, vérifs navigateur, REX |
+| Agents relancés ou re-briefés                    | 0                                                             |
+| Changements de contrat acceptés                  | 3 (L1) + 1 (L10 onWarning) ; 10 différés en V1.1 ; 0 rupture  |
+| Tokens agents (somme des rapports)               | ≈ 4,9 M sur 21 agents, médiane 225 k                          |
+| Compactions de contexte subies                   | 0                                                             |
 
 ## ⏳ Chronologie réelle vs cible 🕐
 
@@ -142,6 +143,12 @@ Notés au fil de l'eau, avec l'heure, la cause et le contournement.
 
 Version condensée et réutilisable, à transformer en skill si elle tient la route.
 
-1.
-2.
-3.
+1. **Cadrage avec le demandeur, 30 min** : finalité, contraintes, nom, stack. Écrire pendant le cadrage : `CLAUDE.md` projet, cahier des charges MoSCoW avec critères d'acceptation mesurables, architecture avec contrats d'API, stratégie de tests avec seuils, roadmap par lots, template de brief, journal, REX vide. Faire valider.
+2. **Phase 0 solo, 15 à 30 min** : scaffold, toutes les dépendances, lint/typecheck/test/build verts à vide, **smoke tests des 2 ou 3 hypothèses techniques les plus risquées**, contrat d'API en types figés, fixtures, CI, playground de vérification bundlé depuis les sources. Relire les configs générées par un CLI contre la base. Commit.
+3. **Vague 1 : 4 agents sur des lots disjoints par paquet**, dans l'arbre principal, chacun avec un brief qui nomme les fichiers autorisés, la définition de fini en cases, l'ordre de sacrifice, les pièges d'outillage connus, et le format de rapport. Intégrer chaque rendu dès réception : check scoped, revue, commit par chemins, entrée de journal, métriques REX.
+4. **Vérifier en navigateur réel dès que le premier assemblage existe**, avant de lancer la vague suivante : c'est là que les bugs d'intégration apparaissent.
+5. **Vague 2 : lots produit** (wrapper framework, features avancées) et un lot documentation qui typechecke ses exemples. Sérialiser deux lots qui partagent des fichiers plutôt que de les paralléliser.
+6. **Vague 3 : un relecteur adverse en lecture seule par paquet**, avec preuves exécutables obligatoires, puis un lot de correctifs par paquet. Lancer chaque revue dès que son paquet est stable, pas en fin de nuit. Ajouter les e2e tôt : ils trouvent ce que jsdom ne voit pas.
+7. **Vague 4 : features bonus** tant que le temps le permet, puis une revue de chaque nouveau lot.
+8. **Gel** : check complet, build, e2e, bump, changelog, rafraîchissement de la doc sur l'état final par un agent qui typechecke, bilan en 5 minutes de lecture, REX, mémoire.
+9. **Règles pour l'orchestrateur** : ne jamais patcher du code par shell inline avec des backslashes (même un heredoc quoté a mangé un `\\` cette nuit) ; ne pas faire tourner deux agents qui exécutent des e2e en même temps ; tenir le journal après chaque lot ; archiver les briefs.
