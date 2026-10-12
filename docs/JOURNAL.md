@@ -195,3 +195,7 @@
 - 15 findings corrigés, word 216 → 260 tests, 98,8 %. Le fichier de preuves du relecteur passe à 17/17 rouge comme attendu : la boucle revue → preuve → correctif → preuve inversée fonctionne.
 - Décisions validées : `svg`/`math` supprimés au collage, liens relatifs déballés (Word n'émet que des ancres `#_Toc` mortes, Google des URL absolues), `start` posé aussi pour alpha/romain.
 - Friction récurrente notée : l'outil Write convertit ` ` en NBSP littéral. Trois agents l'ont rencontrée.
+
+### 00:55 — Revue R-export rendue (agent 25 min, a lu le code de la lib docx)
+- 4 bloquants : caractères de contrôle écrits bruts dans le XML (`docx` n'assainit que `& " ' < >`) → .docx « contenu illisible » dans Word ; NBSP écrasés par `\s` (typographie française) ; `start` des `<ol>` ignoré ; sous-listes de même format partageant un `abstractNum` → numérotation qui continue dans Word. 7 mineurs. Échappement XML et robustesse salués.
+- Lot L9e lancé. Mesure de charge : 2 000 paragraphes + 20 tables exportés en 233 ms.
