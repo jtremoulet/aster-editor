@@ -1,0 +1,32 @@
+import type { AsterEditor } from './editor';
+import type { AsterLocale } from './i18n';
+
+/**
+ * Événements émis par un `AsterEditor`. Les handlers reçoivent toujours l'éditeur
+ * pour éviter les fermetures sur une instance détruite.
+ */
+export interface AsterEvents {
+  /** L'éditeur est monté et prêt à recevoir des commandes. Émis une seule fois. */
+  ready: (payload: { editor: AsterEditor }) => void;
+  /** Le document a changé. Non émis pour un simple déplacement de sélection. */
+  change: (payload: { editor: AsterEditor }) => void;
+  /** La sélection a bougé, ou le document a changé. La toolbar se resynchronise dessus. */
+  selectionChange: (payload: { editor: AsterEditor }) => void;
+  focus: (payload: { editor: AsterEditor; event: FocusEvent }) => void;
+  blur: (payload: { editor: AsterEditor; event: FocusEvent }) => void;
+  readOnlyChange: (payload: { editor: AsterEditor; readOnly: boolean }) => void;
+  localeChange: (payload: { editor: AsterEditor; locale: AsterLocale }) => void;
+  /**
+   * Une image est en cours d'upload via le hook `upload`. Permet à l'UI d'afficher
+   * un état d'attente. `done` est émis après succès ou échec.
+   */
+  uploadStart: (payload: { editor: AsterEditor; file: File }) => void;
+  uploadDone: (payload: { editor: AsterEditor; file: File; src?: string; error?: unknown }) => void;
+  /** Émis juste avant la destruction. Après cet événement, toute méthode de l'éditeur est indéfinie. */
+  destroy: (payload: { editor: AsterEditor }) => void;
+}
+
+export type AsterEventName = keyof AsterEvents;
+
+/** Fonction de désabonnement renvoyée par `on`. */
+export type Unsubscribe = () => void;

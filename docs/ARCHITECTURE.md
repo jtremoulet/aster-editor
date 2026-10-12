@@ -28,6 +28,7 @@ Sens des dépendances : `angular → ui, word, core` ; `ui → core` ; `word →
 ### `@aster-editor/core`
 
 Responsabilités :
+
 - `createEditor(options)` : instancie Tiptap avec le jeu d'extensions Aster, retourne un `AsterEditor`.
 - **Registre de commandes** : chaque action éditable est une `AsterCommand` nommée, avec `run`, `canRun`, `isActive`, clé i18n, icône, raccourci. La toolbar et le wrapper Angular ne parlent qu'au registre, jamais à Tiptap directement.
 - **Extensions Aster** : enveloppes fines des extensions Tiptap avec la config Aster par défaut, plus les extensions maison : `Shortcuts`, `LinkSafety` qui rejette `javascript:`, `ImageUpload` avec hook, `HtmlSanitizeOnPaste`.
@@ -52,6 +53,7 @@ packages/core/src/
 ### `@aster-editor/word`
 
 Responsabilités :
+
 - `importDocx(input: File | ArrayBuffer, options?): Promise<DocxImportResult>` via mammoth, avec une **style map** maison et des post-traitements sur le HTML produit : numérotation des listes, en-têtes de table, images en data URL ou passées au hook `upload`, notes de bas de page.
 - `normalizeWordHtml(html: string, options?): string` : fonction **pure**, sans DOM global, qui prend le HTML du presse-papier Word et rend un HTML propre. Pipeline de passes nommées et testables individuellement :
   1. `stripConditionalComments`
@@ -82,6 +84,7 @@ packages/word/src/
 ### `@aster-editor/ui`
 
 Responsabilités :
+
 - `createToolbar(editor, container, config)` : rend une toolbar DOM à partir du registre de commandes. Aucune logique d'édition dedans.
 - Composants vanilla : `Button`, `Dropdown`, `ColorPicker`, `TableGridPicker`, `LinkDialog`, `Tooltip`. Classes TypeScript légères, pas de framework, pas de Web Components en V1 pour rester simple à styler.
 - Presets `full`, `standard`, `minimal` exprimés en config déclarative : `[['bold','italic'], ['heading'], ...]`.
@@ -92,6 +95,7 @@ Responsabilités :
 ### `@aster-editor/angular`
 
 Responsabilités :
+
 - `AsterEditorComponent` standalone, `ControlValueAccessor`, inputs signals, outputs. Crée l'éditeur dans `afterNextRender`, le détruit dans `DestroyRef`.
 - `provideAster(config: Partial<AsterGlobalConfig>)` avec `InjectionToken`.
 - `AsterUploadHandler` token pour brancher l'upload d'images sur un service applicatif.
@@ -105,36 +109,42 @@ Figé en phase 0 dans `packages/core/src/api/`. Extrait de l'intention, le fichi
 ```ts
 export interface AsterOptions {
   element: HTMLElement;
-  content?: string | AsterDocument;      // HTML ou JSON ProseMirror
+  content?: string | AsterDocument; // HTML ou JSON ProseMirror
   placeholder?: string;
   readOnly?: boolean;
-  locale?: AsterLocale;                   // 'fr' | 'en' | string
-  extensions?: AnyExtension[];            // extensions Tiptap additionnelles
-  commands?: AsterCommand[];              // commandes custom
+  locale?: AsterLocale; // 'fr' | 'en' | string
+  extensions?: AnyExtension[]; // extensions Tiptap additionnelles
+  commands?: AsterCommand[]; // commandes custom
   pasteTransformers?: PasteTransformer[]; // (html, ctx) => html
   upload?: (file: File) => Promise<string>;
   linkPolicy?: LinkPolicy;
 }
 
 export interface AsterEditor {
-  readonly tiptap: Editor;                // porte de sortie, non garantie stable
+  readonly tiptap: Editor; // porte de sortie, non garantie stable
   readonly commands: CommandRegistry;
-  getHTML(): string;  setHTML(html: string, emit?: boolean): void;
-  getJSON(): AsterDocument;  setJSON(doc: AsterDocument, emit?: boolean): void;
-  getText(): string;  isEmpty(): boolean;
+  getHTML(): string;
+  setHTML(html: string, emit?: boolean): void;
+  getJSON(): AsterDocument;
+  setJSON(doc: AsterDocument, emit?: boolean): void;
+  getText(): string;
+  isEmpty(): boolean;
   getCounts(): { words: number; characters: number };
-  focus(position?: 'start' | 'end'): void;  blur(): void;
-  setReadOnly(value: boolean): void;  isReadOnly(): boolean;
-  setLocale(locale: AsterLocale): void;  t(key: string, params?: Record<string, string | number>): string;
+  focus(position?: 'start' | 'end'): void;
+  blur(): void;
+  setReadOnly(value: boolean): void;
+  isReadOnly(): boolean;
+  setLocale(locale: AsterLocale): void;
+  t(key: string, params?: Record<string, string | number>): string;
   on<E extends keyof AsterEvents>(event: E, handler: AsterEvents[E]): () => void;
   destroy(): void;
 }
 
 export interface AsterCommand {
-  id: string;                     // 'bold', 'heading', 'table.insert'
-  labelKey: string;               // clé i18n
-  icon?: string;                  // id d'icône, résolu par ui
-  shortcut?: string;              // 'Mod-B'
+  id: string; // 'bold', 'heading', 'table.insert'
+  labelKey: string; // clé i18n
+  icon?: string; // id d'icône, résolu par ui
+  shortcut?: string; // 'Mod-B'
   run(editor: AsterEditor, args?: unknown): boolean;
   canRun?(editor: AsterEditor, args?: unknown): boolean;
   isActive?(editor: AsterEditor, args?: unknown): boolean;
@@ -163,24 +173,24 @@ Variables définies sur `.aster` et redéfinies sur `.aster[data-theme="night"]`
 
 ## ⚖️ Licences des dépendances de production
 
-| Paquet | Licence |
-|--------|---------|
-| @tiptap/* | MIT |
-| prosemirror-* via @tiptap/pm | MIT |
-| mammoth | BSD-2-Clause |
-| jszip (via mammoth) | MIT ou GPLv3 au choix, on prend MIT |
-| @xmldom/xmldom (via mammoth) | MIT |
-| docx (should, export + génération de fixtures) | MIT |
-| @angular/* | MIT |
+| Paquet                                         | Licence                             |
+| ---------------------------------------------- | ----------------------------------- |
+| @tiptap/*                                      | MIT                                 |
+| prosemirror-* via @tiptap/pm                   | MIT                                 |
+| mammoth                                        | BSD-2-Clause                        |
+| jszip (via mammoth)                            | MIT ou GPLv3 au choix, on prend MIT |
+| @xmldom/xmldom (via mammoth)                   | MIT                                 |
+| docx (should, export + génération de fixtures) | MIT                                 |
+| @angular/*                                     | MIT                                 |
 
 Toute nouvelle dépendance s'ajoute ici avant d'entrer dans le code.
 
 ## ⚠️ Risques techniques identifiés
 
-| Risque | Mitigation |
-|--------|------------|
-| API Tiptap 3 différente de la v2 en mémoire | Lire `node_modules/@tiptap/*/dist/*.d.ts`, tester tôt en phase 0 |
-| TS 6.0 imposé par Angular 22, outillage pas tous compatibles | Pas de bundler pour les libs, `tsc` pur. Vitest 5 vérifié en phase 0 |
-| mammoth en bundle navigateur via Angular CLI | Vérifier le champ `browser` du package en phase 0, import dynamique |
-| Conflits git entre agents | Lots sur dossiers disjoints, fichiers partagés réservés à l'orchestrateur |
-| Compaction de contexte de l'orchestrateur | `docs/JOURNAL.md` mis à jour après chaque lot, lisible à froid |
+| Risque                                                       | Mitigation                                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| API Tiptap 3 différente de la v2 en mémoire                  | Lire `node_modules/@tiptap/*/dist/*.d.ts`, tester tôt en phase 0          |
+| TS 6.0 imposé par Angular 22, outillage pas tous compatibles | Pas de bundler pour les libs, `tsc` pur. Vitest 5 vérifié en phase 0      |
+| mammoth en bundle navigateur via Angular CLI                 | Vérifier le champ `browser` du package en phase 0, import dynamique       |
+| Conflits git entre agents                                    | Lots sur dossiers disjoints, fichiers partagés réservés à l'orchestrateur |
+| Compaction de contexte de l'orchestrateur                    | `docs/JOURNAL.md` mis à jour après chaque lot, lisible à froid            |

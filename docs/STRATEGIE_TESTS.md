@@ -4,13 +4,13 @@
 
 ## 🔺 Pyramide
 
-| Niveau | Outil | Portée | Quand |
-|--------|-------|--------|-------|
-| Unitaire pur | Vitest, environnement `node` | Fonctions pures : passes du normaliseur Word, i18n, helpers HTML, config de toolbar | V1, majorité des tests |
-| Unitaire DOM | Vitest + jsdom | `createEditor`, commandes, sérialisation, toolbar rendue, événements | V1 |
-| Composant Angular | Vitest via `@angular/build:unit-test`, TestBed | CVA, inputs/outputs, cycle de vie, zoneless | V1 |
-| Intégration manuelle | App démo + navigateur intégré de Claude | Collage réel, import .docx réel, clavier | V1, vérif de fin de lot |
-| E2E graphique | Playwright | Parcours utilisateur complets, captures | V1.1 |
+| Niveau               | Outil                                          | Portée                                                                              | Quand                   |
+| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------- |
+| Unitaire pur         | Vitest, environnement `node`                   | Fonctions pures : passes du normaliseur Word, i18n, helpers HTML, config de toolbar | V1, majorité des tests  |
+| Unitaire DOM         | Vitest + jsdom                                 | `createEditor`, commandes, sérialisation, toolbar rendue, événements                | V1                      |
+| Composant Angular    | Vitest via `@angular/build:unit-test`, TestBed | CVA, inputs/outputs, cycle de vie, zoneless                                         | V1                      |
+| Intégration manuelle | App démo + navigateur intégré de Claude        | Collage réel, import .docx réel, clavier                                            | V1, vérif de fin de lot |
+| E2E graphique        | Playwright                                     | Parcours utilisateur complets, captures                                             | V1.1                    |
 
 ## 📐 Règles
 
@@ -25,12 +25,12 @@
 
 Mesurés avec `@vitest/coverage-v8`, seuils dans la config de chaque paquet, bloquants dans `npm run check` :
 
-| Paquet | Lignes | Pourquoi |
-|--------|--------|----------|
-| `word` | 85 % | Cœur de la valeur, logique pure, facile à tester |
-| `core` | 75 % | Commandes et sérialisation |
-| `ui` | 70 % | DOM rendu, états des boutons |
-| `angular` | 70 % | CVA et cycle de vie |
+| Paquet    | Lignes | Pourquoi                                         |
+| --------- | ------ | ------------------------------------------------ |
+| `word`    | 85 %   | Cœur de la valeur, logique pure, facile à tester |
+| `core`    | 75 %   | Commandes et sérialisation                       |
+| `ui`      | 70 %   | DOM rendu, états des boutons                     |
+| `angular` | 70 %   | CVA et cycle de vie                              |
 
 ## 📂 Fixtures
 
@@ -56,6 +56,7 @@ Les `.docx` synthétiques sont générés par `scripts/generate-fixtures.ts` ave
 ## 🧩 Ce que chaque paquet teste
 
 **core**
+
 - `createEditor` monte et détruit sans fuite d'écouteurs.
 - Chaque commande standard : `run` change l'état, `isActive` reflète la sélection, `canRun` faux en lecture seule.
 - `setHTML(getHTML())` idempotent sur un document complet.
@@ -64,6 +65,7 @@ Les `.docx` synthétiques sont générés par `scripts/generate-fixtures.ts` ave
 - Événements émis dans le bon ordre, désabonnement fonctionne.
 
 **word**
+
 - Chaque passe du normaliseur testée seule sur un mini HTML, puis le pipeline complet sur les fixtures.
 - Listes : puces, numéros, imbrication 3 niveaux, reprise de numérotation, liste interrompue par un paragraphe.
 - Tables : en-têtes détectés, attributs de layout retirés, cellules fusionnées conservées.
@@ -71,12 +73,14 @@ Les `.docx` synthétiques sont générés par `scripts/generate-fixtures.ts` ave
 - Détecteurs : HTML Word vs Google Docs vs navigateur.
 
 **ui**
+
 - Toolbar rendue depuis un preset : bon nombre de boutons, labels i18n, raccourcis dans le tooltip.
 - État actif et désactivé synchronisés sur `selectionChange`.
 - Navigation clavier dans la toolbar.
 - Dropdown s'ouvre, se ferme à Échap et au clic extérieur.
 
 **angular**
+
 - `writeValue`, `registerOnChange`, `setDisabledState` dans un reactive form.
 - `touched` au blur, `dirty` à la frappe, pas d'émission sur `writeValue`.
 - Changement d'input `readonly` et `theme` à chaud.

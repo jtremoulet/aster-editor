@@ -7,12 +7,12 @@
 
 ## 🧩 Paquets
 
-| Paquet | Rôle |
-|--------|------|
-| `@aster-editor/core` | Moteur sur Tiptap 3 / ProseMirror, registre de commandes, i18n |
-| `@aster-editor/word` | Import `.docx` et nettoyage du collage depuis Word et Google Docs |
-| `@aster-editor/ui` | Toolbar vanilla, thèmes `light` et `night` |
-| `@aster-editor/angular` | Composant standalone `<aster-editor>`, reactive forms, signals |
+| Paquet                  | Rôle                                                              |
+| ----------------------- | ----------------------------------------------------------------- |
+| `@aster-editor/core`    | Moteur sur Tiptap 3 / ProseMirror, registre de commandes, i18n    |
+| `@aster-editor/word`    | Import `.docx` et nettoyage du collage depuis Word et Google Docs |
+| `@aster-editor/ui`      | Toolbar vanilla, thèmes `light` et `night`                        |
+| `@aster-editor/angular` | Composant standalone `<aster-editor>`, reactive forms, signals    |
 
 ## 🚀 Quick start Angular
 

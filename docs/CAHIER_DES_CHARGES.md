@@ -16,17 +16,18 @@ Ce qui fait la différence d'Aster face à l'existant :
 
 ## 👤 Utilisateurs et cas d'usage
 
-| Utilisateur | Besoin |
-|-------------|--------|
-| Dev Angular intégrateur | Poser `<aster-editor>` dans un formulaire, récupérer du HTML propre, configurer la toolbar en 3 lignes |
-| Utilisateur final métier | Rédiger un contenu riche, coller depuis Word sans tout casser, importer un .docx existant |
-| Joris mainteneur | Ajouter une extension, un bouton, une langue, un thème sans toucher au cœur |
+| Utilisateur              | Besoin                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Dev Angular intégrateur  | Poser `<aster-editor>` dans un formulaire, récupérer du HTML propre, configurer la toolbar en 3 lignes |
+| Utilisateur final métier | Rédiger un contenu riche, coller depuis Word sans tout casser, importer un .docx existant              |
+| Joris mainteneur         | Ajouter une extension, un bouton, une langue, un thème sans toucher au cœur                            |
 
 ## ✅ Périmètre MoSCoW
 
 ### Must — sans ça, pas de V1
 
 **Édition**
+
 - Marks : gras, italique, souligné, barré, indice, exposant, code inline, surlignage.
 - Blocs : paragraphe, titres H1 à H6, listes à puces et numérotées imbriquées, citation, bloc de code, séparateur horizontal.
 - Liens : création, édition, suppression, ouverture dans nouvel onglet, auto-link au collage d'URL.
@@ -38,17 +39,20 @@ Ce qui fait la différence d'Aster face à l'existant :
 - Placeholder, mode lecture seule, focus/blur programmatiques.
 
 **Contenu**
+
 - `getHTML()` / `setHTML()` produisant un HTML sémantique stable et prévisible, sans classes parasites.
 - `getJSON()` / `setJSON()` au format ProseMirror pour stockage structuré.
 - `getText()`, `isEmpty()`, compteur de mots et de caractères.
 - Événements : `change`, `selectionChange`, `focus`, `blur`, `ready`, `destroy`.
 
 **Word**
+
 - **Import .docx** : titres mappés sur H1-H6, listes à puces et numérotées avec imbrication, gras/italique/souligné, tables avec en-têtes, images embarquées, liens, notes de bas de page converties en liste finale. Rapport d'import listant les avertissements.
 - **Collage depuis Word** : détection du HTML Word, reconstruction des listes depuis `mso-list`, nettoyage des styles `mso-*`, des `<o:p>`, des polices et tailles imposées, conservation des tables et de la structure, suppression des commentaires conditionnels.
 - **Collage depuis Google Docs** : nettoyage des `<b style="font-weight:normal">` et des spans de style.
 
 **Toolbar et UI**
+
 - Toolbar vanilla configurable par liste de groupes et d'items, avec presets `full`, `standard`, `minimal`.
 - Boutons avec état actif/désactivé, tooltips avec raccourci, menus déroulants pour titres, tables, couleurs.
 - Thèmes `light` et `night` par variables CSS, surchargeables.
@@ -56,12 +60,14 @@ Ce qui fait la différence d'Aster face à l'existant :
 - i18n : français et anglais, chaînes externalisées, ajout d'une langue par simple objet.
 
 **Angular**
+
 - Composant standalone `<aster-editor>` implémentant `ControlValueAccessor`, compatible reactive forms et template-driven.
 - Inputs signals : `config`, `placeholder`, `readonly`, `theme`, `locale`, `toolbar`. Outputs : `ready`, `changed`, `focused`, `blurred`.
 - `provideAster(config)` pour la config globale. Fonctionne en zoneless.
 - `importDocx(file)` exposé sur le composant.
 
 **Qualité et livrables**
+
 - Tests unitaires sur chaque paquet selon `docs/STRATEGIE_TESTS.md`.
 - README par paquet avec exemple minimal, README racine avec quick start Angular.
 - Doc d'API rédigée pour `@aster-editor/core` et `@aster-editor/angular`.
