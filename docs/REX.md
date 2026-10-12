@@ -78,6 +78,8 @@ Notés au fil de l'eau, avec l'heure.
 - 23:15 — Les rapports au format imposé se lisent en 1 minute et donnent directement les points à vérifier. Les « Décisions prises » sont la matière du REX.
 - 23:28 — La vérification en navigateur réel juste après l'intégration de la vague 1 a trouvé en 3 minutes un bug que 470 tests unitaires ne pouvaient pas voir (bouton Lien grisé : deux lots conformes à leurs briefs, incompatibles à l'intégration). Un playground vanilla sans framework, bundlé depuis les sources, est l'outil de vérification le plus rentable de la nuit.
 - 23:40 — L'agent docs a typechecké tous ses exemples et compté programmatiquement commandes et variables CSS : zéro invention. C'est la méthode à imposer dans tout brief de documentation.
+- 23:50 — L5 a contourné un blocage de config hors de son périmètre avec des tsconfigs temporaires passés en `--ts-config`, sans toucher aux fichiers interdits, et a documenté le correctif attendu en une ligne. C'est le comportement idéal face à une règle de périmètre : contourner, prouver, proposer.
+- 23:50 — Version 0.2.0 testable dans Angular à 23:53, soit **1h20 après le GO**, contre 07:00 prévu. Le plan de nuit était calibré pour des agents 5 à 10 fois plus lents que la réalité.
 
 ## 🧱 Blocages et frictions
 
@@ -94,6 +96,7 @@ Notés au fil de l'eau, avec l'heure, la cause et le contournement.
 - 23:13 — Un agent a perdu du temps sur des heredocs bash avec des apostrophes françaises. À mettre dans les briefs : écrire les fichiers avec l'outil Write.
 - 23:41 — L6 a lancé `npx vitest run -w packages/core` en croyant à un flag workspace : c'est le mode watch, processus orphelin à tuer. À mettre dans les briefs : `cd packages/x && npx vitest run`.
 - 23:25 — `preview_start` a lu le `launch.json` du workspace parent et lancé un autre projet : les outils de preview ne sont pas fiables dans un sous-dossier d'un workspace multi-projets. Serveur lancé à la main.
+- 23:50 — Le `tsconfig.json` généré par Angular CLI mettait `noPropertyAccessFromIndexSignature: true` à l'encontre de la base ; invisible tant qu'aucun projet Angular ne compilait le core via les `paths`. Leçon : en phase 0, diffuser les flags des tsconfigs générés contre la base, flag par flag, et compiler au moins un import croisé.
 - 23:10 — Mon propre `sed` a mangé un `s` dans une regex en passant par le shell : commit de correction derrière. Leçon : pour patcher du code, passer par un script Node dans un fichier, jamais par sed avec des backslashes.
 
 ## 🧭 Décisions de process prises en route
