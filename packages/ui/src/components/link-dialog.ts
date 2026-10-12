@@ -49,7 +49,8 @@ export function createLinkDialog(editor: AsterEditor): ToolbarWidget {
     icon: 'link-set',
     panelRole: 'dialog',
     panelClass: 'aster-dialog aster-link-dialog',
-    isEnabled: () => editor.commands.canRun('link.set', { href: '' }),
+    // Le core refuse un href vide : on teste avec une URL valide fictive, le vrai href est validé à la soumission.
+    isEnabled: () => editor.commands.canRun('link.set', { href: 'https://aster.invalid/' }),
     isActive: () => hasLink(editor),
     renderPanel: (panel, dropdown) => {
       const t = (key: string): string => editor.i18n.t(key);

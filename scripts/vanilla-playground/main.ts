@@ -86,3 +86,5 @@ docxInput.addEventListener('change', async () => {
 });
 
 mount();
+// Exposé pour les vérifications automatisées de l'orchestrateur.
+(window as unknown as { asterImportDocx: typeof importDocx }).asterImportDocx = importDocx;
