@@ -10,3 +10,6 @@ Thumbs.db
 .idea/
 *.tsbuildinfo
 scripts/vanilla-playground/dist/
+e2e/output/
+e2e/test-results/
+e2e/playwright-report/

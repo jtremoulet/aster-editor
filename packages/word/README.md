@@ -1,6 +1,6 @@
 # 📄 @aster-editor/word
 
-> Import `.docx` et nettoyage du collage depuis Word et Google Docs pour Aster Editor. Produit du HTML sémantique que le schéma ProseMirror accepte tel quel.
+> Import et export `.docx`, nettoyage du collage depuis Word et Google Docs pour Aster Editor. Produit du HTML sémantique que le schéma ProseMirror accepte tel quel, et un fichier Word depuis ce même HTML.
 
 ## 📦 Installation
 
@@ -157,6 +157,85 @@ const editor = createEditor({
 
 Avec `createAster` de `@aster-editor/ui`, même option : `createAster(host, { pasteTransformers: [wordPasteTransformer()] })`.
 
+## 📤 Export .docx
+
+```ts
+function exportDocx(input: string | AsterDocument, options?: DocxExportOptions): Promise<Blob>;
+function downloadDocx(blob: Blob, filename?: string): void;
+function jsonToHtml(document: AsterDocument): string;
+```
+
+Convertit le HTML d'Aster (`editor.getHTML()`) ou un document JSON ProseMirror (`editor.getJSON()`) en fichier Word. Rend un `Blob` de type `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, prêt pour `downloadDocx` ou un upload. Ne lève jamais pour du HTML valide : ce qui n'a pas d'équivalent Word remonte via `options.onWarning`. La lib `docx` (MIT, ~1,3 MB non minifié) est chargée en **import dynamique** au premier appel, comme mammoth pour l'import : elle n'entre dans le bundle initial que si ton bundler ne fait pas de code-splitting.
+
+Le JSON passe par `jsonToHtml`, sérialiseur minimal limité au schéma d'Aster (StarterKit, tables, images, alignement, surlignage, indice/exposant, `textStyle`, tâches). Pour un schéma étendu par tes propres extensions, donne plutôt `editor.getHTML()` à `exportDocx`.
+
+### Options (`DocxExportOptions`)
+
+| Champ        | Type                                          | Défaut            | Rôle                                                                                                                                       |
+| ------------ | --------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `parse`      | `HtmlParser`                                  | `new DOMParser()` | Parseur HTML injectable, jamais le `document` global (SSR, tests).                                                                         |
+| `fetchImage` | `(src: string) => Promise<ArrayBuffer\|null>` | —                 | Récupère les octets d'une image `http(s)://`. Sans hook, seules les data URL sont embarquées, les autres sont ignorées avec avertissement. |
+| `title`      | `string`                                      | —                 | Titre inscrit dans les propriétés du document.                                                                                             |
+| `creator`    | `string`                                      | —                 | Auteur inscrit dans les propriétés du document.                                                                                            |
+| `pageSize`   | `'A4' \| 'LETTER'`                            | `'A4'`            | Format de page, marges de 2,54 cm.                                                                                                         |
+| `onWarning`  | `(warning: DocxExportWarning) => void`        | —                 | Reçoit chaque avertissement au fil de la conversion.                                                                                       |
+
+### Codes d'avertissement (`DocxExportWarningCode`)
+
+| Code                  | Sens                                                                                                                        |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `image-skipped`       | Image ignorée : URL distante sans `fetchImage`, hook en échec ou `null`, data URL illisible, format non raster (SVG, WebP). |
+| `unsupported-element` | `iframe`, `video`, `audio`, `canvas`, `svg`, `form`… sans équivalent Word, ignorés.                                         |
+
+`DocxWarning<Code>` est le type générique commun : `DocxImportWarning` et `DocxExportWarning` en sont deux spécialisations structurellement compatibles.
+
+### Mapping HTML → Word
+
+| HTML                                           | Word                                                                                                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `h1`..`h6`                                     | Styles `Heading 1`..`Heading 6`                                                                                                            |
+| `p`, `text-align`                              | Paragraphe, alignement `center`/`right`/`justify` (`left` est le défaut)                                                                   |
+| `strong`/`b`, `em`/`i`, `u`, `s`               | Gras, italique, souligné, barré (aussi lus depuis `font-weight`, `font-style`, `text-decoration`)                                          |
+| `sub`, `sup`                                   | Indice, exposant                                                                                                                           |
+| `code`, `kbd`, `samp`                          | Style de caractère `Code`, police Consolas                                                                                                 |
+| `mark`, `background-color`                     | Surlignage jaune                                                                                                                           |
+| `span style="color / font-family / font-size"` | Couleur (`#hex`, `rgb()`, noms courants), police, taille (`px`, `pt`, `em`, `rem`)                                                         |
+| `a href`                                       | Lien externe (`http`, `https`, `mailto`, `tel`, `ftp` ; autres schémas → texte simple)                                                     |
+| `ul`, `ol`, `ol type="a/A/i/I"`                | Numérotation Word sur 9 niveaux : puces, décimal, lettres, romains. Chaque liste repart à 1. Le premier bloc d'un `li` porte la puce.      |
+| `blockquote`                                   | Style de paragraphe `Quote` (italique, indenté)                                                                                            |
+| `pre`                                          | Une ligne = un paragraphe de style `HTML Preformatted` (Consolas)                                                                          |
+| `hr`                                           | Paragraphe vide à bordure basse                                                                                                            |
+| `br`                                           | Saut de ligne                                                                                                                              |
+| `img`                                          | Image inline PNG/JPEG/GIF/BMP, dimensions lues dans `width`/`height` ou l'en-tête du fichier, plafonnées à la largeur de page              |
+| `table`, `thead`, `th`, `colspan`, `rowspan`   | Table 100 % avec bordures, lignes d'en-tête marquées (`thead` ou ligne entièrement en `th`) et en gras, fusions horizontales et verticales |
+| `div`, `section`, `article`…                   | Traversés ; les inline nus deviennent des paragraphes                                                                                      |
+
+Les styles `Quote`, `HTML Preformatted` et `Code` portent les noms que la style map d'`importDocx` reconnaît : un aller-retour `exportDocx` → `importDocx` restitue titres, marques, lien, listes imbriquées, citation, bloc de code, image et table. Les alignements, couleurs et polices ne survivent pas à l'import (mammoth les jette volontairement).
+
+### Exemple avec un bouton
+
+```ts
+import { createAster } from '@aster-editor/ui';
+import { downloadDocx, exportDocx } from '@aster-editor/word';
+
+const { editor } = createAster(document.querySelector<HTMLElement>('#editor')!);
+
+document.querySelector('#export')?.addEventListener('click', async () => {
+  const blob = await exportDocx(editor.getHTML(), {
+    title: 'Compte rendu',
+    creator: 'Aster',
+    fetchImage: async (src) => {
+      const response = await fetch(src);
+      return response.ok ? response.arrayBuffer() : null;
+    },
+    onWarning: (warning) => console.warn(`[${warning.code}] ${warning.message}`),
+  });
+  downloadDocx(blob, 'compte-rendu');
+});
+```
+
+`downloadDocx` crée un `<a download>` éphémère et révoque l'URL objet après le clic ; à appeler depuis un gestionnaire d'événement utilisateur. Hors navigateur (SSR, Node), envoie plutôt les octets : `Buffer.from(await blob.arrayBuffer())`.
+
 ## ⚠️ Limites connues
 
 - **Pas de fidélité de mise en page** : colonnes, en-têtes et pieds de page, sauts de page, polices exactes, tailles et interlignes sont volontairement jetés. L'objectif est de préserver l'intention (structure, emphase), pas le rendu au pixel.
@@ -182,4 +261,4 @@ async function loadDocx(file: File): Promise<string> {
 
 ## 🧾 Exports
 
-`importDocx`, `normalizeWordHtml`, `normalizeGoogleDocsHtml`, `isWordHtml`, `isGoogleDocsHtml`, `wordPasteTransformer`, et les types `DocxImportOptions`, `DocxImportResult`, `DocxImportWarning`, `DocxImportWarningCode`, `HtmlParser`, `WordPasteOptions`, `ListLevelFormat`.
+`importDocx`, `exportDocx`, `downloadDocx`, `jsonToHtml`, `DOCX_MIME_TYPE`, `normalizeWordHtml`, `normalizeGoogleDocsHtml`, `isWordHtml`, `isGoogleDocsHtml`, `wordPasteTransformer`, et les types `DocxImportOptions`, `DocxImportResult`, `DocxImportWarning`, `DocxImportWarningCode`, `DocxExportInput`, `DocxExportOptions`, `DocxExportWarning`, `DocxExportWarningCode`, `DocxImageFetcher`, `DocxPageSize`, `DocxWarning`, `HtmlParser`, `WordPasteOptions`, `ListLevelFormat`.

@@ -4,7 +4,7 @@
  */
 import type { AsterInstance, AsterUiOptions } from '@aster-editor/ui';
 import { createAster } from '@aster-editor/ui';
-import { importDocx, wordPasteTransformer } from '@aster-editor/word';
+import { downloadDocx, exportDocx, importDocx, wordPasteTransformer } from '@aster-editor/word';
 import '../../packages/ui/themes/aster.css';
 
 const host = document.querySelector<HTMLElement>('#host');
@@ -16,6 +16,7 @@ const toolbarSelect = document.querySelector<HTMLSelectElement>('#toolbar');
 const readonlyInput = document.querySelector<HTMLInputElement>('#readonly');
 const docxInput = document.querySelector<HTMLInputElement>('#docx');
 const dumpButton = document.querySelector<HTMLButtonElement>('#dump');
+const exportButton = document.querySelector<HTMLButtonElement>('#export');
 
 if (
   !host ||
@@ -26,7 +27,8 @@ if (
   !toolbarSelect ||
   !readonlyInput ||
   !docxInput ||
-  !dumpButton
+  !dumpButton ||
+  !exportButton
 ) {
   throw new Error('Playground : éléments manquants dans index.html');
 }
@@ -73,6 +75,16 @@ localeSelect.addEventListener('change', () => instance?.editor.i18n.setLocale(lo
 toolbarSelect.addEventListener('change', mount);
 readonlyInput.addEventListener('change', () => instance?.editor.setReadOnly(readonlyInput.checked));
 dumpButton.addEventListener('click', () => log('getHTML()', instance?.editor.getHTML() ?? ''));
+exportButton.addEventListener('click', async () => {
+  if (!instance) return;
+  const warnings: unknown[] = [];
+  const blob = await exportDocx(instance.editor.getHTML(), {
+    onWarning: (w) => warnings.push(w),
+    title: 'Aster playground',
+  });
+  log(`exportDocx — ${blob.size} octets, ${warnings.length} avertissement(s)`, warnings);
+  downloadDocx(blob, 'aster-playground.docx');
+});
 docxInput.addEventListener('change', async () => {
   const file = docxInput.files?.[0];
   if (!file || !instance) return;
@@ -88,3 +100,4 @@ docxInput.addEventListener('change', async () => {
 mount();
 // Exposé pour les vérifications automatisées de l'orchestrateur.
 (window as unknown as { asterImportDocx: typeof importDocx }).asterImportDocx = importDocx;
+(window as unknown as { asterExportDocx: typeof exportDocx }).asterExportDocx = exportDocx;

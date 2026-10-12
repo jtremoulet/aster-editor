@@ -25,7 +25,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "mammoth": "^1.13.0"
+    "mammoth": "^1.13.0",
+    "docx": "^9.10.0"
   },
   "peerDependencies": {
     "@aster-editor/core": ">=0.0.1",

@@ -17,3 +17,15 @@ export { isWordHtml, isGoogleDocsHtml } from './paste/detectors';
 export { normalizeWordHtml } from './paste/normalize-word-html';
 export { normalizeGoogleDocsHtml } from './google/normalize-google-docs-html';
 export { wordPasteTransformer } from './extension/word-paste';
+export type {
+  DocxExportInput,
+  DocxExportOptions,
+  DocxExportWarning,
+  DocxExportWarningCode,
+  DocxImageFetcher,
+  DocxPageSize,
+  DocxWarning,
+} from './export/types';
+export { exportDocx, DOCX_MIME_TYPE } from './export/export-docx';
+export { downloadDocx } from './export/download-docx';
+export { jsonToHtml } from './export/json-to-html';
