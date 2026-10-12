@@ -199,3 +199,10 @@
 ### 00:55 — Revue R-export rendue (agent 25 min, a lu le code de la lib docx)
 - 4 bloquants : caractères de contrôle écrits bruts dans le XML (`docx` n'assainit que `& " ' < >`) → .docx « contenu illisible » dans Word ; NBSP écrasés par `\s` (typographie française) ; `start` des `<ol>` ignoré ; sous-listes de même format partageant un `abstractNum` → numérotation qui continue dans Word. 7 mineurs. Échappement XML et robustesse salués.
 - Lot L9e lancé. Mesure de charge : 2 000 paragraphes + 20 tables exportés en 233 ms.
+
+### 00:57 — L9d correctifs core rendu et intégré (agent 30 min, 301k tokens, 131 outils)
+- 13 findings corrigés, core 323 → 363 tests, `getHTML` 17,8 ms → 0 ms entre deux transactions.
+- Décision validée contre mon brief : `paragraph`/`heading` sur un bloc déjà du type → `false` sans mutation (sémantique ProseMirror pure, `heading` n'est plus une bascule). Cohérent avec « pas de titre dans les listes en V1 ».
+- Décision hors brief acceptée avec réserve : `focus()` synchrone en navigateur (détection `Range.prototype.getClientRects`) pour tenir le contrat « API synchrone » et supprimer une course e2e (grille de table → `type` avant le rAF de Tiptap). À réexaminer en V1.1 : alternative propre côté `ui` (ne pas reconstruire un panneau pendant un clic).
+- `data:image/svg+xml` accepté dans `<img>` (pas d'exécution de script), SVG toujours refusé à l'upload.
+- Échec transitoire d'un `ng test` pendant un e2e concurrent : le builder Angular bundle `ui`/`word` pendant que d'autres agents y écrivent. À noter dans le REX : ne pas lancer deux agents qui exécutent des e2e en même temps.
