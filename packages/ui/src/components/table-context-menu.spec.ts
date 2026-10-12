@@ -1,8 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createMockEditor, type MockEditor } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createTableContextMenu, type TableContextMenu } from './table-context-menu';
+import {
+  clampToViewport,
+  createTableContextMenu,
+  type TableContextMenu,
+} from './table-context-menu';
 import { TABLE_ACTIONS } from './table-grid-picker';
+
+describe('clampToViewport', () => {
+  it('garde la position si le menu tient, sinon le ramène avec 8px de marge, jamais négatif', () => {
+    expect(clampToViewport(40, 200, 1024)).toBe(40);
+    expect(clampToViewport(900, 200, 1024)).toBe(816);
+    expect(clampToViewport(10, 2000, 1024)).toBe(0);
+  });
+});
 
 describe('createTableContextMenu', () => {
   let editor: MockEditor;
@@ -60,6 +72,29 @@ describe('createTableContextMenu', () => {
     expect(items().length).toBe(TABLE_ACTIONS.length);
     expect(items().map((node) => node.textContent)).toContain('Delete table');
     expect(document.activeElement).toBe(items()[0]);
+  });
+
+  it('reste dans le viewport quand le curseur est près du bord droit ou bas', () => {
+    editor.activeNodes.add('table');
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerWidth', { value: 300, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 500, configurable: true });
+    // jsdom ne fait pas de mise en page : on simule un menu de 200 × 320.
+    menu.element.getBoundingClientRect = (): DOMRect =>
+      ({ width: 200, height: 320, left: 0, top: 0, right: 200, bottom: 320 }) as DOMRect;
+    try {
+      menu.open(250, 400);
+      expect(menu.element.style.left).toBe('92px');
+      expect(menu.element.style.top).toBe('172px');
+      menu.close();
+      menu.open(20, 30);
+      expect(menu.element.style.left).toBe('20px');
+      expect(menu.element.style.top).toBe('30px');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true });
+      Object.defineProperty(window, 'innerHeight', { value: originalHeight, configurable: true });
+    }
   });
 
   it('grise les actions non exécutables', () => {

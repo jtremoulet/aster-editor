@@ -32,7 +32,7 @@
   --aster-focus-ring: 0 0 0 2px var(--aster-surface), 0 0 0 4px var(--aster-accent);
   --aster-button-size: 32px;
   --aster-content-min-height: 200px;
-  --aster-highlight: #8a6d00;
+  --aster-highlight: #6b5500; /* texte night dessus : ratio ≈ 5,9 : 1 (AA) */
   --aster-selection: rgba(122, 156, 255, 0.3);
   color-scheme: dark;
 }

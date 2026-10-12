@@ -47,6 +47,16 @@ describe('icons', () => {
     expect(hasIcon('toString')).toBe(false);
   });
 
+  it('ignore les propriétés héritées du prototype (constructor, __proto__, toString)', () => {
+    const fallback = getIcon('does-not-exist');
+    for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      expect(hasIcon(name), name).toBe(false);
+      const icon: unknown = getIcon(name);
+      expect(typeof icon, name).toBe('string');
+      expect(icon, name).toBe(fallback);
+    }
+  });
+
   it('convertit un identifiant de commande en nom d’icône', () => {
     expect(iconNameForCommand('table.insert')).toBe('table-insert');
     expect(iconNameForCommand('alignLeft')).toBe('align-left');

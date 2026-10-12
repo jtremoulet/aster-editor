@@ -26,6 +26,40 @@ export const TABLE_ACTIONS: readonly TableAction[] = [
   'table.delete',
 ];
 
+/**
+ * Index de la cellule visée par une flèche dans une grille `rows × cols` parcourue
+ * ligne par ligne : ←/→ restent dans la ligne, ↑/↓ changent de ligne. `null` si la
+ * touche n'est pas une flèche ou si on est au bord (l'appelant décide quoi faire).
+ */
+export function gridIndexFor(
+  key: string,
+  index: number,
+  rows: number,
+  cols: number,
+): number | null {
+  const row = Math.floor(index / cols);
+  const col = index % cols;
+  switch (key) {
+    case 'ArrowRight':
+      return col < cols - 1 ? index + 1 : null;
+    case 'ArrowLeft':
+      return col > 0 ? index - 1 : null;
+    case 'ArrowDown':
+      return row < rows - 1 ? index + cols : null;
+    case 'ArrowUp':
+      return row > 0 ? index - cols : null;
+    default:
+      return null;
+  }
+}
+
+const ARROW_KEYS: ReadonlySet<string> = new Set([
+  'ArrowRight',
+  'ArrowLeft',
+  'ArrowDown',
+  'ArrowUp',
+]);
+
 /** Vrai si le curseur est dans un tableau, tolérant si l'extension manque. */
 function isInTable(editor: AsterEditor): boolean {
   try {
@@ -106,6 +140,28 @@ function renderGrid(editor: AsterEditor, panel: HTMLElement, close: () => void):
     }
   }
   grid.addEventListener('mouseleave', () => highlight(0, 0));
+
+  // Navigation 2D au clavier : le dropdown ne connaît que ↑/↓ entre `menuitem`, ce qui
+  // ferait sauter d'une cellule à la suivante dans l'ordre du DOM. Ici ↑/↓ changent de
+  // ligne ; ↓ depuis la dernière ligne passe aux actions `table.*` s'il y en a, et
+  // les autres bords sont bloquants (Home/End restent ceux du dropdown).
+  grid.addEventListener('keydown', (event) => {
+    if (!ARROW_KEYS.has(event.key)) return;
+    const index = cells.findIndex((candidate) => candidate === document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const target = gridIndexFor(event.key, index, TABLE_GRID_ROWS, TABLE_GRID_COLS);
+    if (target !== null) {
+      cells[target]?.focus();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      panel
+        .querySelector<HTMLElement>('.aster-table-picker__actions [role="menuitem"]:not(:disabled)')
+        ?.focus();
+    }
+  });
   panel.append(sizeLabel, grid);
 }
 

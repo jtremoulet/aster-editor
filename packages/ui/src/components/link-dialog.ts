@@ -1,22 +1,26 @@
 import type { AsterEditor } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
+import { isRecord, readString } from '../utils/guards';
 import { createPlainButton } from './button';
 import { createDropdown } from './dropdown';
 
 /** Attributs du mark `link` tels que lus via `tiptap.getAttributes('link')`. */
 interface LinkAttributes {
-  href?: string | null;
-  target?: string | null;
+  href: string | null;
+  target: string | null;
 }
 
-/** Lien courant sous la sélection, tolérant si l'extension manque. */
+const NO_LINK: LinkAttributes = { href: null, target: null };
+
+/** Lien courant sous la sélection, tolérant si l'extension manque ou renvoie autre chose. */
 function currentLink(editor: AsterEditor): LinkAttributes {
   try {
     const attrs: unknown = editor.tiptap.getAttributes('link');
-    return typeof attrs === 'object' && attrs !== null ? (attrs as LinkAttributes) : {};
+    if (!isRecord(attrs)) return NO_LINK;
+    return { href: readString(attrs, 'href'), target: readString(attrs, 'target') };
   } catch {
-    return {};
+    return NO_LINK;
   }
 }
 

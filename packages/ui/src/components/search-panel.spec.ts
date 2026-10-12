@@ -152,6 +152,20 @@ describe('createSearchPanel', () => {
     expect(editor.focusCalls).toBe(1);
   });
 
+  it('Échap dans le panneau efface la recherche comme Fermer, puis referme', () => {
+    trigger().click();
+    key(query(), 'Escape');
+    expect(editor.calls).toEqual([{ id: 'search.clear', args: undefined }]);
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(trigger());
+    // Après destroy, Échap sur le panneau n'appelle plus rien.
+    widget.destroy();
+    key(panel(), 'Escape');
+    expect(editor.calls.length).toBe(1);
+    widget = createSearchPanel(editor);
+    host.append(widget.element);
+  });
+
   it('s’ouvre sur aster:search-open émis par le core, avec la requête du détail', () => {
     editor.element.dispatchEvent(
       new CustomEvent(SEARCH_OPEN_EVENT, { bubbles: true, detail: { query: 'loup' } }),

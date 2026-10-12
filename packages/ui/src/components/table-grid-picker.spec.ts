@@ -2,7 +2,26 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createMockEditor, type MockEditor } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
 import type { Dropdown } from './dropdown';
-import { TABLE_GRID_COLS, TABLE_GRID_ROWS, createTableGridPicker } from './table-grid-picker';
+import {
+  TABLE_GRID_COLS,
+  TABLE_GRID_ROWS,
+  createTableGridPicker,
+  gridIndexFor,
+} from './table-grid-picker';
+
+describe('gridIndexFor', () => {
+  it('se déplace dans la ligne et entre les lignes, null au bord ou pour une autre touche', () => {
+    expect(gridIndexFor('ArrowRight', 0, 8, 10)).toBe(1);
+    expect(gridIndexFor('ArrowRight', 9, 8, 10)).toBeNull();
+    expect(gridIndexFor('ArrowLeft', 10, 8, 10)).toBeNull();
+    expect(gridIndexFor('ArrowLeft', 11, 8, 10)).toBe(10);
+    expect(gridIndexFor('ArrowDown', 3, 8, 10)).toBe(13);
+    expect(gridIndexFor('ArrowDown', 73, 8, 10)).toBeNull();
+    expect(gridIndexFor('ArrowUp', 13, 8, 10)).toBe(3);
+    expect(gridIndexFor('ArrowUp', 3, 8, 10)).toBeNull();
+    expect(gridIndexFor('Enter', 3, 8, 10)).toBeNull();
+  });
+});
 
 describe('createTableGridPicker', () => {
   let editor: MockEditor;
@@ -48,6 +67,42 @@ describe('createTableGridPicker', () => {
       .querySelector('.aster-table-picker__grid')
       ?.dispatchEvent(new MouseEvent('mouseleave'));
     expect(cell(1, 1).classList.contains('aster-table-picker__cell--hover')).toBe(false);
+  });
+
+  it('les flèches naviguent en 2D dans la grille, ↓ depuis le bas va aux actions', () => {
+    editor.activeNodes.add('table');
+    picker.open();
+    const press = (key: string): void => {
+      (document.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    };
+    expect(document.activeElement).toBe(cell(1, 1));
+    press('ArrowRight');
+    expect(document.activeElement).toBe(cell(1, 2));
+    press('ArrowDown');
+    expect(document.activeElement).toBe(cell(2, 2));
+    expect(cell(2, 2).classList.contains('aster-table-picker__cell--hover')).toBe(true);
+    press('ArrowLeft');
+    expect(document.activeElement).toBe(cell(2, 1));
+    press('ArrowLeft');
+    expect(document.activeElement).toBe(cell(2, 1));
+    press('ArrowUp');
+    expect(document.activeElement).toBe(cell(1, 1));
+    press('ArrowUp');
+    expect(document.activeElement).toBe(cell(1, 1));
+    press('End');
+    const lastAction = picker.panel.querySelector<HTMLElement>(
+      '.aster-table-picker__actions [role="menuitem"]:last-child',
+    );
+    expect(document.activeElement).toBe(lastAction);
+    cell(TABLE_GRID_ROWS, TABLE_GRID_COLS).focus();
+    press('ArrowRight');
+    expect(document.activeElement).toBe(cell(TABLE_GRID_ROWS, TABLE_GRID_COLS));
+    press('ArrowDown');
+    expect(document.activeElement).toBe(
+      picker.panel.querySelector('.aster-table-picker__actions [role="menuitem"]'),
+    );
   });
 
   it('le clic sur la cellule 3×2 insère { rows: 3, cols: 2, withHeaderRow: true }', () => {

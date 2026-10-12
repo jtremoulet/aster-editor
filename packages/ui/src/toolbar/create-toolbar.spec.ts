@@ -49,12 +49,17 @@ describe('createToolbar', () => {
     expect(container.querySelectorAll('.aster-toolbar__group').length).toBe(STANDARD_PRESET.length);
   });
 
-  it('ne rend rien avec false et retourne une toolbar vide', () => {
+  it('ne rend rien avec false et retourne une toolbar vide, sans abonnement', () => {
     const toolbar = createToolbar(editor, container, false);
     expect(container.children.length).toBe(0);
     expect(toolbar.element.childElementCount).toBe(0);
+    expect(editor.listenerCount()).toBe(0);
     toolbar.update();
     toolbar.destroy();
+    expect(editor.listenerCount()).toBe(0);
+    const empty = createToolbar(editor, container, []);
+    expect(editor.listenerCount()).toBe(0);
+    empty.destroy();
   });
 
   it('résout un preset inconnu sur standard avec un avertissement', () => {

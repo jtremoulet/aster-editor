@@ -1,7 +1,7 @@
 import { createEditor } from '@aster-editor/core';
-import type { AsterTheme } from '@aster-editor/core';
+import type { AsterTheme, Unsubscribe } from '@aster-editor/core';
 import { getFullscreen } from './components/fullscreen';
-import { getSourceView } from './components/source-view';
+import { releaseSourceView, retainSourceView } from './components/source-view';
 import { createTableContextMenu } from './components/table-context-menu';
 import { createToolbar, registerUiTranslations } from './toolbar/create-toolbar';
 import type { AsterInstance, AsterUiOptions, Toolbar } from './types';
@@ -39,11 +39,18 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
     toolbarContainer.remove();
   }
   // Menu contextuel de table (clic droit), indépendant de la toolbar : dès que le core
-  // expose des commandes `table.*`. Détruit avec l'instance.
+  // expose des commandes `table.*`. Il se ferme quand l'éditeur passe en lecture seule
+  // (vue source comprise) ou que la sélection quitte le tableau. Détruit avec l'instance.
   const tableMenu = editor.commands.has('table.delete') ? createTableContextMenu(editor) : null;
+  const subscriptions: Unsubscribe[] = tableMenu
+    ? [
+        editor.on('readOnlyChange', () => tableMenu.update()),
+        editor.on('selectionChange', () => tableMenu.update()),
+      ]
+    : [];
   // Vue source et plein écran : contrôleurs partagés avec les widgets `source` et
-  // `fullscreen` de la toolbar (même instance via `getSourceView` / `getFullscreen`).
-  const sourceView = getSourceView(editor);
+  // `fullscreen` de la toolbar (même instance via `retainSourceView` / `getFullscreen`).
+  const sourceView = retainSourceView(editor);
   const fullscreen = getFullscreen(editor);
 
   let destroyed = false;
@@ -63,7 +70,9 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
       if (destroyed) return;
       destroyed = true;
       fullscreen.destroy();
-      sourceView.destroy();
+      releaseSourceView(sourceView);
+      for (const unsubscribe of subscriptions) unsubscribe();
+      subscriptions.length = 0;
       tableMenu?.destroy();
       toolbar?.destroy();
       if (!editor.isDestroyed()) editor.destroy();

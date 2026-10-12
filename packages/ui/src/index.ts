@@ -47,6 +47,8 @@ export {
   createSourceView,
   formatSourceHtml,
   getSourceView,
+  releaseSourceView,
+  retainSourceView,
 } from './components/source-view';
 export type { Fullscreen } from './components/fullscreen';
 export {

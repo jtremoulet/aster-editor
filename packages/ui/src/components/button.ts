@@ -65,10 +65,12 @@ export function setDisabled(button: HTMLButtonElement, disabled: boolean): void 
 
 /**
  * Résout l'icône d'un item de commande : surcharge explicite, puis `icon` déclaré par la
- * commande, puis convention `id` → kebab-case. Un nom absent du jeu tombe sur le repli.
+ * commande, puis convention `id` → kebab-case. Chaque candidat passe par `hasIcon`, y
+ * compris la surcharge (`'constructor'` ou une faute de frappe ne doivent pas court-
+ * circuiter la chaîne) ; si rien n'existe, le nom conventionnel est rendu via le repli.
  */
 export function resolveIcon(commandId: string, override?: string, declared?: string): string {
-  if (override) return override;
+  if (override && hasIcon(override)) return override;
   if (declared && hasIcon(declared)) return declared;
   const conventional = iconNameForCommand(commandId);
   if (hasIcon(conventional)) return conventional;
@@ -81,6 +83,10 @@ export function resolveIcon(commandId: string, override?: string, declared?: str
  * focus à l'éditeur. `update()` reflète `isActive` (`aria-pressed`) et `canRun`
  * (`disabled`), et retraduit le libellé. Retourne `null` si la commande est inconnue :
  * c'est à l'appelant de décider (la toolbar avertit et ignore).
+ *
+ * `aria-pressed` n'est posé que si la commande déclare `isActive` : un bouton d'action
+ * (annuler, insérer une règle…) n'est pas un bouton à bascule, et un `aria-pressed="false"`
+ * permanent serait annoncé à tort comme tel par les lecteurs d'écran.
  */
 export function createCommandButton(
   editor: AsterEditor,
@@ -105,9 +111,11 @@ export function createCommandButton(
   const update = (): void => {
     const label = editor.i18n.t(item.labelKey ?? command.labelKey);
     applyTooltip(button, label, command.shortcut);
-    const active = editor.commands.isActive(item.command, item.args);
-    button.setAttribute('aria-pressed', active ? 'true' : 'false');
-    button.classList.toggle(`${BUTTON_CLASS}--active`, active);
+    if (command.isActive !== undefined) {
+      const active = editor.commands.isActive(item.command, item.args);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      button.classList.toggle(`${BUTTON_CLASS}--active`, active);
+    }
     setDisabled(button, !editor.commands.canRun(item.command, item.args));
   };
   update();

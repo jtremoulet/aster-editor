@@ -199,6 +199,13 @@
   display: none;
 }
 
+/* Panneau qui déborderait à droite du viewport : aligné sur le bord droit du déclencheur
+   (posé par `createDropdown` à l'ouverture après mesure). */
+.aster-dropdown__panel--flip {
+  right: 0;
+  left: auto;
+}
+
 /* ---------- Menu --------------------------------------------------------- */
 
 .aster-menu {
@@ -605,25 +612,17 @@
   border-radius: var(--aster-radius);
 }
 
-.aster-content .ProseMirror img.ProseMirror-selectednode {
-  outline: 3px solid var(--aster-accent);
-  outline-offset: 2px;
-}
+/*
+ * Dans l'éditeur, une image est rendue par le NodeView `figure.aster-image` (sélection,
+ * alignement et poignée : voir `images-tables.css`). Les règles `img[data-align]` ne
+ * concernent que le HTML exporté (`getHTML()`) affiché hors éditeur : elles sont à
+ * reproduire côté intégrateur, par exemple :
+ *
+ *   img[data-align='center'] { display: block; margin-left: auto; margin-right: auto; }
+ *   img[data-align='right']  { display: block; margin-left: auto; }
+ */
 
-.aster-content .ProseMirror img[data-align='center'] {
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.aster-content .ProseMirror img[data-align='right'] {
-  margin-left: auto;
-}
-
-/* Tables */
-
-.aster-content .ProseMirror .tableWrapper {
-  overflow-x: auto;
-}
+/* Tables (défilement, poignées de colonnes et curseur : voir `images-tables.css`) */
 
 .aster-content .ProseMirror table {
   border-collapse: collapse;
@@ -661,21 +660,6 @@
   background: var(--aster-accent-soft);
   pointer-events: none;
   z-index: 2;
-}
-
-.aster-content .ProseMirror .column-resize-handle {
-  position: absolute;
-  top: 0;
-  bottom: -1px;
-  right: -2px;
-  width: 4px;
-  background: var(--aster-accent);
-  pointer-events: none;
-  z-index: 3;
-}
-
-.aster-content .ProseMirror.resize-cursor {
-  cursor: col-resize;
 }
 
 /* Placeholder */

@@ -6,7 +6,6 @@ import type { AsterDictionary } from '@aster-editor/core';
  */
 export const uiFr: AsterDictionary = {
   'ui.toolbar.label': 'Barre de mise en forme',
-  'ui.dropdown.open': 'Ouvrir le menu',
   'ui.link.title': 'Lien',
   'ui.link.url': 'URL',
   'ui.link.newTab': 'Ouvrir dans un nouvel onglet',
@@ -29,7 +28,6 @@ export const uiFr: AsterDictionary = {
   'ui.image.align.left': 'Gauche',
   'ui.image.align.center': 'Centre',
   'ui.image.align.right': 'Droite',
-  'ui.table.insert': 'Insérer un tableau',
   'ui.table.size': 'Tableau {rows} × {cols}',
   'ui.table.grid': 'Choisir la taille du tableau',
   'ui.table.actions': 'Actions du tableau',

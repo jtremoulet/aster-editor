@@ -12,6 +12,8 @@ import {
   createSourceView,
   formatSourceHtml,
   getSourceView,
+  releaseSourceView,
+  retainSourceView,
 } from './source-view';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
@@ -171,17 +173,48 @@ describe('vue source', () => {
       expect(textarea()).toBeNull();
     });
 
-    it('destroy quitte la vue sans appliquer et oublie l’instance', () => {
+    it('destroy quitte la vue sans appliquer, rend l’édition et oublie l’instance', () => {
       const view = getSourceView(editor);
+      const listener = vi.fn();
+      view.onChange(listener);
       view.enter();
       view.textarea!.value = '<p>Perdu</p>';
+      expect(editor.isReadOnly()).toBe(true);
       view.destroy();
       expect(textarea()).toBeNull();
       expect(editor.contentElement.hasAttribute('hidden')).toBe(false);
       expect(editor.contentElement.innerHTML).toBe('<p>Bonjour</p>');
+      expect(editor.isReadOnly()).toBe(false);
+      expect(host.classList.contains(SOURCE_VIEW_CLASS)).toBe(false);
+      expect(listener).toHaveBeenCalledTimes(2);
       expect(getSourceView(editor)).not.toBe(view);
       view.enter();
       expect(textarea()).toBeNull();
+    });
+
+    it('destroy hors vue source ne touche pas à la lecture seule posée par l’intégrateur', () => {
+      const view = getSourceView(editor);
+      editor.setReadOnly(true);
+      view.destroy();
+      expect(editor.isReadOnly()).toBe(true);
+    });
+
+    it('retainSourceView / releaseSourceView : le dernier utilisateur détruit le contrôleur', () => {
+      const first = retainSourceView(editor);
+      const second = retainSourceView(editor);
+      expect(first).toBe(second);
+      first.enter();
+      releaseSourceView(first);
+      expect(first.isActive()).toBe(true);
+      expect(getSourceView(editor)).toBe(first);
+      releaseSourceView(second);
+      expect(first.isActive()).toBe(false);
+      expect(editor.isReadOnly()).toBe(false);
+      expect(getSourceView(editor)).not.toBe(first);
+      // Libérer un contrôleur obtenu par `getSourceView` (jamais retenu) le détruit aussi.
+      const bare = getSourceView(editor);
+      releaseSourceView(bare);
+      expect(getSourceView(editor)).not.toBe(bare);
     });
 
     it('masque le conteneur .aster-content quand le contenteditable y vit', () => {
@@ -219,6 +252,36 @@ describe('vue source', () => {
       expect(source.getAttribute('aria-pressed')).toBe('false');
       expect(bold.disabled).toBe(false);
       toolbar.destroy();
+    });
+
+    it('toolbar.destroy() pendant la vue source la quitte et rend l’édition', () => {
+      const container = document.createElement('div');
+      host.prepend(container);
+      const toolbar = createToolbar(editor, container, [
+        ['bold'],
+        [{ type: 'widget', widget: 'source' }],
+      ]);
+      container.querySelector<HTMLButtonElement>('.aster-source-button')!.click();
+      expect(textarea()).not.toBeNull();
+      expect(editor.isReadOnly()).toBe(true);
+      toolbar.destroy();
+      expect(textarea()).toBeNull();
+      expect(editor.contentElement.hasAttribute('hidden')).toBe(false);
+      expect(editor.isReadOnly()).toBe(false);
+      expect(host.classList.contains(SOURCE_VIEW_CLASS)).toBe(false);
+    });
+
+    it('deux boutons source partagent le contrôleur, détruit avec le dernier', () => {
+      const a = createSourceButton(editor);
+      const b = createSourceButton(editor);
+      const view = getSourceView(editor);
+      view.enter();
+      a.destroy();
+      expect(view.isActive()).toBe(true);
+      expect((b.element as HTMLButtonElement).getAttribute('aria-pressed')).toBe('true');
+      b.destroy();
+      expect(view.isActive()).toBe(false);
+      expect(editor.isReadOnly()).toBe(false);
     });
 
     it('est désactivé si l’éditeur est en lecture seule hors vue source', () => {
@@ -262,8 +325,13 @@ describe('vue source', () => {
       expect(
         instance.element.querySelector('.aster-source-button')?.getAttribute('aria-pressed'),
       ).toBe('true');
+      // La toolbar `full` porte un bouton `source` : sa destruction ne doit pas détruire
+      // le contrôleur tant que l'instance `createAster` le retient.
+      instance.toolbar?.destroy();
+      expect(instance.isSourceView()).toBe(true);
       instance.destroy();
       expect(mock.element.querySelector(`.${SOURCE_TEXTAREA_CLASS}`)).toBeNull();
+      expect(mock.isReadOnly()).toBe(false);
       root.remove();
     });
   });

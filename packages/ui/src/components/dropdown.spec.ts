@@ -129,6 +129,145 @@ describe('createDropdown', () => {
     dropdown.trigger.click();
     expect(dropdown.isOpen()).toBe(false);
   });
+
+  it('un second clic sur le déclencheur rend le focus au déclencheur s’il était dans le panneau', () => {
+    const dropdown = mount();
+    dropdown.trigger.click();
+    expect(dropdown.panel.contains(document.activeElement)).toBe(true);
+    dropdown.trigger.click();
+    expect(dropdown.isOpen()).toBe(false);
+    expect(document.activeElement).toBe(dropdown.trigger);
+  });
+
+  it('se ferme quand le focus sort du dropdown, pas quand il circule dedans ni vers nulle part', () => {
+    const dropdown = mount();
+    const outside = document.createElement('button');
+    host.append(outside);
+    dropdown.open();
+    const items = Array.from(dropdown.panel.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    const focusout = (from: HTMLElement, relatedTarget: EventTarget | null): void => {
+      from.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget }));
+    };
+    focusout(items[0]!, items[1]!);
+    expect(dropdown.isOpen()).toBe(true);
+    focusout(items[0]!, dropdown.trigger);
+    expect(dropdown.isOpen()).toBe(true);
+    // Fenêtre qui perd le focus, sélecteur de fichier natif : relatedTarget nul, on garde.
+    focusout(items[0]!, null);
+    expect(dropdown.isOpen()).toBe(true);
+    focusout(items[0]!, outside);
+    expect(dropdown.isOpen()).toBe(false);
+    // Idem pour un dialogue : Tab hors du panneau le ferme.
+    const dialog = createDropdown({
+      editor,
+      labelKey: 'ui.link.title',
+      panelRole: 'dialog',
+      renderPanel: (panel) => panel.append(document.createElement('input')),
+    });
+    host.append(dialog.element);
+    dialog.open();
+    focusout(dialog.panel.querySelector('input')!, outside);
+    expect(dialog.isOpen()).toBe(false);
+    dialog.destroy();
+  });
+
+  it('rend le focus à l’éditeur si le panneau se ferme parce que le dropdown se désactive', () => {
+    const dropdown = mount();
+    dropdown.open();
+    expect(dropdown.panel.contains(document.activeElement)).toBe(true);
+    editor.setReadOnly(true);
+    dropdown.update();
+    expect(dropdown.isOpen()).toBe(false);
+    expect(dropdown.trigger.disabled).toBe(true);
+    expect(editor.focusCalls).toBe(1);
+    // Focus sur le déclencheur qui devient disabled : le navigateur le lâcherait sur body.
+    editor.setReadOnly(false);
+    dropdown.update();
+    dropdown.open();
+    dropdown.trigger.focus();
+    editor.setReadOnly(true);
+    dropdown.update();
+    expect(editor.focusCalls).toBe(2);
+    // Focus ailleurs : rien à rendre.
+    editor.setReadOnly(false);
+    dropdown.update();
+    expect(dropdown.trigger.disabled).toBe(false);
+    editor.setReadOnly(true);
+    dropdown.update();
+    expect(editor.focusCalls).toBe(2);
+  });
+
+  it('aligne le panneau à droite quand il déborde du viewport', () => {
+    const dropdown = mount();
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { value: 758, configurable: true });
+    dropdown.panel.getBoundingClientRect = (): DOMRect =>
+      ({ left: 563, right: 903, width: 340, top: 0, bottom: 100, height: 100 }) as DOMRect;
+    try {
+      dropdown.open();
+      expect(dropdown.panel.classList.contains('aster-dropdown__panel--flip')).toBe(true);
+      dropdown.close();
+      expect(dropdown.panel.classList.contains('aster-dropdown__panel--flip')).toBe(false);
+      dropdown.panel.getBoundingClientRect = (): DOMRect =>
+        ({ left: 10, right: 350, width: 340, top: 0, bottom: 100, height: 100 }) as DOMRect;
+      dropdown.open();
+      expect(dropdown.panel.classList.contains('aster-dropdown__panel--flip')).toBe(false);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true });
+    }
+  });
+
+  it('update() reconstruit un menu ouvert en gardant le focus sur l’entrée de même rang', () => {
+    let label = 'avant';
+    const dropdown = createDropdown({
+      editor,
+      labelKey: 'command.heading',
+      renderPanel: (panel) => {
+        for (let i = 0; i < 3; i++) {
+          panel.append(createMenuItem({ text: `${label} ${i}`, onSelect: () => undefined }));
+        }
+      },
+    });
+    host.append(dropdown.element);
+    dropdown.open();
+    const items = (): HTMLElement[] =>
+      Array.from(dropdown.panel.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    items()[1]!.focus();
+    label = 'après';
+    dropdown.update();
+    expect(items().map((item) => item.textContent)).toEqual(['après 0', 'après 1', 'après 2']);
+    expect(document.activeElement).toBe(items()[1]);
+    dropdown.destroy();
+  });
+
+  it('update() ne touche pas à un dialogue ouvert (saisie en cours)', () => {
+    const dialog = createDropdown({
+      editor,
+      labelKey: 'ui.link.title',
+      panelRole: 'dialog',
+      renderPanel: (panel) => panel.append(document.createElement('input')),
+    });
+    host.append(dialog.element);
+    dialog.open();
+    const input = dialog.panel.querySelector('input')!;
+    input.value = 'https://aster.invalid/';
+    dialog.update();
+    expect(dialog.panel.querySelector('input')).toBe(input);
+    expect(input.value).toBe('https://aster.invalid/');
+    dialog.destroy();
+  });
+
+  it('ne pose aria-pressed sur le déclencheur que si isActive est fourni', () => {
+    const dropdown = mount();
+    expect(dropdown.trigger.hasAttribute('aria-pressed')).toBe(false);
+    const stateful = createDropdown({
+      editor,
+      labelKey: 'command.heading',
+      isActive: () => true,
+      renderPanel: () => undefined,
+    });
+    expect(stateful.trigger.getAttribute('aria-pressed')).toBe('true');
+  });
 });
 
 describe('createCommandDropdown', () => {
@@ -167,5 +306,40 @@ describe('createCommandDropdown', () => {
     expect(editor.calls).toEqual([{ id: 'alignLeft', args: undefined }]);
     expect(editor.focusCalls).toBe(1);
     expect(dropdown.isOpen()).toBe(false);
+  });
+
+  it('rend des menuitem (sans aria-checked) et aucun aria-pressed pour des commandes sans isActive', () => {
+    const stateless = createMockEditor({
+      commands: ['undo', 'redo', 'bold'],
+      stateless: ['undo', 'redo'],
+    });
+    const actions = createCommandDropdown(stateless, {
+      type: 'dropdown',
+      id: 'history',
+      labelKey: 'command.undo',
+      items: [{ command: 'undo' }, { command: 'redo' }],
+    });
+    host.append(actions.element);
+    expect(actions.trigger.hasAttribute('aria-pressed')).toBe(false);
+    actions.open();
+    expect(actions.panel.querySelectorAll('[role="menuitem"]').length).toBe(2);
+    expect(actions.panel.querySelectorAll('[role="menuitemradio"]').length).toBe(0);
+    expect(actions.panel.querySelector('[aria-checked]')).toBeNull();
+    actions.close();
+    // Mixte : seules les entrées à état sont cochables, le déclencheur reflète celles-ci.
+    stateless.active.add('bold');
+    const mixed = createCommandDropdown(stateless, {
+      type: 'dropdown',
+      id: 'mixed',
+      labelKey: 'command.undo',
+      items: [{ command: 'undo' }, { command: 'bold' }],
+    });
+    host.append(mixed.element);
+    expect(mixed.trigger.getAttribute('aria-pressed')).toBe('true');
+    mixed.open();
+    expect(mixed.panel.querySelector('[role="menuitem"]')?.textContent).toBe('Undo');
+    expect(mixed.panel.querySelector('[role="menuitemradio"]')?.getAttribute('aria-checked')).toBe(
+      'true',
+    );
   });
 });

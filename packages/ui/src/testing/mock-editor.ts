@@ -28,6 +28,11 @@ export interface MockEditorOptions {
   readOnly?: boolean;
   /** Raccourcis déclarés par commande, ex. `{ bold: 'Mod-b' }`. */
   shortcuts?: Readonly<Record<string, string>>;
+  /**
+   * Commandes enregistrées **sans** `isActive` (actions pures comme `undo`), pour tester
+   * les boutons sans `aria-pressed`. Les autres déclarent `isActive` et lisent `active`.
+   */
+  stateless?: readonly string[];
 }
 
 /**
@@ -210,6 +215,7 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
   };
 
   const ids: readonly string[] = options.commands ?? STANDARD_COMMAND_IDS;
+  const stateless = new Set(options.stateless ?? []);
   for (const id of ids) {
     const shortcut = options.shortcuts?.[id];
     const command: AsterCommand = {
@@ -220,6 +226,14 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
         calls.push({ id, args });
         return true;
       },
+      // Comme les commandes standard du core, chaque commande à état déclare `isActive` ;
+      // l'UI ne pose `aria-pressed` que dans ce cas.
+      ...(stateless.has(id)
+        ? {}
+        : {
+            isActive: (_editor, args: unknown) =>
+              active.has(stateKey(id, args)) || (args !== undefined && active.has(id)),
+          }),
     };
     commands.register(command);
   }

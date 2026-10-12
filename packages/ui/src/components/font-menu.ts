@@ -1,5 +1,6 @@
 import type { AsterEditor } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
+import { isRecord, readString } from '../utils/guards';
 import { createDropdown, createMenuItem } from './dropdown';
 
 /** Polices proposées par défaut : familles système sûres, sans chargement distant. */
@@ -26,17 +27,20 @@ export const FONT_SIZES: readonly string[] = [
 
 /** Attributs du mark `textStyle` tels qu'exposés par Tiptap. */
 interface TextStyleAttributes {
-  fontFamily?: string | null;
-  fontSize?: string | null;
+  fontFamily: string | null;
+  fontSize: string | null;
 }
+
+const NO_TEXT_STYLE: TextStyleAttributes = { fontFamily: null, fontSize: null };
 
 /** Lit l'attribut courant du mark `textStyle`, tolérant si l'extension est absente. */
 function currentTextStyle(editor: AsterEditor): TextStyleAttributes {
   try {
     const attrs: unknown = editor.tiptap.getAttributes('textStyle');
-    return typeof attrs === 'object' && attrs !== null ? (attrs as TextStyleAttributes) : {};
+    if (!isRecord(attrs)) return NO_TEXT_STYLE;
+    return { fontFamily: readString(attrs, 'fontFamily'), fontSize: readString(attrs, 'fontSize') };
   } catch {
-    return {};
+    return NO_TEXT_STYLE;
   }
 }
 

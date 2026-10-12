@@ -6,6 +6,8 @@ import { createAster } from '../create-aster';
 import { createMockEditor, type MockEditor } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
 import { createWidget } from '../toolbar/widgets';
+import { createDropdown, createMenuItem } from './dropdown';
+import { createTableContextMenu } from './table-context-menu';
 import {
   FULLSCREEN_CLASS,
   createFullscreen,
@@ -63,9 +65,11 @@ describe('plein écran', () => {
       expect(listener).toHaveBeenCalledTimes(2);
     });
 
-    it('Échap dans l’éditeur quitte le plein écran, pas si l’événement est déjà consommé', () => {
+    it('Échap dans l’éditeur quitte le plein écran, même si ProseMirror l’a déjà consommé', () => {
       const fullscreen = getFullscreen(editor);
       fullscreen.set(true);
+      // prosemirror-view appelle `preventDefault` sur Échap quand le focus est dans le
+      // contenu : l'écouteur, en phase de capture, doit passer avant et ne pas s'y fier.
       const consumed = new KeyboardEvent('keydown', {
         key: 'Escape',
         bubbles: true,
@@ -73,11 +77,48 @@ describe('plein écran', () => {
       });
       consumed.preventDefault();
       editor.contentElement.dispatchEvent(consumed);
-      expect(fullscreen.isActive()).toBe(true);
-      expect(escape(editor.contentElement).defaultPrevented).toBe(true);
       expect(fullscreen.isActive()).toBe(false);
       // Hors plein écran, Échap n'est plus écouté.
       expect(escape(editor.contentElement).defaultPrevented).toBe(false);
+      fullscreen.set(true);
+      expect(escape(editor.contentElement).defaultPrevented).toBe(true);
+      expect(fullscreen.isActive()).toBe(false);
+    });
+
+    it('Échap ferme d’abord un dropdown ouvert, le plein écran n’est quitté qu’au suivant', () => {
+      const fullscreen = getFullscreen(editor);
+      const dropdown = createDropdown({
+        editor,
+        labelKey: 'command.heading',
+        renderPanel: (panel) => {
+          panel.append(createMenuItem({ text: 'x', onSelect: () => undefined }));
+        },
+      });
+      host.prepend(dropdown.element);
+      fullscreen.set(true);
+      dropdown.open();
+      const item = dropdown.panel.querySelector<HTMLElement>('[role="menuitem"]')!;
+      escape(item);
+      expect(dropdown.isOpen()).toBe(false);
+      expect(fullscreen.isActive()).toBe(true);
+      escape(dropdown.trigger);
+      expect(fullscreen.isActive()).toBe(false);
+      dropdown.destroy();
+    });
+
+    it('Échap ferme d’abord le menu contextuel de table', () => {
+      const fullscreen = getFullscreen(editor);
+      const menu = createTableContextMenu(editor);
+      editor.activeNodes.add('table');
+      fullscreen.set(true);
+      menu.open(10, 10);
+      expect(menu.isOpen()).toBe(true);
+      escape(menu.element);
+      expect(menu.isOpen()).toBe(false);
+      expect(fullscreen.isActive()).toBe(true);
+      escape(editor.contentElement);
+      expect(fullscreen.isActive()).toBe(false);
+      menu.destroy();
     });
 
     it('retombe sur l’hôte de l’éditeur sans racine .aster', () => {

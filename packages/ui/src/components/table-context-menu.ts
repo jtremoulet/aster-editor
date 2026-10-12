@@ -15,6 +15,18 @@ export interface TableContextMenu extends ToolbarWidget {
 
 const MENU_ITEM_SELECTOR = '[role="menuitem"]';
 
+/** Marge gardée entre le menu et le bord du viewport, en pixels. */
+const VIEWPORT_MARGIN = 8;
+
+/**
+ * Ramène une coordonnée dans le viewport : le menu est posé au curseur mais ne doit
+ * pas dépasser le bord (`size` = sa largeur ou hauteur mesurée, `limit` = celle du
+ * viewport). Jamais négatif, pour un menu plus grand que l'écran.
+ */
+export function clampToViewport(position: number, size: number, limit: number): number {
+  return Math.max(0, Math.min(position, limit - size - VIEWPORT_MARGIN));
+}
+
 /** Vrai si le curseur est dans un tableau, tolérant si l'extension manque. */
 function isInTable(editor: AsterEditor): boolean {
   try {
@@ -87,6 +99,11 @@ export function createTableContextMenu(editor: AsterEditor): TableContextMenu {
     menu.style.top = `${clientY}px`;
     menu.removeAttribute('hidden');
     if (!menu.isConnected) editor.element.append(menu);
+    // Mesuré une fois rendu : le menu est en `position: fixed` au curseur, on le ramène
+    // dans le viewport pour que ses dernières entrées restent cliquables en bas d'écran.
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${clampToViewport(clientX, rect.width, window.innerWidth)}px`;
+    menu.style.top = `${clampToViewport(clientY, rect.height, window.innerHeight)}px`;
     document.addEventListener('mousedown', onDocumentMouseDown, true);
     enabledElements(menu, MENU_ITEM_SELECTOR)[0]?.focus();
   };

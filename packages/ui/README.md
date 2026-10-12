@@ -200,6 +200,18 @@ const stamp = createDropdown({
 toolbar.element.append(stamp.element);
 ```
 
+## 🧾 Vue source et plein écran
+
+Deux contrôleurs partagés par éditeur, utilisés par `createAster` (`toggleSource`, `setFullscreen`) et par les widgets `source` et `fullscreen` :
+
+| Export                            | Rôle                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `getSourceView(editor)`           | `SourceView` partagé : `enter()` masque le contenu, ajoute un `<textarea class="aster-source">` avec le HTML formaté et passe l'éditeur en **lecture seule** (ce qui désactive la toolbar) ; `exit()` **remet l'édition** (`setReadOnly(false)`) et applique le HTML s'il a changé ; `destroy()` quitte sans appliquer et remet aussi l'édition. |
+| `retainSourceView(editor)`        | Comme `getSourceView`, mais compte l'utilisateur : chaque `retain` appelle `releaseSourceView(view)` à sa destruction, et le dernier détruit le contrôleur. `createAster` et chaque bouton `source` le font : `toolbar.destroy()` pendant la vue source la quitte et rend l'édition.                                                             |
+| `releaseSourceView(view)`         | Libère un contrôleur obtenu par `retainSourceView`.                                                                                                                                                                                                                                                                                              |
+| `getFullscreen(editor)`           | `Fullscreen` partagé : `set(true)` pose `aster--fullscreen` sur `.aster` (position fixe plein écran via CSS), `Échap` quitte, `destroy()` quitte et libère.                                                                                                                                                                                      |
+| `formatSourceHtml(html, indent?)` | Indentation par bloc du HTML sérialisé, utilisée par la vue source.                                                                                                                                                                                                                                                                              |
+
 ## 🖼️ Icônes
 
 Jeu maison MIT, SVG inline 20 × 20 en `currentColor`, injecté dans `.aster-toolbar__icon`.
@@ -207,13 +219,13 @@ Jeu maison MIT, SVG inline 20 × 20 en `currentColor`, injecté dans `.aster-too
 | Export                   | Rôle                                                                       |
 | ------------------------ | -------------------------------------------------------------------------- |
 | `getIcon(name)`          | SVG de l'icône. Nom inconnu → icône « ? » visible, jamais une chaîne vide. |
-| `hasIcon(name)`          | Vrai si le nom existe.                                                     |
+| `hasIcon(name)`          | Vrai si le nom existe dans le jeu (`constructor`, `toString`… → `false`).  |
 | `iconNameForCommand(id)` | Convention : `table.insert` → `table-insert`, `alignLeft` → `align-left`.  |
 | `ICON_NAMES`             | Liste des 58 noms disponibles.                                             |
 
 Noms : une icône par commande standard (`bold`, `heading`, `heading-1` … `heading-6`, `bullet-list`, `table-insert`, `link-set`, `text-color`, `undo`…) plus `chevron-down`, `check`, `close`, `none`.
 
-Résolution de l'icône d'un bouton : `item.icon` explicite → `command.icon` déclaré → convention `iconNameForCommand(id)` → repli. Pour une commande custom, le plus simple est de réutiliser un nom existant (`icon: 'horizontal-rule'`).
+Résolution de l'icône d'un bouton : `item.icon` explicite → `command.icon` déclaré → convention `iconNameForCommand(id)` → repli. Chaque candidat passe par `hasIcon` : un `item.icon` inconnu ne masque pas l'icône de la commande. Pour une commande custom, le plus simple est de réutiliser un nom existant (`icon: 'horizontal-rule'`).
 
 **Ajouter une icône** : le jeu est fermé en 0.1.0, il n'y a pas d'API d'enregistrement. Deux options : choisir un nom du jeu, ou remplacer le SVG après montage :
 
@@ -243,7 +255,7 @@ editor.i18n.addTranslations('de', {
 });
 ```
 
-Clés : `ui.toolbar.label`, `ui.dropdown.open`, `ui.link.*` (`title`, `url`, `newTab`, `ok`, `cancel`, `remove`, `invalid`), `ui.image.*` (`title`, `url`, `alt`, `fromFile`, `ok`, `cancel`), `ui.table.*` (`insert`, `size` avec `{rows}`/`{cols}`, `grid`, `actions`), `ui.color.none`, `ui.color.palette` et les 20 noms de couleurs (`ui.color.black` … `ui.color.lightPurple`), `ui.heading.paragraph`, `ui.heading.label`, `ui.font.*` (`default`, `family`, `sizeDefault`, `size`). Le repli `en` couvre les clés manquantes.
+Clés : `ui.toolbar.label`, `ui.link.*` (`title`, `url`, `newTab`, `ok`, `cancel`, `remove`, `invalid`), `ui.image.*` (`title`, `url`, `alt`, `fromFile`, `ok`, `cancel`, `edit`, `apply`, `titleAttr`, `width`, `widthAuto`, `align`, `align.left/center/right`), `ui.table.*` (`size` avec `{rows}`/`{cols}`, `grid`, `actions`, `contextMenu`), `ui.color.none`, `ui.color.palette` et les 20 noms de couleurs (`ui.color.black` … `ui.color.lightPurple`), `ui.heading.paragraph`, `ui.heading.label`, `ui.font.*` (`default`, `family`, `sizeDefault`, `size`), `ui.search.*`, `ui.source.*`, `ui.fullscreen.*`, `ui.specialChars.*`, `ui.print.*`. Le repli `en` couvre les clés manquantes ; `uiFr` et `uiEn` ont exactement les mêmes clés (vérifié par test).
 
 ## 🎨 Thèmes
 
@@ -314,10 +326,12 @@ Anatomie DOM complète, classes d'état et exemple de thème « corporate » dan
 ## ♿ Accessibilité
 
 - Toolbar : `role="toolbar"` avec `aria-label` traduit, groupes `role="group"`.
-- Boutons : `aria-label` (libellé seul), `title` (libellé + raccourci), `aria-pressed` pour l'état actif, `disabled` + `aria-disabled`.
+- Boutons : `aria-label` (libellé seul), `title` (libellé + raccourci), `disabled` + `aria-disabled`. `aria-pressed` n'est posé que sur les boutons à bascule, c'est-à-dire les commandes qui déclarent `isActive` (`bold`, `alignLeft`…) ; `undo`, `horizontalRule` ou une commande custom sans `isActive` n'en ont pas.
 - Navigation : **roving tabindex**, un seul bouton tabbable à la fois. `←` / `→` entre les boutons, `Home` / `End`, les boutons désactivés sont sautés.
-- Dropdowns : `aria-haspopup`, `aria-expanded` ; `↓` ouvre, `Échap` ferme et rend le focus au déclencheur, clic extérieur ferme ; dans un panneau `menu`, `↑` / `↓` entre les `menuitem`, les entrées cochables sont des `menuitemradio` avec `aria-checked`.
-- Dialogues (lien, image) : `role="dialog"` avec `aria-label`, champ URL focalisé à l'ouverture, `Entrée` valide, erreurs en `role="alert"` + `aria-invalid`.
-- Grille de table : chaque cellule a un `aria-label` « Tableau r × c », taille annoncée en `aria-live="polite"`.
+- Dropdowns : `aria-haspopup`, `aria-expanded` ; `↓` ouvre, `Échap` ferme et rend le focus au déclencheur, un second clic sur le déclencheur aussi, clic extérieur ou focus sorti du dropdown (`Tab`) ferment ; dans un panneau `menu`, `↑` / `↓` entre les `menuitem`, les entrées des commandes à état sont des `menuitemradio` avec `aria-checked`, les autres de simples `menuitem`. Un panneau qui déborderait à droite du viewport reçoit `aster-dropdown__panel--flip` (aligné sur le bord droit du déclencheur). Si le dropdown se désactive alors que son panneau a le focus (lecture seule, vue source), le focus revient à l'éditeur.
+- Dialogues (lien, image, recherche) : `role="dialog"` avec `aria-label`, champ URL focalisé à l'ouverture, `Entrée` valide, erreurs en `role="alert"` + `aria-invalid`. Dans la recherche, `Échap` efface le surlignage comme « Fermer ».
+- Grille de table : chaque cellule a un `aria-label` « Tableau r × c », taille annoncée en `aria-live="polite"`, navigation `←` / `→` dans la ligne et `↑` / `↓` entre les lignes (`↓` depuis la dernière ligne passe aux actions `table.*`).
+- Menu contextuel de table : ouvert au clic droit, ramené dans le viewport, fermé à `Échap`, au clic extérieur, en lecture seule et quand la sélection quitte le tableau.
+- Plein écran : `Échap` quitte, écouté en phase de capture sur `.aster` (ProseMirror consomme la touche sinon) ; un dropdown ou un menu contextuel ouvert est fermé en priorité.
 - Pastilles de couleur : `aria-label` et `title` traduits, `aria-checked` sur la couleur courante.
 - Focus visible via `--aster-focus-ring`, `prefers-reduced-motion` respecté.

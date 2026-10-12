@@ -84,9 +84,35 @@ describe('createAster', () => {
     expect(instance.element.getAttribute('data-theme')).toBe('custom');
   });
 
+  it('ferme le menu contextuel de table en lecture seule et quand la sélection quitte le tableau', () => {
+    const instance = createAster(host, { toolbar: false });
+    editor.activeNodes.add('table');
+    const menu = (): HTMLElement | null =>
+      editor.element.querySelector('.aster-table-context-menu');
+    const open = (): void => {
+      editor.contentElement.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+      );
+      expect(menu()?.hasAttribute('hidden')).toBe(false);
+    };
+    open();
+    // Vue source ou `setReadOnly(true)` : l'éditeur émet `readOnlyChange`.
+    editor.setReadOnly(true);
+    expect(menu()?.hasAttribute('hidden')).toBe(true);
+    editor.setReadOnly(false);
+    open();
+    editor.activeNodes.delete('table');
+    editor.emit('selectionChange', { editor });
+    expect(menu()?.hasAttribute('hidden')).toBe(true);
+    instance.destroy();
+    expect(editor.listenerCount()).toBe(0);
+  });
+
   it('destroy détruit toolbar et éditeur, retire l’élément, idempotent', () => {
     const instance = createAster(host);
-    expect(editor.listenerCount()).toBe(3);
+    // 3 abonnements de la toolbar (selectionChange, readOnlyChange, localeChange)
+    // + 2 du menu contextuel de table (readOnlyChange, selectionChange).
+    expect(editor.listenerCount()).toBe(5);
     instance.destroy();
     expect(editor.isDestroyed()).toBe(true);
     expect(editor.listenerCount()).toBe(0);

@@ -2,6 +2,7 @@ import type { AsterEditor, StandardCommandArgs } from '@aster-editor/core';
 import { IMAGE_ALIGNMENTS, IMAGE_EDIT_EVENT } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
+import { isRecord, readNumberOrString, readString } from '../utils/guards';
 import { createPlainButton } from './button';
 import { createDropdown, type Dropdown } from './dropdown';
 
@@ -16,20 +17,29 @@ type ImageAlign = NonNullable<StandardCommandArgs['image.setAttributes']['align'
 
 /** Attributs du nœud image tels que lus via `tiptap.getAttributes('image')`. */
 interface ImageAttributes {
-  src?: string | null;
-  alt?: string | null;
-  title?: string | null;
-  width?: number | string | null;
-  align?: string | null;
+  src: string | null;
+  alt: string | null;
+  title: string | null;
+  width: number | string | null;
+  align: string | null;
 }
+
+const NO_IMAGE: ImageAttributes = { src: null, alt: null, title: null, width: null, align: null };
 
 /** Image sous la sélection, tolérant si l'extension manque (mock, core réduit). */
 function currentImage(editor: AsterEditor): ImageAttributes {
   try {
     const attrs: unknown = editor.tiptap.getAttributes('image');
-    return typeof attrs === 'object' && attrs !== null ? (attrs as ImageAttributes) : {};
+    if (!isRecord(attrs)) return NO_IMAGE;
+    return {
+      src: readString(attrs, 'src'),
+      alt: readString(attrs, 'alt'),
+      title: readString(attrs, 'title'),
+      width: readNumberOrString(attrs, 'width'),
+      align: readString(attrs, 'align'),
+    };
   } catch {
-    return {};
+    return NO_IMAGE;
   }
 }
 
@@ -119,7 +129,7 @@ export function createImageDialog(editor: AsterEditor): ToolbarWidget {
 function renderImagePanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dropdown): void {
   const t = (key: string): string => editor.i18n.t(key);
   const editing = isImageSelected(editor) && editor.commands.canRun('image.setAttributes', {});
-  const current = editing ? currentImage(editor) : {};
+  const current = editing ? currentImage(editor) : NO_IMAGE;
   panel.setAttribute('aria-label', t(editing ? 'ui.image.edit' : 'ui.image.title'));
   panel.classList.toggle('aster-image-dialog--editing', editing);
   const suffix = Math.random().toString(36).slice(2, 8);

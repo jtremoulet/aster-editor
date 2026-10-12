@@ -1,6 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { createCommandButton, createPlainButton, setDisabled } from './button';
+import { createCommandButton, createPlainButton, resolveIcon, setDisabled } from './button';
+
+describe('resolveIcon', () => {
+  it('passe la surcharge par hasIcon et retombe sur la commande ou la convention', () => {
+    expect(resolveIcon('bold', 'italic')).toBe('italic');
+    expect(resolveIcon('bold', 'constructor')).toBe('bold');
+    expect(resolveIcon('bold', 'nope', 'italic')).toBe('italic');
+    expect(resolveIcon('table.insert', '__proto__')).toBe('table-insert');
+    expect(resolveIcon('custom', 'toString', 'alignLeft')).toBe('align-left');
+    expect(resolveIcon('custom', 'toString')).toBe('custom');
+  });
+});
 
 describe('createPlainButton', () => {
   it('neutralise le mousedown pour ne pas voler le focus à l’éditeur', () => {
@@ -70,5 +81,21 @@ describe('createCommandButton', () => {
 
   it('retourne null pour une commande inconnue', () => {
     expect(createCommandButton(editor, { type: 'button', command: 'ghost' })).toBeNull();
+  });
+
+  it('ne pose aria-pressed et --active que si la commande déclare isActive', () => {
+    const stateless = createMockEditor({ commands: ['bold', 'undo'], stateless: ['undo'] });
+    const bold = createCommandButton(stateless, { type: 'button', command: 'bold' })!;
+    const undo = createCommandButton(stateless, { type: 'button', command: 'undo' })!;
+    expect(bold.element.getAttribute('aria-pressed')).toBe('false');
+    expect(undo.element.hasAttribute('aria-pressed')).toBe(false);
+    stateless.active.add('bold');
+    stateless.active.add('undo');
+    bold.update();
+    undo.update();
+    expect(bold.element.getAttribute('aria-pressed')).toBe('true');
+    expect(bold.element.classList.contains('aster-toolbar__button--active')).toBe(true);
+    expect(undo.element.hasAttribute('aria-pressed')).toBe(false);
+    expect(undo.element.classList.contains('aster-toolbar__button--active')).toBe(false);
   });
 });

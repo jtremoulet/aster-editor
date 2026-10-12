@@ -175,15 +175,17 @@ export const ICON_NAMES: readonly string[] = Object.keys(ICONS);
 
 /**
  * Retourne le SVG inline d'une icône. Un nom inconnu retourne une icône de repli
- * visible plutôt qu'une chaîne vide, pour que l'oubli se voie en démo.
+ * visible plutôt qu'une chaîne vide, pour que l'oubli se voie en démo. Passe par
+ * `hasIcon` : `ICONS['constructor']` ou `ICONS['toString']` renverraient sinon une
+ * fonction héritée de `Object.prototype`, injectée telle quelle dans le DOM.
  */
 export function getIcon(name: string): string {
-  return ICONS[name] ?? FALLBACK_ICON;
+  return hasIcon(name) ? (ICONS[name] ?? FALLBACK_ICON) : FALLBACK_ICON;
 }
 
-/** Vrai si l'icône existe dans le jeu. */
+/** Vrai si l'icône existe dans le jeu (propriété propre, jamais héritée du prototype). */
 export function hasIcon(name: string): boolean {
-  return Object.prototype.hasOwnProperty.call(ICONS, name);
+  return Object.hasOwn(ICONS, name);
 }
 
 /**

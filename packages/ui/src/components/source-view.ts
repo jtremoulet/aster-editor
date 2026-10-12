@@ -23,7 +23,10 @@ export interface SourceView {
   toggle(): void;
   /** Appelé à chaque entrée / sortie. */
   onChange(listener: () => void): Unsubscribe;
-  /** Quitte la vue source sans appliquer le HTML et libère les écouteurs. */
+  /**
+   * Quitte la vue source sans appliquer le HTML, rend l'édition (`setReadOnly(false)`)
+   * et libère les écouteurs.
+   */
   destroy(): void;
 }
 
@@ -147,6 +150,9 @@ export function formatSourceHtml(html: string, indent = '  '): string {
 
 const registry = new WeakMap<AsterEditor, SourceView>();
 
+/** Nombre d'utilisateurs (`createAster`, boutons `source`) de chaque contrôleur partagé. */
+const retainCounts = new WeakMap<SourceView, number>();
+
 /**
  * Crée le contrôleur de vue source d'un éditeur.
  *
@@ -155,6 +161,8 @@ const registry = new WeakMap<AsterEditor, SourceView>();
  * en lecture seule : c'est ce qui désactive toute la toolbar via `canRun`, sans que
  * celle-ci ait à connaître la vue source. Le bouton `source` reste actif par exception.
  * Sortie : lecture seule levée, puis `setHTML` seulement si le texte a changé.
+ * `destroy` pendant la vue source lève aussi la lecture seule : elle a été posée par
+ * la vue, l'éditeur ne doit pas rester figé après la disparition de la toolbar.
  */
 export function createSourceView(editor: AsterEditor): SourceView {
   const listeners = new Set<() => void>();
@@ -232,9 +240,13 @@ export function createSourceView(editor: AsterEditor): SourceView {
       if (destroyed) return;
       destroyed = true;
       const wasActive = teardown() !== null;
-      if (wasActive) notify();
+      if (wasActive) {
+        if (!editor.isDestroyed()) editor.setReadOnly(false);
+        notify();
+      }
       listeners.clear();
       if (registry.get(editor) === view) registry.delete(editor);
+      retainCounts.delete(view);
     },
   };
   return view;
@@ -251,12 +263,36 @@ export function getSourceView(editor: AsterEditor): SourceView {
 }
 
 /**
+ * Comme `getSourceView`, mais compte l'utilisateur : chaque `retainSourceView` doit être
+ * suivi d'un `releaseSourceView`, et le dernier détruit le contrôleur. Ainsi la
+ * destruction d'une toolbar montée seule (`createToolbar` + widget `source`) quitte la
+ * vue source et rend l'édition, sans que personne n'ait à connaître le contrôleur.
+ */
+export function retainSourceView(editor: AsterEditor): SourceView {
+  const view = getSourceView(editor);
+  retainCounts.set(view, (retainCounts.get(view) ?? 0) + 1);
+  return view;
+}
+
+/** Libère un contrôleur obtenu par `retainSourceView` ; le détruit s'il n'a plus d'utilisateur. */
+export function releaseSourceView(view: SourceView): void {
+  const count = (retainCounts.get(view) ?? 1) - 1;
+  if (count > 0) {
+    retainCounts.set(view, count);
+    return;
+  }
+  retainCounts.delete(view);
+  view.destroy();
+}
+
+/**
  * Widget `source` : bouton `aria-pressed` qui bascule la vue source. Reste actif
  * pendant la vue source alors que le reste de la toolbar est désactivé par la lecture
- * seule ; désactivé si l'éditeur était déjà en lecture seule avant.
+ * seule ; désactivé si l'éditeur était déjà en lecture seule avant. Le bouton retient
+ * le contrôleur partagé et le libère à son `destroy` (voir `releaseSourceView`).
  */
 export function createSourceButton(editor: AsterEditor): ToolbarWidget {
-  const view = getSourceView(editor);
+  const view = retainSourceView(editor);
   const button = createPlainButton({ className: 'aster-source-button', toolbarItem: true });
   const icon = el('span', { className: 'aster-toolbar__icon' });
   setIcon(icon, getIcon('source'));
@@ -285,6 +321,7 @@ export function createSourceButton(editor: AsterEditor): ToolbarWidget {
     destroy: () => {
       unsubscribe();
       button.removeEventListener('click', onClick);
+      releaseSourceView(view);
     },
   };
 }

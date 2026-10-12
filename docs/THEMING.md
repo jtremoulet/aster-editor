@@ -93,7 +93,8 @@ Produite par `createAster` (le core seul ne crée que `.aster-content` et son `.
 | Éditeur focalisé          | `.aster-content .ProseMirror:focus-visible`, `.ProseMirror-focused`                        |
 | Lecture seule             | `.aster-content .ProseMirror[contenteditable='false']`                                     |
 | Document vide             | `.ProseMirror p.is-editor-empty:first-child::before` (placeholder via `data-placeholder`)  |
-| Nœud sélectionné          | `img.ProseMirror-selectednode`, cellule `.selectedCell::after`                             |
+| Nœud sélectionné          | `figure.aster-image--selected` (image), cellule `.selectedCell::after`                     |
+| Panneau retourné          | `.aster-dropdown__panel--flip` quand le panneau déborderait à droite du viewport           |
 | Curseurs ProseMirror      | `.ProseMirror-gapcursor`, `.ProseMirror-dropcursor`, `.column-resize-handle`               |
 | Commande d'un bouton      | `[data-command='bold']` (utile pour cibler un bouton précis)                               |
 | Image alignée             | `.ProseMirror img[data-align='center' \| 'right']`                                         |
@@ -242,3 +243,5 @@ Pour afficher le HTML stocké avec la même mise en forme sans monter d'éditeur
 ```
 
 Ou monte un éditeur `readOnly: true, toolbar: false` : le schéma refiltre le HTML au passage, ce qui vaut une sanitization de plus côté client.
+
+> ℹ️ Depuis 0.3.0, les règles des tables redimensionnables (`.tableWrapper`, `.column-resize-handle`, `.resize-cursor`) et des images (`figure.aster-image`) vivent dans `images-tables.css`, importé par `aster.css`. `base.css` seul ne suffit plus pour ces fonctionnalités.

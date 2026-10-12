@@ -21,17 +21,23 @@ export interface Fullscreen {
 
 const registry = new WeakMap<AsterEditor, Fullscreen>();
 
+/** Sélecteur d'un panneau ouvert dans `.aster` qui doit recevoir Échap avant le plein écran. */
+const OPEN_PANEL_SELECTOR = '.aster-dropdown--open, .aster-context-menu:not([hidden])';
+
 /**
  * Crée le contrôleur de plein écran. Il ajoute `aster--fullscreen` à la racine `.aster`
  * (ou à l'hôte de l'éditeur s'il n'y en a pas) : c'est le CSS qui la passe en
- * `position: fixed; inset: 0`. Échap, reçu sur la racine en phase de bouillonnement,
- * quitte le plein écran ; un menu ou un dialogue ouvert consomme Échap avant et n'est
- * donc pas court-circuité.
+ * `position: fixed; inset: 0`. Échap est écouté sur la racine en **phase de capture** :
+ * ProseMirror consomme la touche (`preventDefault`) quand le focus est dans le contenu,
+ * et un écouteur en bouillonnement qui testerait `defaultPrevented` ne la verrait jamais.
+ * Un dropdown ou un menu contextuel ouvert garde la priorité : Échap le ferme d'abord,
+ * le plein écran n'est quitté qu'au suivant.
  */
 export function createFullscreen(editor: AsterEditor): Fullscreen {
   const listeners = new Set<() => void>();
   let active = false;
   let destroyed = false;
+  let listening: HTMLElement | null = null;
 
   const root = (): HTMLElement => editor.element.closest<HTMLElement>('.aster') ?? editor.element;
 
@@ -40,7 +46,8 @@ export function createFullscreen(editor: AsterEditor): Fullscreen {
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (event.key !== 'Escape') return;
+    if (listening?.querySelector(OPEN_PANEL_SELECTOR)) return;
     event.preventDefault();
     set(false);
   };
@@ -50,8 +57,13 @@ export function createFullscreen(editor: AsterEditor): Fullscreen {
     active = value;
     const target = root();
     target.classList.toggle(FULLSCREEN_CLASS, value);
-    if (value) target.addEventListener('keydown', onKeyDown);
-    else target.removeEventListener('keydown', onKeyDown);
+    if (value) {
+      listening = target;
+      target.addEventListener('keydown', onKeyDown, true);
+    } else {
+      listening?.removeEventListener('keydown', onKeyDown, true);
+      listening = null;
+    }
     notify();
   };
 

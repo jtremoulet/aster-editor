@@ -110,11 +110,15 @@ export function createToolbar(
     syncTabIndex();
   };
 
-  const subscriptions: Unsubscribe[] = [
-    editor.on('selectionChange', update),
-    editor.on('readOnlyChange', update),
-    editor.on('localeChange', update),
-  ];
+  // Rien à synchroniser sans groupe (`config: false`) : pas d'abonnement inutile.
+  const subscriptions: Unsubscribe[] =
+    groups.length > 0
+      ? [
+          editor.on('selectionChange', update),
+          editor.on('readOnlyChange', update),
+          editor.on('localeChange', update),
+        ]
+      : [];
 
   if (groups.length > 0) {
     container.append(root);

@@ -64,7 +64,7 @@ function iconButton(className: string, svg: string, label: string): HTMLButtonEl
  *
  * Tout passe par le registre : la saisie lance `search.open` avec la requête (ou
  * `search.clear` si vide), les boutons appellent `search.next`, `search.previous`,
- * `search.replace`, `search.replaceAll`, « Fermer » efface puis referme. Le panneau
+ * `search.replace`, `search.replaceAll`, « Fermer » et Échap effacent puis referment. Le panneau
  * s'ouvre aussi sur l'événement `aster:search-open` émis par `search.open` (`Mod-f`).
  * Le compteur `n / total` est lu dans le storage du core après chaque action et à
  * chaque `update()` de la toolbar.
@@ -217,6 +217,13 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
   setIcon(triggerIcon, getIcon('search'));
   dropdown.trigger.prepend(triggerIcon);
 
+  // Échap dans le panneau : même effet que « Fermer », le surlignage est effacé avant
+  // que le dropdown ne se referme (écouté en capture pour passer avant lui).
+  const onPanelKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') editor.commands.run('search.clear');
+  };
+  dropdown.panel.addEventListener('keydown', onPanelKeyDown, true);
+
   const onSearchOpen = (event: Event): void => {
     const detail = (event as CustomEvent<SearchOpenEventDetail | undefined>).detail;
     if (!dropdown.isOpen()) dropdown.open();
@@ -237,6 +244,7 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
     },
     destroy: () => {
       editor.element.removeEventListener(SEARCH_OPEN_EVENT, onSearchOpen);
+      dropdown.panel.removeEventListener('keydown', onPanelKeyDown, true);
       refresh = null;
       queryInput = null;
       dropdown.destroy();
