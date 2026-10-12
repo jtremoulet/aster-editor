@@ -34,7 +34,7 @@ function hasLink(editor: AsterEditor): boolean {
 export function isAcceptableUrl(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.length === 0) return false;
-  if (/^s*(javascript|data|vbscript|file):/i.test(trimmed)) return false;
+  if (/^(javascript|data|vbscript|file):/i.test(trimmed)) return false;
   return true;
 }
 
