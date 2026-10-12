@@ -144,6 +144,16 @@ describe('upload d’image', () => {
       await waitForHtml(mounted.editor, 'src="https://x/a.png"');
       expect(upload).toHaveBeenCalledWith(file);
     });
+
+    it('sans hook, destroy() pendant la lecture du fichier ne lève pas', async () => {
+      mounted = mountEditor({ content: '<p></p>' });
+      expect(mounted.editor.commands.run('image.upload', { file: png() })).toBe(true);
+      mounted.editor.destroy();
+      // Laisse le `FileReader` résoudre : une insertion sur la vue morte serait un rejet
+      // non géré que Vitest ferait échouer ; l'éditeur reste simplement détruit.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(mounted.editor.isDestroyed()).toBe(true);
+    });
   });
 
   describe('handlers de collage et de dépôt', () => {

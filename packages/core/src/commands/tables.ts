@@ -4,11 +4,13 @@ import { defineStandardCommand } from './define';
 /**
  * Tables. Toutes les commandes d'édition de table s'appuient sur `can()` : hors
  * d'une table, Tiptap répond `false` et la toolbar les grise naturellement.
- * `table.insert` est la seule exécutable depuis un paragraphe.
+ * `table.insert` est la seule exécutable depuis un paragraphe, et seulement hors
+ * d'une table : pas de tables imbriquées en V1, même si le schéma les tolère.
  */
 export const TABLE_COMMANDS: readonly AsterCommand[] = [
   defineStandardCommand('table.insert', {
     run: (editor, args) =>
+      !editor.tiptap.isActive('table') &&
       editor.tiptap
         .chain()
         .focus()
@@ -22,6 +24,7 @@ export const TABLE_COMMANDS: readonly AsterCommand[] = [
       args !== undefined &&
       args.rows > 0 &&
       args.cols > 0 &&
+      !editor.tiptap.isActive('table') &&
       editor.tiptap.can().insertTable({ rows: args.rows, cols: args.cols }),
     isActive: (editor) => editor.tiptap.isActive('table'),
   }),

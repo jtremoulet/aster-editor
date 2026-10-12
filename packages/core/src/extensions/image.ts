@@ -3,6 +3,7 @@ import { Image } from '@tiptap/extension-image';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
+import { DEFAULT_LINK_POLICY, isAllowedImageSrc, type ResolvedLinkPolicy } from './link-safety';
 
 /** Alignements d'image reconnus, sérialisés en `data-align`. */
 export const IMAGE_ALIGNMENTS = ['left', 'center', 'right'] as const;
@@ -19,9 +20,11 @@ export const IMAGE_DEFAULT_DRAG_WIDTH = 300;
 /** Nom de l'événement DOM émis au double-clic sur une image, pour ouvrir le dialogue d'édition. */
 export const IMAGE_EDIT_EVENT = 'aster:image-edit';
 
-/** Classes CSS du NodeView d'image. */
+/** Classe CSS du `<figure>` rendu par le NodeView d'image. */
 export const IMAGE_CLASS = 'aster-image';
+/** Classe posée sur le `<figure>` tant que le nœud image est sélectionné (`NodeSelection`). */
 export const IMAGE_SELECTED_CLASS = 'aster-image--selected';
+/** Classe de la poignée de redimensionnement, en bas à droite du `<figure>`. */
 export const IMAGE_HANDLE_CLASS = 'aster-image__handle';
 
 /** Détail de l'événement `aster:image-edit` : position ProseMirror du nœud image. */
@@ -265,9 +268,22 @@ export const renderImageNodeView: NodeViewRenderer = (props) => new ImageNodeVie
  * une largeur numérique lue depuis `width` ou `style="width"`, et un NodeView avec
  * poignée de redimensionnement. Le HTML produit reste un `<img>` nu : `getHTML()`
  * passe par `renderHTML`, pas par le NodeView, donc la sortie est stable.
+ *
+ * La politique de liens s'applique au parsing (`setHTML`, collage) : un `<img>` dont
+ * la source n'est pas autorisée (`javascript:`, `data:text/html`…) n'est pas reconnu
+ * par la règle et disparaît, exactement comme `link.set` et `image.insert` le refusent.
  */
-export function createImageExtension(): Node {
+export function createImageExtension(policy: ResolvedLinkPolicy = DEFAULT_LINK_POLICY): Node {
   return Image.extend({
+    parseHTML() {
+      return [
+        {
+          tag: 'img[src]',
+          getAttrs: (element: HTMLElement) =>
+            isAllowedImageSrc(element.getAttribute('src') ?? '', policy) ? null : false,
+        },
+      ];
+    },
     addAttributes() {
       return {
         ...this.parent?.(),

@@ -20,6 +20,14 @@ function currentAlignment(editor: AsterEditor): string | null {
   return null;
 }
 
+/**
+ * Vrai si la sélection porte sur un bloc alignable. Une image sélectionnée ou un
+ * bloc de code n'ont pas d'alignement : aucun bouton `align*` ne doit y être enfoncé.
+ */
+function hasAlignedBlock(editor: AsterEditor): boolean {
+  return ALIGNED_TYPES.some((type) => editor.tiptap.isActive(type));
+}
+
 const EXPLICIT_ALIGNMENTS: readonly [Extract<StandardCommandId, `align${string}`>, Alignment][] = [
   ['alignCenter', 'center'],
   ['alignRight', 'right'],
@@ -40,6 +48,9 @@ export const ALIGNMENT_COMMANDS: readonly AsterCommand[] = [
     run: (editor) => editor.tiptap.chain().focus().unsetTextAlign().run(),
     canRun: (editor) => editor.tiptap.can().setTextAlign('left'),
     isActive: (editor) => {
+      if (!hasAlignedBlock(editor)) {
+        return false;
+      }
       const current = currentAlignment(editor);
       return current === null || current === 'left';
     },
@@ -48,7 +59,8 @@ export const ALIGNMENT_COMMANDS: readonly AsterCommand[] = [
     defineStandardCommand(id, {
       run: (editor) => editor.tiptap.chain().focus().setTextAlign(alignment).run(),
       canRun: (editor) => editor.tiptap.can().setTextAlign(alignment),
-      isActive: (editor) => editor.tiptap.isActive({ textAlign: alignment }),
+      isActive: (editor) =>
+        hasAlignedBlock(editor) && editor.tiptap.isActive({ textAlign: alignment }),
     }),
   ),
 ];

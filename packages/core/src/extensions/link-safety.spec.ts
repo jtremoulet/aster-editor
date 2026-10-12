@@ -52,6 +52,32 @@ describe('LinkSafety', () => {
       expect(extractScheme('java​script:alert(1)')).toBe('javascript');
       expect(extractScheme('﻿javascript:alert(1)')).toBe('javascript');
     });
+
+    it('ignore aussi les invisibles Unicode sans largeur', () => {
+      expect(extractScheme('java­script:alert(1)')).toBe('javascript');
+      expect(extractScheme('java⁠script:alert(1)')).toBe('javascript');
+      expect(extractScheme('java⁤script:alert(1)')).toBe('javascript');
+      expect(extractScheme('java᠎script:alert(1)')).toBe('javascript');
+    });
+
+    it('décode les entités numériques et &colon; avant de lire le schéma', () => {
+      expect(extractScheme('java&#115;cript:alert(1)')).toBe('javascript');
+      expect(extractScheme('java&#x73;cript:alert(1)')).toBe('javascript');
+      expect(extractScheme('java&#X73;cript:alert(1)')).toBe('javascript');
+      expect(extractScheme('javascript&colon;alert(1)')).toBe('javascript');
+      expect(extractScheme('javascript&#58;alert(1)')).toBe('javascript');
+      expect(extractScheme('javascript&#x3a;alert(1)')).toBe('javascript');
+    });
+
+    it('rend tel quel un segment de schéma où subsiste une entité, jamais null', () => {
+      expect(extractScheme('java&amp;script:alert(1)')).toBe('java&amp;script');
+      expect(extractScheme('a&b:c')).toBe('a&b');
+    });
+
+    it('laisse relative une URL dont le & est dans la requête', () => {
+      expect(extractScheme('/search?a=1&b=https://example.com')).toBeNull();
+      expect(extractScheme('page?x=1&y=2')).toBeNull();
+    });
   });
 
   describe('isAllowedHref', () => {
@@ -75,6 +101,23 @@ describe('LinkSafety', () => {
       expect(isAllowedHref('vbscript:x', policy)).toBe(false);
     });
 
+    it('rejette les entités et invisibles glissés dans le schéma', () => {
+      for (const href of [
+        'java&#115;cript:alert(1)',
+        'java&#x73;cript:alert(1)',
+        'javascript&colon;alert(1)',
+        'javascript&#58;alert(1)',
+        'javascript&#x3a;alert(1)',
+        'java&amp;script:alert(1)',
+        'java­script:alert(1)',
+        'java⁠script:alert(1)',
+        'java᠎script:alert(1)',
+      ]) {
+        expect(isAllowedHref(href, policy)).toBe(false);
+      }
+      expect(isAllowedHref('/search?a=1&b=https://example.com', policy)).toBe(true);
+    });
+
     it('respecte une liste blanche custom', () => {
       const custom = resolveLinkPolicy({ allowedProtocols: ['ftp'] });
       expect(isAllowedHref('ftp://x', custom)).toBe(true);
@@ -83,11 +126,17 @@ describe('LinkSafety', () => {
   });
 
   describe('isAllowedImageSrc', () => {
-    it('tolère data: et blob: pour les images, pas javascript:', () => {
+    it('tolère data:image/ et blob: pour les images, pas javascript: ni data:text/html', () => {
       expect(isAllowedImageSrc('data:image/png;base64,AA==', DEFAULT_LINK_POLICY)).toBe(true);
+      expect(isAllowedImageSrc('DATA:IMAGE/GIF;base64,AA==', DEFAULT_LINK_POLICY)).toBe(true);
       expect(isAllowedImageSrc('blob:https://x/uuid', DEFAULT_LINK_POLICY)).toBe(true);
       expect(isAllowedImageSrc('https://x/a.png', DEFAULT_LINK_POLICY)).toBe(true);
       expect(isAllowedImageSrc('javascript:alert(1)', DEFAULT_LINK_POLICY)).toBe(false);
+      expect(isAllowedImageSrc('data:text/html,<script>', DEFAULT_LINK_POLICY)).toBe(false);
+      expect(isAllowedImageSrc('data:application/pdf;base64,AA==', DEFAULT_LINK_POLICY)).toBe(
+        false,
+      );
+      expect(isAllowedImageSrc('data:,x', DEFAULT_LINK_POLICY)).toBe(false);
     });
   });
 

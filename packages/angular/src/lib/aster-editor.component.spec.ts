@@ -238,10 +238,14 @@ describe('AsterEditorComponent', () => {
 
   it('setDisabledState passe en lecture seule, cumulé avec l’input readonly', async () => {
     const { fixture, component, editor } = await mount();
+    const onChange = vi.fn();
+    component.registerOnChange(onChange);
     component.setDisabledState(true);
     expect(editor.isReadOnly()).toBe(true);
     component.setDisabledState(false);
     expect(editor.isReadOnly()).toBe(false);
+    // Passer disabled ne touche pas au document : le contrôle ne doit pas devenir dirty.
+    expect(onChange).not.toHaveBeenCalled();
 
     fixture.componentRef.setInput('readonly', true);
     fixture.detectChanges();

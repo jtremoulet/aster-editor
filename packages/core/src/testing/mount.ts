@@ -30,6 +30,27 @@ export function mountEditor(options: Partial<AsterOptions> = {}): MountedEditor 
   };
 }
 
+/**
+ * HTML sans le paragraphe vide final que `TrailingNode` ajoute dès que le dernier
+ * bloc n'est pas un paragraphe (titre, liste, citation…). C'est voulu : il garantit
+ * qu'on peut toujours cliquer sous un tel bloc. On l'ignore pour lire le reste.
+ */
+export function bodyHtml(editor: AsterEditor): string {
+  return editor.getHTML().replace(/<p><\/p>$/, '');
+}
+
+/** Position du premier nœud du type donné, -1 s'il n'y en a pas. */
+export function findNodePos(editor: AsterEditor, typeName: string): number {
+  let found = -1;
+  editor.tiptap.state.doc.descendants((node, pos) => {
+    if (found < 0 && node.type.name === typeName) {
+      found = pos;
+    }
+    return found < 0;
+  });
+  return found;
+}
+
 /** Place la sélection sur une plage de positions ProseMirror. */
 export function selectRange(editor: AsterEditor, from: number, to: number): void {
   editor.tiptap.commands.setTextSelection({ from, to });

@@ -6,8 +6,9 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 /** Nom de l'extension, clé de `editor.storage`. */
 export const SEARCH_EXTENSION_NAME = 'search';
 
-/** Classes CSS des décorations de recherche, stylées par `ui`. */
+/** Classe CSS de chaque correspondance décorée, stylée par `ui`. */
 export const SEARCH_MATCH_CLASS = 'aster-search-match';
+/** Classe ajoutée à la correspondance courante (celle que `search.next` vient d'atteindre). */
 export const SEARCH_CURRENT_CLASS = 'aster-search-match--current';
 
 /** Une correspondance : plage de positions ProseMirror dans le document. */

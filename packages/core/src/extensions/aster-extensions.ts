@@ -47,7 +47,7 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     // le porterait et sérialiserait `text-align: left` partout. On garde `null` pour
     // un HTML propre ; c'est la commande `alignLeft` qui traite « absent » comme gauche.
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    createImageExtension(),
+    createImageExtension(context.linkPolicy),
     Subscript,
     Superscript,
     Highlight.configure({ multicolor: true }),

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONTENT_CLASS } from './aster-editor';
+import { CONTENT_CLASS, DESTROYED_ERROR_MESSAGE } from './aster-editor';
 import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount';
 
 /**
@@ -74,6 +74,16 @@ describe('createEditor', () => {
       expect(mounted.editor.getText()).toBe('Un\nDeux');
     });
 
+    it('getText met un seul saut de ligne entre blocs, tables et listes imbriquées comprises', () => {
+      mounted.editor.setHTML(
+        '<h1>Titre</h1>' +
+          '<table><tbody><tr><td><p>a</p></td><td><p>b</p></td></tr></tbody></table>' +
+          '<ul><li><p>Un</p><ul><li><p>Deux</p></li></ul></li></ul>' +
+          '<p>x<br>y</p>',
+      );
+      expect(mounted.editor.getText()).toBe('Titre\na\nb\nUn\nDeux\nx\ny');
+    });
+
     it('setHTML(getHTML()) est idempotent sur un document complet', () => {
       mounted.editor.setHTML(FULL_DOCUMENT);
       const first = mounted.editor.getHTML();
@@ -122,6 +132,18 @@ describe('createEditor', () => {
       mounted.editor.setHTML('');
       expect(mounted.editor.isEmpty()).toBe(true);
       expect(mounted.editor.getCounts()).toEqual({ words: 0, characters: 0 });
+    });
+
+    it('getCounts : une image seule compte un caractère et aucun mot, une table compte ses cellules', () => {
+      // Valeurs observées de `CharacterCount`, figées : une feuille non-texte vaut un
+      // caractère (séparateur), et les cellules se lisent comme des blocs ordinaires.
+      mounted.editor.setHTML('<img src="https://example.com/a.png">');
+      expect(mounted.editor.getCounts()).toEqual({ words: 0, characters: 1 });
+      mounted.editor.setHTML(
+        '<table><tbody><tr><th><p>En-tête</p></th><th><p>Col</p></th></tr>' +
+          '<tr><td><p>ab cd</p></td><td><p>ef</p></td></tr></tbody></table>',
+      );
+      expect(mounted.editor.getCounts()).toEqual({ words: 5, characters: 17 });
     });
   });
 
@@ -188,6 +210,19 @@ describe('createEditor', () => {
       expect(mounted.editor.getHTML()).toBe('<p>J</p>');
     });
 
+    it('setHTML(html, false) après une frappe vide l’historique : pas d’undo fantôme', () => {
+      mounted.editor.setHTML('<p>Tapé</p>');
+      expect(mounted.editor.commands.canRun('undo')).toBe(true);
+      mounted.editor.setHTML('<p>Silencieux</p>', false);
+      expect(mounted.editor.commands.canRun('undo')).toBe(false);
+      expect(mounted.editor.commands.run('undo')).toBe(false);
+      expect(mounted.editor.getHTML()).toBe('<p>Silencieux</p>');
+      // L'historique repart de ce document : la frappe suivante s'annule vers lui.
+      mounted.editor.setHTML('<p>Encore</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Silencieux</p>');
+    });
+
     it('setHTML(html) avec émission reste annulable', () => {
       mounted.editor.setHTML('<p>Annulable</p>');
       expect(mounted.editor.commands.canRun('undo')).toBe(true);
@@ -216,6 +251,17 @@ describe('createEditor', () => {
       mounted.editor.setReadOnly(false);
       expect(handler).toHaveBeenCalledTimes(2);
       expect(mounted.editor.isReadOnly()).toBe(false);
+    });
+
+    it('setReadOnly n’émet jamais change : un formulaire ne doit pas passer dirty', () => {
+      const change = vi.fn();
+      const readOnly = vi.fn();
+      mounted.editor.on('change', change);
+      mounted.editor.on('readOnlyChange', readOnly);
+      mounted.editor.setReadOnly(true);
+      mounted.editor.setReadOnly(false);
+      expect(change).not.toHaveBeenCalled();
+      expect(readOnly).toHaveBeenCalledTimes(2);
     });
 
     it('émet focus et blur avec l’événement DOM', () => {
@@ -314,6 +360,24 @@ describe('createEditor', () => {
       expect(mounted.editor.commands.run('bold')).toBe(false);
       expect(mounted.editor.commands.canRun('bold')).toBe(false);
       expect(mounted.editor.commands.isActive('bold')).toBe(false);
+    });
+
+    it('on est un no-op après destroy et renvoie un désabonnement inoffensif', () => {
+      mounted.editor.destroy();
+      const handler = vi.fn();
+      const unsubscribe = mounted.editor.on('change', handler);
+      expect(typeof unsubscribe).toBe('function');
+      expect(() => unsubscribe()).not.toThrow();
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('les méthodes de contenu lèvent une erreur explicite après destroy', () => {
+      mounted.editor.destroy();
+      expect(() => mounted.editor.getHTML()).toThrow(DESTROYED_ERROR_MESSAGE);
+      expect(() => mounted.editor.setHTML('<p>x</p>')).toThrow(DESTROYED_ERROR_MESSAGE);
+      expect(() => mounted.editor.getJSON()).toThrow(DESTROYED_ERROR_MESSAGE);
+      expect(() => mounted.editor.getText()).toThrow(DESTROYED_ERROR_MESSAGE);
+      expect(() => mounted.editor.insertHTML('<p>x</p>')).toThrow(DESTROYED_ERROR_MESSAGE);
     });
   });
 

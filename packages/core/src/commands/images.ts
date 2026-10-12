@@ -54,9 +54,16 @@ export function createImageCommands(
   upload: UploadHandler | undefined,
 ): readonly AsterCommand[] {
   return [
+    // Pas d'`isActive` : insérer n'est pas une bascule, le bouton ne s'enfonce jamais.
+    // Dans un bloc de code, `insertContent` collerait du texte : refusé explicitement.
     defineStandardCommand('image.insert', {
       run: (editor, args) => {
-        if (!args || typeof args.src !== 'string' || !isAllowedImageSrc(args.src, policy)) {
+        if (
+          !args ||
+          typeof args.src !== 'string' ||
+          !isAllowedImageSrc(args.src, policy) ||
+          editor.tiptap.isActive('codeBlock')
+        ) {
           return false;
         }
         return editor.tiptap
@@ -69,8 +76,8 @@ export function createImageCommands(
         args !== undefined &&
         typeof args.src === 'string' &&
         isAllowedImageSrc(args.src, policy) &&
+        !editor.tiptap.isActive('codeBlock') &&
         editor.tiptap.can().setImage({ src: args.src }),
-      isActive: (editor) => editor.tiptap.isActive('image'),
     }),
     defineStandardCommand('image.upload', {
       run: (editor, args) => {

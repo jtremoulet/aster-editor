@@ -61,34 +61,34 @@ editor.destroy();
 
 ### Contenu
 
-| Méthode                    | Rôle                                                                                                                       |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `getHTML(): string`        | HTML sémantique stable, sans `colgroup`, `min-width` ni `colspan="1"` sur les tables. `setHTML(getHTML())` est idempotent. |
-| `setHTML(html, emit?)`     | Remplace tout le contenu. `emit = false` n'émet pas `change` (utile pour `writeValue` côté formulaire).                    |
-| `getJSON(): AsterDocument` | Document JSON ProseMirror (`JSONContent` de Tiptap).                                                                       |
-| `setJSON(doc, emit?)`      | Idem avec un document JSON.                                                                                                |
-| `getText(): string`        | Texte brut, blocs séparés par `\n`.                                                                                        |
-| `insertHTML(html)`         | Insère à la sélection courante, en passant par le schéma.                                                                  |
-| `isEmpty(): boolean`       | Vrai pour un document sans contenu. Note : `getHTML()` d'un document vide vaut `<p></p>`, teste `isEmpty()` plutôt.        |
-| `getCounts(): AsterCounts` | `{ words, characters }` via `CharacterCount`.                                                                              |
+| Méthode                    | Rôle                                                                                                                                                                                                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getHTML(): string`        | HTML sémantique stable, sans `colgroup`, `min-width` ni `colspan="1"` sur les tables. `setHTML(getHTML())` est idempotent. Mis en cache tant que le document ne change pas : l'appeler à chaque frappe ne coûte qu'une sérialisation par transaction.                                   |
+| `setHTML(html, emit?)`     | Remplace tout le contenu. `emit = false` n'émet pas `change`, n'entre pas dans l'historique **et vide l'historique antérieur** (un `undo` qui suit ne fait rien) : c'est le mode de `writeValue` côté formulaire. Avec `emit = true` (défaut), le remplacement est une étape annulable. |
+| `getJSON(): AsterDocument` | Document JSON ProseMirror (`JSONContent` de Tiptap).                                                                                                                                                                                                                                    |
+| `setJSON(doc, emit?)`      | Idem avec un document JSON, mêmes règles pour `emit`.                                                                                                                                                                                                                                   |
+| `getText(): string`        | Texte brut : un seul `\n` entre deux blocs de texte, cellules de table et items de liste compris ; un `\n` par `hardBreak`.                                                                                                                                                             |
+| `insertHTML(html)`         | Insère à la sélection courante, en passant par le schéma. HTML **brut, non transformé** : ni `pasteTransformers` ni normaliseur Word ne s'appliquent, seule la politique de liens et d'images filtre. Transforme le HTML avant si besoin.                                               |
+| `isEmpty(): boolean`       | Vrai pour un document sans contenu. Note : `getHTML()` d'un document vide vaut `<p></p>`, teste `isEmpty()` plutôt.                                                                                                                                                                     |
+| `getCounts(): AsterCounts` | `{ words, characters }` via `CharacterCount`.                                                                                                                                                                                                                                           |
 
 ### État
 
-| Méthode                  | Rôle                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `focus(position?)`       | `'start' \| 'end' \| 'all'`, ou la sélection courante sans argument.                                       |
-| `blur()`                 |                                                                                                            |
-| `isFocused(): boolean`   |                                                                                                            |
-| `setReadOnly(value)`     | Émet `readOnlyChange` si la valeur change. En lecture seule, `commands.run` et `canRun` répondent `false`. |
-| `isReadOnly(): boolean`  |                                                                                                            |
-| `isDestroyed(): boolean` |                                                                                                            |
-| `destroy()`              | Émet `destroy`, vide les écouteurs, détruit Tiptap, retire `.aster-content`. Idempotent.                   |
+| Méthode                  | Rôle                                                                                                                                                                                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `focus(position?)`       | `'start' \| 'end' \| 'all'`, ou la sélection courante sans argument. Synchrone : au retour, la vue a le focus DOM (Tiptap seul le diffère à la frame suivante).                                                                                                                         |
+| `blur()`                 |                                                                                                                                                                                                                                                                                         |
+| `isFocused(): boolean`   |                                                                                                                                                                                                                                                                                         |
+| `setReadOnly(value)`     | Émet `readOnlyChange` si la valeur change. En lecture seule, `commands.run` et `canRun` répondent `false`.                                                                                                                                                                              |
+| `isReadOnly(): boolean`  |                                                                                                                                                                                                                                                                                         |
+| `isDestroyed(): boolean` |                                                                                                                                                                                                                                                                                         |
+| `destroy()`              | Émet `destroy`, vide les écouteurs, détruit Tiptap, retire `.aster-content`. Idempotent. Ensuite, les méthodes de contenu (`getHTML`, `setHTML`, `getJSON`, `setJSON`, `getText`, `insertHTML`) lèvent `Error('AsterEditor détruit')`, `on` est un no-op et le registre répond `false`. |
 
 ### Événements
 
 | Méthode                   | Rôle                                                                 |
 | ------------------------- | -------------------------------------------------------------------- |
-| `on(event, handler)`      | Abonne et renvoie une fonction `Unsubscribe`.                        |
+| `on(event, handler)`      | Abonne et renvoie une fonction `Unsubscribe`. No-op après `destroy`. |
 | `off(event, handler)`     | Désabonne.                                                           |
 | `emit(event, ...payload)` | Réservé aux extensions et aux paquets Aster. Ignoré après `destroy`. |
 
@@ -112,56 +112,56 @@ Les arguments sont typés par `StandardCommandArgs` : TypeScript refuse `run('he
 
 Raccourcis au format Tiptap : `Mod` = `Ctrl` sur Windows/Linux, `⌘` sur macOS. Libellés = dictionnaire `fr` (clé `command.<id>`).
 
-| Id                         | Libellé fr                   | Raccourci                 | Arguments                                                                                   |
-| -------------------------- | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| `bold`                     | Gras                         | `Mod-b`                   | —                                                                                           |
-| `italic`                   | Italique                     | `Mod-i`                   | —                                                                                           |
-| `underline`                | Souligné                     | `Mod-u`                   | —                                                                                           |
-| `strike`                   | Barré                        | `Mod-Shift-s`             | —                                                                                           |
-| `subscript`                | Indice                       | —                         | —                                                                                           |
-| `superscript`              | Exposant                     | —                         | —                                                                                           |
-| `code`                     | Code                         | `Mod-e`                   | —                                                                                           |
-| `highlight`                | Surligner                    | `Mod-Shift-h`             | —                                                                                           |
-| `clearFormatting`          | Effacer la mise en forme     | —                         | — (retire les marks puis ramène les blocs au paragraphe)                                    |
-| `paragraph`                | Paragraphe                   | —                         | —                                                                                           |
-| `heading`                  | Titre                        | `Mod-Alt-1` … `Mod-Alt-6` | `{ level: 1 \| 2 \| 3 \| 4 \| 5 \| 6 }`                                                     |
-| `blockquote`               | Citation                     | —                         | —                                                                                           |
-| `codeBlock`                | Bloc de code                 | —                         | —                                                                                           |
-| `horizontalRule`           | Séparateur                   | —                         | —                                                                                           |
-| `hardBreak`                | Saut de ligne                | —                         | —                                                                                           |
-| `bulletList`               | Liste à puces                | `Mod-Shift-8`             | —                                                                                           |
-| `orderedList`              | Liste numérotée              | `Mod-Shift-7`             | —                                                                                           |
-| `taskList`                 | Liste de tâches              | —                         | —                                                                                           |
-| `indent`                   | Augmenter le retrait         | —                         | — (`listItem` puis `taskItem`)                                                              |
-| `outdent`                  | Réduire le retrait           | —                         | —                                                                                           |
-| `alignLeft`                | Aligner à gauche             | —                         | — (retire l'attribut ; actif quand aucun alignement explicite)                              |
-| `alignCenter`              | Centrer                      | —                         | —                                                                                           |
-| `alignRight`               | Aligner à droite             | —                         | —                                                                                           |
-| `alignJustify`             | Justifier                    | —                         | —                                                                                           |
-| `link.set`                 | Insérer un lien              | `Mod-k`                   | `{ href: string; target?: '_blank' \| '_self'; title?: string }`                            |
-| `link.unset`               | Supprimer le lien            | —                         | —                                                                                           |
-| `image.insert`             | Insérer une image            | —                         | `{ src: string; alt?: string; title?: string; width?: number }`                             |
-| `image.upload`             | Importer une image           | —                         | `{ file: File }` (asynchrone : voir `uploadStart` / `uploadDone`)                           |
-| `image.setAttributes`      | Propriétés de l'image        | —                         | `{ alt?: string; title?: string; width?: number; align?: 'left' \| 'center' \| 'right' }`   |
-| `table.insert`             | Insérer un tableau           | —                         | `{ rows: number; cols: number; withHeaderRow?: boolean }` (`withHeaderRow` vrai par défaut) |
-| `table.delete`             | Supprimer le tableau         | —                         | —                                                                                           |
-| `table.addRowBefore`       | Insérer une ligne au-dessus  | —                         | —                                                                                           |
-| `table.addRowAfter`        | Insérer une ligne en dessous | —                         | —                                                                                           |
-| `table.deleteRow`          | Supprimer la ligne           | —                         | —                                                                                           |
-| `table.addColumnBefore`    | Insérer une colonne à gauche | —                         | —                                                                                           |
-| `table.addColumnAfter`     | Insérer une colonne à droite | —                         | —                                                                                           |
-| `table.deleteColumn`       | Supprimer la colonne         | —                         | —                                                                                           |
-| `table.mergeCells`         | Fusionner les cellules       | —                         | —                                                                                           |
-| `table.splitCell`          | Scinder la cellule           | —                         | —                                                                                           |
-| `table.toggleHeaderRow`    | Ligne d'en-tête              | —                         | —                                                                                           |
-| `table.toggleHeaderColumn` | Colonne d'en-tête            | —                         | —                                                                                           |
-| `textColor`                | Couleur du texte             | —                         | `{ color: string \| null }`                                                                 |
-| `backgroundColor`          | Couleur de fond              | —                         | `{ color: string \| null }`                                                                 |
-| `fontFamily`               | Police                       | —                         | `{ family: string \| null }`                                                                |
-| `fontSize`                 | Taille                       | —                         | `{ size: string \| null }` (ex. `'14px'`)                                                   |
-| `undo`                     | Annuler                      | `Mod-z`                   | —                                                                                           |
-| `redo`                     | Rétablir                     | `Mod-Shift-z`, `Mod-y`    | —                                                                                           |
-| `selectAll`                | Tout sélectionner            | `Mod-a`                   | —                                                                                           |
+| Id                         | Libellé fr                   | Raccourci                 | Arguments                                                                                                                                                              |
+| -------------------------- | ---------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bold`                     | Gras                         | `Mod-b`                   | —                                                                                                                                                                      |
+| `italic`                   | Italique                     | `Mod-i`                   | —                                                                                                                                                                      |
+| `underline`                | Souligné                     | `Mod-u`                   | —                                                                                                                                                                      |
+| `strike`                   | Barré                        | `Mod-Shift-s`             | —                                                                                                                                                                      |
+| `subscript`                | Indice                       | —                         | —                                                                                                                                                                      |
+| `superscript`              | Exposant                     | —                         | —                                                                                                                                                                      |
+| `code`                     | Code                         | `Mod-e`                   | —                                                                                                                                                                      |
+| `highlight`                | Surligner                    | `Mod-Shift-h`             | —                                                                                                                                                                      |
+| `clearFormatting`          | Effacer la mise en forme     | —                         | — (retire les marks sauf `link`, ramène les blocs de texte au paragraphe sans alignement ; liste, citation et cellule restent en place ; impossible sur document vide) |
+| `paragraph`                | Paragraphe                   | —                         | — (pose le type sans repli : impossible dans un item de liste ou si le bloc est déjà un paragraphe)                                                                    |
+| `heading`                  | Titre                        | `Mod-Alt-1` … `Mod-Alt-6` | `{ level: 1 \| 2 \| 3 \| 4 \| 5 \| 6 }` (idem : pas de bascule, pas de titre dans un item de liste en V1)                                                              |
+| `blockquote`               | Citation                     | —                         | —                                                                                                                                                                      |
+| `codeBlock`                | Bloc de code                 | —                         | —                                                                                                                                                                      |
+| `horizontalRule`           | Séparateur                   | —                         | —                                                                                                                                                                      |
+| `hardBreak`                | Saut de ligne                | —                         | —                                                                                                                                                                      |
+| `bulletList`               | Liste à puces                | `Mod-Shift-8`             | —                                                                                                                                                                      |
+| `orderedList`              | Liste numérotée              | `Mod-Shift-7`             | —                                                                                                                                                                      |
+| `taskList`                 | Liste de tâches              | —                         | —                                                                                                                                                                      |
+| `indent`                   | Augmenter le retrait         | —                         | — (`listItem` puis `taskItem`)                                                                                                                                         |
+| `outdent`                  | Réduire le retrait           | —                         | —                                                                                                                                                                      |
+| `alignLeft`                | Aligner à gauche             | —                         | — (retire l'attribut ; actif quand aucun alignement explicite)                                                                                                         |
+| `alignCenter`              | Centrer                      | —                         | —                                                                                                                                                                      |
+| `alignRight`               | Aligner à droite             | —                         | —                                                                                                                                                                      |
+| `alignJustify`             | Justifier                    | —                         | —                                                                                                                                                                      |
+| `link.set`                 | Insérer un lien              | `Mod-k`                   | `{ href: string; target?: '_blank' \| '_self'; title?: string }`                                                                                                       |
+| `link.unset`               | Supprimer le lien            | —                         | —                                                                                                                                                                      |
+| `image.insert`             | Insérer une image            | —                         | `{ src: string; alt?: string; title?: string; width?: number }` (jamais active : pas une bascule ; impossible dans un bloc de code)                                    |
+| `image.upload`             | Importer une image           | —                         | `{ file: File }` (asynchrone : voir `uploadStart` / `uploadDone`)                                                                                                      |
+| `image.setAttributes`      | Propriétés de l'image        | —                         | `{ alt?: string; title?: string; width?: number; align?: 'left' \| 'center' \| 'right' }`                                                                              |
+| `table.insert`             | Insérer un tableau           | —                         | `{ rows: number; cols: number; withHeaderRow?: boolean }` (`withHeaderRow` vrai par défaut ; impossible dans une table : pas de tables imbriquées en V1)               |
+| `table.delete`             | Supprimer le tableau         | —                         | —                                                                                                                                                                      |
+| `table.addRowBefore`       | Insérer une ligne au-dessus  | —                         | —                                                                                                                                                                      |
+| `table.addRowAfter`        | Insérer une ligne en dessous | —                         | —                                                                                                                                                                      |
+| `table.deleteRow`          | Supprimer la ligne           | —                         | —                                                                                                                                                                      |
+| `table.addColumnBefore`    | Insérer une colonne à gauche | —                         | —                                                                                                                                                                      |
+| `table.addColumnAfter`     | Insérer une colonne à droite | —                         | —                                                                                                                                                                      |
+| `table.deleteColumn`       | Supprimer la colonne         | —                         | —                                                                                                                                                                      |
+| `table.mergeCells`         | Fusionner les cellules       | —                         | —                                                                                                                                                                      |
+| `table.splitCell`          | Scinder la cellule           | —                         | —                                                                                                                                                                      |
+| `table.toggleHeaderRow`    | Ligne d'en-tête              | —                         | —                                                                                                                                                                      |
+| `table.toggleHeaderColumn` | Colonne d'en-tête            | —                         | —                                                                                                                                                                      |
+| `textColor`                | Couleur du texte             | —                         | `{ color: string \| null }`                                                                                                                                            |
+| `backgroundColor`          | Couleur de fond              | —                         | `{ color: string \| null }`                                                                                                                                            |
+| `fontFamily`               | Police                       | —                         | `{ family: string \| null }`                                                                                                                                           |
+| `fontSize`                 | Taille                       | —                         | `{ size: string \| null }` (ex. `'14px'`)                                                                                                                              |
+| `undo`                     | Annuler                      | `Mod-z`                   | —                                                                                                                                                                      |
+| `redo`                     | Rétablir                     | `Mod-Shift-z`, `Mod-y`    | —                                                                                                                                                                      |
+| `selectAll`                | Tout sélectionner            | `Mod-a`                   | —                                                                                                                                                                      |
 
 Les raccourcis à liaisons multiples (`heading`, `redo`) sont déclarés dans `EXTRA_SHORTCUT_BINDINGS` ; `Tab` / `Shift-Tab` dans les listes et les tables sont gérés nativement par Tiptap. Une commande custom qui déclare un `shortcut` est câblée automatiquement par `collectShortcutBindings`.
 
@@ -220,7 +220,7 @@ Liste blanche de protocoles, pas liste noire : `javascript:` et `data:` sont rej
 | `rel`              | `'noopener noreferrer'`              |
 | `autolink`         | `true`                               |
 
-La politique s'applique à `link.set`, au parsing HTML (`setHTML`, collage : un `<a href="javascript:…">` devient du texte simple), au rendu et à l'autolink. `rel` est forcé à la valeur de la politique dès que `target="_blank"`. Les images suivent les mêmes règles, `data:` et `blob:` en plus (repli d'upload et aperçu local).
+La politique s'applique à `link.set`, au parsing HTML (`setHTML`, collage : un `<a href="javascript:…">` devient du texte simple), au rendu et à l'autolink. `rel` est forcé à la valeur de la politique dès que `target="_blank"`. Les entités HTML (`&#115;`, `&#x73;`, `&colon;`) et les invisibles Unicode glissés dans le schéma sont décodés ou rejetés avant la vérification. Les images suivent les mêmes règles, `blob:` (aperçu local) et `data:image/…` (repli d'upload) en plus : `image.insert` refuse une source non autorisée, et un `<img>` interdit (`javascript:`, `data:text/html`…) disparaît au parsing (`setHTML`, collage).
 
 ```ts
 import { createEditor, isAllowedHref, resolveLinkPolicy } from '@aster-editor/core';

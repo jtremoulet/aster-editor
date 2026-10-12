@@ -35,26 +35,62 @@ export function resolveLinkPolicy(policy?: LinkPolicy): ResolvedLinkPolicy {
 /**
  * Caractères de contrôle, espaces et invisibles que les navigateurs ignorent dans
  * une URL : une tabulation ou un retour à la ligne glissés dans le mot javascript
- * doivent quand même aboutir au schéma javascript. La classe contient donc des
- * caractères de contrôle par construction, d'où l'exemption ESLint ci-dessous.
- * Elle est construite depuis une chaîne ASCII pure : un séparateur de ligne
- * Unicode écrit en dur dans un littéral regex casse le fichier à la réécriture.
+ * doivent quand même aboutir au schéma javascript. S'y ajoutent les invisibles
+ * Unicode sans largeur (trait d'union conditionnel, gluon de mots, séparateur de
+ * voyelles mongol, sélecteurs invisibles). La classe contient donc des caractères
+ * de contrôle par construction, d'où l'exemption ESLint ci-dessous. Elle est
+ * construite depuis une chaîne ASCII pure : un séparateur de ligne Unicode écrit
+ * en dur dans un littéral regex casse le fichier à la réécriture.
  */
 const URL_NOISE = new RegExp(
   // eslint-disable-next-line no-control-regex -- plage de contrôle intentionnelle, voir ci-dessus
-  '[\\u0000-\\u0020\\u007f-\\u009f\\u200b-\\u200d\\u2028\\u2029\\ufeff]',
+  '[\\u0000-\\u0020\\u007f-\\u009f\\u00ad\\u180e\\u200b-\\u200d\\u2028\\u2029\\u2060-\\u2064\\ufeff]',
   'g',
 );
 const SCHEME_PATTERN = /^([a-z][a-z0-9+.-]*):/i;
+/** Entités HTML qu'un attaquant glisse dans un schéma : numériques et `&colon;`. */
+const NUMERIC_ENTITY = /&#(x[0-9a-f]+|\d+);?/gi;
+const COLON_ENTITY = /&colon;/gi;
+
+/**
+ * Décode les entités numériques et `&colon;` d'une URL. Le DOM les a déjà décodées
+ * au parsing d'un attribut `href`, mais une URL passée en argument à `link.set`,
+ * elle, arrive brute : `java&#115;cript:` doit aboutir au schéma javascript.
+ */
+function decodeEntities(value: string): string {
+  return value
+    .replace(NUMERIC_ENTITY, (whole, code: string) => {
+      const hex = code.startsWith('x') || code.startsWith('X');
+      const point = hex ? Number.parseInt(code.slice(1), 16) : Number(code);
+      return Number.isInteger(point) && point >= 0 && point <= 0x10ffff
+        ? String.fromCodePoint(point)
+        : whole;
+    })
+    .replace(COLON_ENTITY, ':');
+}
 
 /**
  * Extrait le schéma d'une URL, en minuscules, ou `null` si l'URL est relative.
  * Une URL sans deux-points, ou dont le premier segment n'est pas un schéma valide
- * (`foo/bar:baz`), est relative.
+ * (`foo/bar:baz`), est relative. Les entités sont décodées d'abord ; s'il reste
+ * un `&` dans le segment de schéma (`java&amp;script:`), ce segment est rendu tel
+ * quel : il ne peut pas figurer dans une liste blanche, donc l'URL est rejetée.
  */
 export function extractScheme(href: string): string | null {
-  const match = SCHEME_PATTERN.exec(href.replace(URL_NOISE, ''));
-  return match?.[1] ? match[1].toLowerCase() : null;
+  const cleaned = decodeEntities(href).replace(URL_NOISE, '');
+  const match = SCHEME_PATTERN.exec(cleaned);
+  if (match?.[1]) {
+    return match[1].toLowerCase();
+  }
+  const colon = cleaned.indexOf(':');
+  if (colon < 0) {
+    return null;
+  }
+  const candidate = cleaned.slice(0, colon);
+  // Un `/`, `?` ou `#` avant le deux-points : URL relative avec requête ou ancre. Le `#`
+  // d'une entité non décodée (`&#…;`) ne compte pas, c'est justement ce qu'on traque.
+  const relative = /[/?]|(?<!&)#/.test(candidate);
+  return relative || !candidate.includes('&') ? null : candidate.toLowerCase();
 }
 
 /**
@@ -69,14 +105,21 @@ export function isAllowedHref(href: string, policy: ResolvedLinkPolicy): boolean
   return policy.allowedProtocols.some((protocol) => protocol.toLowerCase() === scheme);
 }
 
+/** Une data URL d'image : seul type MIME `data:` toléré dans un `<img>`. */
+const DATA_IMAGE_PATTERN = /^data:image\//i;
+
 /**
- * Vrai si une source d'image est acceptable : mêmes règles que les liens, mais
- * `data:` et `blob:` sont tolérés puisque c'est le repli d'upload et l'aperçu local.
+ * Vrai si une source d'image est acceptable : mêmes règles que les liens, plus
+ * `blob:` (aperçu local) et `data:image/…` (repli d'upload). Une `data:text/html`
+ * ou tout autre type MIME est rejeté comme le serait `javascript:`.
  */
 export function isAllowedImageSrc(src: string, policy: ResolvedLinkPolicy): boolean {
   const scheme = extractScheme(src);
-  if (scheme === 'data' || scheme === 'blob') {
+  if (scheme === 'blob') {
     return true;
+  }
+  if (scheme === 'data') {
+    return DATA_IMAGE_PATTERN.test(decodeEntities(src).replace(URL_NOISE, ''));
   }
   return isAllowedHref(src, policy);
 }

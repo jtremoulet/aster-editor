@@ -1,4 +1,6 @@
 import { Editor, type FocusPosition } from '@tiptap/core';
+import { history } from '@tiptap/pm/history';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorProps } from '@tiptap/pm/view';
 import type {
   AsterCommand,
@@ -26,6 +28,22 @@ import { createEventEmitter, type AsterEventEmitter } from './event-emitter';
 /** Classe CSS du conteneur créé dans `options.element`. */
 export const CONTENT_CLASS = 'aster-content';
 
+/** Message de l'erreur levée par les méthodes de contenu appelées après `destroy()`. */
+export const DESTROYED_ERROR_MESSAGE = 'AsterEditor détruit';
+
+/**
+ * Options du plugin d'historique, identiques à celles de `UndoRedo` dans `StarterKit`
+ * (`@tiptap/extensions`) : on recrée le même plugin pour vider la pile, rien d'autre.
+ */
+const HISTORY_OPTIONS = { depth: 100, newGroupDelay: 500 } as const;
+
+/**
+ * Vrai dans un navigateur, faux sous jsdom : ProseMirror mesure la sélection avec
+ * `Range.getClientRects` pour la faire défiler, et jsdom ne l'implémente pas.
+ */
+const CAN_MEASURE_SELECTION =
+  typeof Range !== 'undefined' && typeof Range.prototype.getClientRects === 'function';
+
 /**
  * Implémentation de `AsterEditor`.
  *
@@ -44,6 +62,9 @@ export class AsterEditorImpl implements AsterEditor {
   private readonly emitter: AsterEventEmitter;
   private readonly container: HTMLElement;
   private destroyed = false;
+  /** Document pour lequel `cachedHtml` a été calculé : identité, pas égalité. */
+  private cachedDoc: ProseMirrorNode | null = null;
+  private cachedHtml = '';
 
   constructor(options: AsterOptions) {
     this.element = options.element;
@@ -113,8 +134,22 @@ export class AsterEditorImpl implements AsterEditor {
 
   // --- Contenu -------------------------------------------------------------
 
+  /**
+   * Le HTML est mis en cache par identité du document ProseMirror : Angular appelle
+   * `getHTML()` à chaque `change`, et `normalizeOutputHtml` reparse tout le document
+   * dès qu'il contient une table. Le document est immuable, toute transaction en
+   * produit un nouveau : le cache s'invalide tout seul, sans compteur ni événement.
+   */
   getHTML(): string {
-    return normalizeOutputHtml(this.tiptap.getHTML());
+    this.assertAlive();
+    const { doc } = this.tiptap.state;
+    if (doc === this.cachedDoc) {
+      return this.cachedHtml;
+    }
+    const html = normalizeOutputHtml(this.tiptap.getHTML());
+    this.cachedDoc = doc;
+    this.cachedHtml = html;
+    return html;
   }
 
   setHTML(html: string, emit = true): void {
@@ -122,6 +157,7 @@ export class AsterEditorImpl implements AsterEditor {
   }
 
   getJSON(): AsterDocument {
+    this.assertAlive();
     return this.tiptap.getJSON();
   }
 
@@ -135,8 +171,13 @@ export class AsterEditorImpl implements AsterEditor {
    * silencieuse (`writeValue` d'un formulaire, resynchronisation) ne doit pas devenir une
    * étape que Ctrl+Z annulerait. La chaîne partage la même transaction entre `setContent`
    * et `command`, donc la méta s'applique bien à l'écriture elle-même.
+   *
+   * L'historique antérieur est ensuite vidé : ses étapes visaient l'ancien document, et
+   * un `undo` les rejouerait, remappées, sur le nouveau (annulation fantôme). Le plugin
+   * `history` ne s'efface pas, on le remplace par un neuf aux mêmes options.
    */
   private replaceContent(content: string | AsterDocument, emit: boolean): void {
+    this.assertAlive();
     this.tiptap
       .chain()
       .setContent(content, { emitUpdate: emit })
@@ -147,13 +188,41 @@ export class AsterEditorImpl implements AsterEditor {
         return true;
       })
       .run();
+    if (!emit) {
+      this.clearHistory();
+    }
   }
 
+  /** Vide la pile d'annulation en recréant le plugin `history` de ProseMirror. */
+  private clearHistory(): void {
+    this.tiptap.unregisterPlugin('history');
+    this.tiptap.registerPlugin(history(HISTORY_OPTIONS));
+  }
+
+  /**
+   * Un seul `\n` entre deux blocs de texte, quelle que soit l'imbrication (cellule de
+   * table, item de liste) ; `hardBreak` compte pour un `\n`. `tiptap.getText` ajoute
+   * un séparateur à chaque niveau de conteneur, d'où des lignes vides dans les tables.
+   */
   getText(): string {
-    return this.tiptap.getText({ blockSeparator: '\n' });
+    this.assertAlive();
+    const blocks: string[] = [];
+    this.tiptap.state.doc.descendants((node) => {
+      if (!node.isTextblock) {
+        return true;
+      }
+      blocks.push(
+        node.textBetween(0, node.content.size, undefined, (leaf) =>
+          leaf.type.name === 'hardBreak' ? '\n' : '',
+        ),
+      );
+      return false;
+    });
+    return blocks.join('\n');
   }
 
   insertHTML(html: string): void {
+    this.assertAlive();
     this.tiptap.chain().focus().insertContent(html).run();
   }
 
@@ -168,9 +237,22 @@ export class AsterEditorImpl implements AsterEditor {
 
   // --- État ----------------------------------------------------------------
 
+  /**
+   * La commande Tiptap pose la sélection puis diffère le focus DOM à la prochaine frame
+   * (`requestAnimationFrame`). Le contrat Aster est synchrone : une frappe qui suit
+   * immédiatement `focus()` doit atteindre l'éditeur, pas `body` (cas réel : la toolbar
+   * ferme son menu puis rend le focus à l'éditeur, le tout dans un seul clic). On focalise
+   * donc la vue tout de suite quand elle ne l'est pas ; le rappel différé de Tiptap devient
+   * un no-op. Sauf sous jsdom : sans `getClientRects`, une sélection DOM réellement posée
+   * fait planter le défilement vers la sélection au dispatch suivant, et le focus n'y a
+   * de toute façon aucune valeur observable (les tests passent par les événements).
+   */
   focus(position?: 'start' | 'end' | 'all'): void {
     const target: FocusPosition = position ?? null;
     this.tiptap.commands.focus(target);
+    if (CAN_MEASURE_SELECTION && !this.tiptap.view.hasFocus()) {
+      this.tiptap.view.focus();
+    }
   }
 
   blur(): void {
@@ -185,7 +267,9 @@ export class AsterEditorImpl implements AsterEditor {
     if (this.isReadOnly() === value) {
       return;
     }
-    this.tiptap.setEditable(!value);
+    // Sans `emitUpdate` : Tiptap émettrait `update`, relayé en `change`, et un formulaire
+    // Angular passerait `dirty` à chaque `disabled` ou `readonly`.
+    this.tiptap.setEditable(!value, false);
     this.emit('readOnlyChange', { editor: this, readOnly: value });
   }
 
@@ -199,7 +283,11 @@ export class AsterEditorImpl implements AsterEditor {
 
   // --- Événements ----------------------------------------------------------
 
+  /** Après `destroy()`, abonner est un no-op : rien ne sera plus émis, inutile de retenir le handler. */
   on<E extends AsterEventName>(event: E, handler: AsterEvents[E]): Unsubscribe {
+    if (this.destroyed) {
+      return () => undefined;
+    }
     return this.emitter.on(event, handler);
   }
 
@@ -227,5 +315,18 @@ export class AsterEditorImpl implements AsterEditor {
     this.emitter.clear();
     this.tiptap.destroy();
     this.container.remove();
+    this.cachedDoc = null;
+    this.cachedHtml = '';
+  }
+
+  /**
+   * Les méthodes de contenu lèvent une erreur explicite après `destroy()` plutôt que le
+   * `TypeError` opaque d'une vue ProseMirror démontée : un `getHTML()` tardif dans un
+   * composant détruit se diagnostique en une ligne de pile.
+   */
+  private assertAlive(): void {
+    if (this.destroyed) {
+      throw new Error(DESTROYED_ERROR_MESSAGE);
+    }
   }
 }

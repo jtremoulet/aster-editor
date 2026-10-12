@@ -41,8 +41,11 @@ export function collectShortcutBindings(commands: readonly AsterCommand[]): Shor
   return bindings;
 }
 
+/** Dépendances de l'extension clavier, fournies par l'éditeur au montage. */
 export interface ShortcutsExtensionOptions {
+  /** Registre par lequel passe chaque raccourci, pour honorer les commandes remplacées. */
   readonly registry: CommandRegistry;
+  /** Liaisons calculées au montage par `collectShortcutBindings`, commandes désactivées comprises. */
   readonly bindings: readonly ShortcutBinding[];
   /** Identifiants désactivés : leur raccourci est avalé, pas seulement ignoré. */
   readonly disabled: ReadonlySet<string>;

@@ -1,6 +1,9 @@
 import type { AsterCommand } from '../api';
 import { defineStandardCommand } from './define';
 
+/** Marques que `clearFormatting` conserve : un lien est une donnée, pas une mise en forme. */
+const PRESERVED_MARKS: ReadonlySet<string> = new Set(['link']);
+
 /**
  * Marques inline. Chaque commande est un toggle Tiptap : `canRun` interroge
  * `can()` pour refléter l'impossibilité de marquer un bloc de code, par exemple.
@@ -53,9 +56,32 @@ export const MARK_COMMANDS: readonly AsterCommand[] = [
     isActive: (editor) => editor.tiptap.isActive('highlight'),
   }),
   defineStandardCommand('clearFormatting', {
-    // Retire les marques puis ramène les blocs au paragraphe : un seul geste
-    // pour revenir au texte nu, comme le « Effacer la mise en forme » de Word.
-    run: (editor) => editor.tiptap.chain().focus().unsetAllMarks().clearNodes().run(),
-    canRun: (editor) => editor.tiptap.can().unsetAllMarks() || editor.tiptap.can().clearNodes(),
+    // Retire les marques (sauf le lien) puis ramène les blocs de texte au paragraphe,
+    // alignement compris : un seul geste pour revenir au texte nu, comme le « Effacer
+    // la mise en forme » de Word. Les conteneurs (liste, citation, cellule) restent :
+    // `clearNodes` de Tiptap sortirait l'item de sa liste, ce n'est pas de la mise en forme.
+    run: (editor) =>
+      editor.tiptap
+        .chain()
+        .focus()
+        .command(({ tr, state }) => {
+          const paragraph = state.schema.nodes['paragraph'];
+          const marks = Object.values(state.schema.marks).filter(
+            (mark) => !PRESERVED_MARKS.has(mark.name),
+          );
+          for (const range of tr.selection.ranges) {
+            const from = range.$from.pos;
+            const to = range.$to.pos;
+            for (const mark of marks) {
+              tr.removeMark(from, to, mark);
+            }
+            if (paragraph) {
+              tr.setBlockType(from, to, paragraph);
+            }
+          }
+          return true;
+        })
+        .run(),
+    canRun: (editor) => !editor.isEmpty(),
   }),
 ];
