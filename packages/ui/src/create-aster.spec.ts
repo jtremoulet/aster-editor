@@ -63,6 +63,20 @@ describe('createAster', () => {
     expect(custom.element.querySelectorAll('[data-toolbar-item]').length).toBe(1);
   });
 
+  it('monte le menu contextuel de table sur le contenu, retiré au destroy', () => {
+    const instance = createAster(host, { toolbar: false });
+    editor.activeNodes.add('table');
+    const rightClick = (): MouseEvent => {
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      editor.contentElement.dispatchEvent(event);
+      return event;
+    };
+    expect(rightClick().defaultPrevented).toBe(true);
+    expect(editor.element.querySelector('.aster-table-context-menu')).not.toBeNull();
+    instance.destroy();
+    expect(rightClick().defaultPrevented).toBe(false);
+  });
+
   it('applique le thème demandé et setTheme le change', () => {
     const instance = createAster(host, { theme: 'night' });
     expect(instance.element.getAttribute('data-theme')).toBe('night');

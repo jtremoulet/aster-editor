@@ -1,5 +1,6 @@
 import { createEditor } from '@aster-editor/core';
 import type { AsterTheme } from '@aster-editor/core';
+import { createTableContextMenu } from './components/table-context-menu';
 import { createToolbar, registerUiTranslations } from './toolbar/create-toolbar';
 import type { AsterInstance, AsterUiOptions, Toolbar } from './types';
 import { el } from './utils/dom';
@@ -35,6 +36,9 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
   } else {
     toolbarContainer.remove();
   }
+  // Menu contextuel de table (clic droit), indépendant de la toolbar : dès que le core
+  // expose des commandes `table.*`. Détruit avec l'instance.
+  const tableMenu = editor.commands.has('table.delete') ? createTableContextMenu(editor) : null;
 
   let destroyed = false;
 
@@ -48,6 +52,7 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
+      tableMenu?.destroy();
       toolbar?.destroy();
       if (!editor.isDestroyed()) editor.destroy();
       root.remove();

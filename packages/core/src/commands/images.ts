@@ -1,12 +1,53 @@
-import type { AsterCommand, UploadHandler } from '../api';
+import type { AsterCommand, StandardCommandArgs, UploadHandler } from '../api';
+import { isImageAlignment } from '../extensions/image';
 import { insertImageFile, isImageFile } from '../extensions/image-upload';
 import { isAllowedImageSrc, type ResolvedLinkPolicy } from '../extensions/link-safety';
 import { defineStandardCommand } from './define';
 
+/** Attributs effectivement écrits sur le nœud image par `image.setAttributes`. */
+export interface ImageAttributeUpdate {
+  alt?: string | null;
+  title?: string | null;
+  width?: number | null;
+  height?: null;
+  align?: 'left' | 'center' | 'right' | null;
+}
+
+/**
+ * Traduit les arguments publics en attributs de nœud. Une clé absente est laissée
+ * telle quelle ; une chaîne vide efface `alt`/`title` ; une largeur nulle ou
+ * négative efface `width` (retour à la taille naturelle) et `height` avec elle ;
+ * un alignement inconnu est ignoré. Le contrat (`width?: number`) ne prévoit pas
+ * `null` : c'est ce qui permet à l'UI de revenir à la largeur automatique.
+ */
+export function toImageAttributes(
+  args: StandardCommandArgs['image.setAttributes'] | undefined,
+): ImageAttributeUpdate {
+  const update: ImageAttributeUpdate = {};
+  if (!args) {
+    return update;
+  }
+  if (typeof args.alt === 'string') {
+    update.alt = args.alt === '' ? null : args.alt;
+  }
+  if (typeof args.title === 'string') {
+    update.title = args.title === '' ? null : args.title;
+  }
+  if (typeof args.width === 'number' && Number.isFinite(args.width)) {
+    update.width = args.width > 0 ? Math.round(args.width) : null;
+    update.height = null;
+  }
+  if (args.align !== undefined) {
+    update.align = isImageAlignment(args.align) ? args.align : null;
+  }
+  return update;
+}
+
 /**
  * Commandes d'image. `image.upload` déclenche le traitement asynchrone et répond
  * tout de suite : `true` si le fichier est une image acceptée, le reste se joue
- * dans les événements `uploadStart`/`uploadDone`.
+ * dans les événements `uploadStart`/`uploadDone`. `image.setAttributes` n'est
+ * exécutable que si une image est sélectionnée.
  */
 export function createImageCommands(
   policy: ResolvedLinkPolicy,
@@ -47,11 +88,11 @@ export function createImageCommands(
         if (!editor.tiptap.isActive('image')) {
           return false;
         }
-        return editor.tiptap
-          .chain()
-          .focus()
-          .updateAttributes('image', { ...args })
-          .run();
+        const attributes = toImageAttributes(args);
+        if (Object.keys(attributes).length === 0) {
+          return false;
+        }
+        return editor.tiptap.chain().focus().updateAttributes('image', attributes).run();
       },
       canRun: (editor) => editor.tiptap.isActive('image'),
       isActive: (editor) => editor.tiptap.isActive('image'),

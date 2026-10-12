@@ -35,3 +35,5 @@ export { createColorPicker, COLOR_PALETTE } from './components/color-picker';
 export { createTableGridPicker, TABLE_ACTIONS } from './components/table-grid-picker';
 export { createLinkDialog, isAcceptableUrl } from './components/link-dialog';
 export { createImageDialog } from './components/image-dialog';
+export type { TableContextMenu } from './components/table-context-menu';
+export { createTableContextMenu } from './components/table-context-menu';

@@ -1,8 +1,9 @@
-import type { AsterEditor } from '@aster-editor/core';
+import type { AsterEditor, StandardCommandArgs } from '@aster-editor/core';
+import { IMAGE_ALIGNMENTS, IMAGE_EDIT_EVENT } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
 import { createPlainButton } from './button';
-import { createDropdown } from './dropdown';
+import { createDropdown, type Dropdown } from './dropdown';
 
 /** Validation légère de l'URL d'image : non vide, pas de `javascript:`. */
 function isAcceptableImageUrl(value: string): boolean {
@@ -10,120 +11,254 @@ function isAcceptableImageUrl(value: string): boolean {
   return trimmed.length > 0 && !/^\s*javascript:/i.test(trimmed);
 }
 
+/** Alignement d'image, tel que le contrat `image.setAttributes` l'attend. */
+type ImageAlign = NonNullable<StandardCommandArgs['image.setAttributes']['align']>;
+
+/** Attributs du nœud image tels que lus via `tiptap.getAttributes('image')`. */
+interface ImageAttributes {
+  src?: string | null;
+  alt?: string | null;
+  title?: string | null;
+  width?: number | string | null;
+  align?: string | null;
+}
+
+/** Image sous la sélection, tolérant si l'extension manque (mock, core réduit). */
+function currentImage(editor: AsterEditor): ImageAttributes {
+  try {
+    const attrs: unknown = editor.tiptap.getAttributes('image');
+    return typeof attrs === 'object' && attrs !== null ? (attrs as ImageAttributes) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Vrai si une image est sélectionnée : le dialogue passe alors en mode édition. */
+function isImageSelected(editor: AsterEditor): boolean {
+  try {
+    return editor.tiptap.isActive('image');
+  } catch {
+    return false;
+  }
+}
+
+/** Convertit une saisie de largeur en nombre : vide ou invalide → `null`. */
+function parseWidthInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function isImageAlign(value: unknown): value is ImageAlign {
+  return typeof value === 'string' && (IMAGE_ALIGNMENTS as readonly string[]).includes(value);
+}
+
+/** Champ texte libellé du dialogue. */
+function field(
+  id: string,
+  label: string,
+  attrs: Readonly<Record<string, string | undefined>>,
+): { wrapper: HTMLElement; input: HTMLInputElement } {
+  const input = el('input', {
+    className: 'aster-dialog__input',
+    attrs: { id, autocomplete: 'off', ...attrs },
+  });
+  const wrapper = el('div', { className: 'aster-dialog__field' }, [
+    el('label', { className: 'aster-dialog__label', attrs: { for: id }, text: label }),
+    input,
+  ]);
+  return { wrapper, input };
+}
+
 /**
- * Widget `image` : panneau avec URL + texte alternatif, et bouton « Depuis un fichier »
- * qui ouvre un `<input type="file" accept="image/*">` et délègue à `image.upload`.
- * Le bouton fichier n'apparaît que si `image.upload` est enregistrée.
+ * Widget `image`, deux modes :
+ *
+ * - **insertion** (aucune image sélectionnée) : URL, texte alternatif, titre, largeur,
+ *   alignement, et bouton « Depuis un fichier » si `image.upload` existe. OK →
+ *   `image.insert` puis `image.setAttributes` pour l'alignement, que `image.insert`
+ *   ne prend pas.
+ * - **édition** (image sélectionnée, ou événement `aster:image-edit` émis par le core
+ *   au double-clic) : mêmes champs sans l'URL, préremplis depuis le nœud. OK →
+ *   `image.setAttributes({ alt, title, width, align })`. Une largeur vide vaut `0`,
+ *   que le core interprète comme « largeur automatique ».
  */
 export function createImageDialog(editor: AsterEditor): ToolbarWidget {
-  return createDropdown({
+  const dropdown: Dropdown = createDropdown({
     editor,
     labelKey: 'command.image.insert',
     icon: 'image-insert',
     panelRole: 'dialog',
     panelClass: 'aster-dialog aster-image-dialog',
-    isEnabled: () => editor.commands.canRun('image.insert', { src: '' }),
-    renderPanel: (panel, dropdown) => {
-      const t = (key: string): string => editor.i18n.t(key);
-      panel.setAttribute('aria-label', t('ui.image.title'));
-      const suffix = Math.random().toString(36).slice(2, 8);
-
-      const urlId = `aster-image-url-${suffix}`;
-      const urlInput = el('input', {
-        className: 'aster-dialog__input',
-        attrs: {
-          type: 'url',
-          id: urlId,
-          autocomplete: 'off',
-          placeholder: 'https://',
-          autofocus: '',
-        },
-      });
-      const altId = `aster-image-alt-${suffix}`;
-      const altInput = el('input', {
-        className: 'aster-dialog__input',
-        attrs: { type: 'text', id: altId, autocomplete: 'off' },
-      });
-
-      const submit = (): void => {
-        const src = urlInput.value.trim();
-        if (!isAcceptableImageUrl(src)) {
-          urlInput.setAttribute('aria-invalid', 'true');
-          urlInput.focus();
-          return;
-        }
-        const alt = altInput.value.trim();
-        editor.commands.run('image.insert', alt ? { src, alt } : { src });
-        dropdown.close(false);
-        editor.focus();
-      };
-      urlInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          submit();
-        }
-      });
-
-      const ok = createPlainButton({
-        className: 'aster-dialog__button aster-dialog__button--primary',
-        text: t('ui.image.ok'),
-      });
-      ok.addEventListener('click', submit);
-      const cancel = createPlainButton({
-        className: 'aster-dialog__button',
-        text: t('ui.image.cancel'),
-      });
-      cancel.addEventListener('click', () => dropdown.close(true));
-
-      const actions = el('div', { className: 'aster-dialog__actions' }, [cancel, ok]);
-
-      if (editor.commands.has('image.upload')) {
-        const fileInput = el('input', {
-          className: 'aster-image-dialog__file',
-          attrs: {
-            type: 'file',
-            accept: 'image/*',
-            hidden: '',
-            'aria-hidden': 'true',
-            tabindex: '-1',
-          },
-        });
-        fileInput.addEventListener('change', () => {
-          const file = fileInput.files?.[0];
-          if (!file) return;
-          editor.commands.run('image.upload', { file });
-          dropdown.close(false);
-          editor.focus();
-        });
-        const fromFile = createPlainButton({
-          className: 'aster-dialog__button aster-image-dialog__from-file',
-          icon: 'image-upload',
-          text: t('ui.image.fromFile'),
-        });
-        fromFile.disabled = !editor.commands.canRun('image.upload', { file: new File([], '') });
-        fromFile.addEventListener('click', () => fileInput.click());
-        panel.append(el('div', { className: 'aster-dialog__field' }, [fromFile, fileInput]));
-      }
-
-      panel.append(
-        el('div', { className: 'aster-dialog__field' }, [
-          el('label', {
-            className: 'aster-dialog__label',
-            attrs: { for: urlId },
-            text: t('ui.image.url'),
-          }),
-          urlInput,
-        ]),
-        el('div', { className: 'aster-dialog__field' }, [
-          el('label', {
-            className: 'aster-dialog__label',
-            attrs: { for: altId },
-            text: t('ui.image.alt'),
-          }),
-          altInput,
-        ]),
-        actions,
-      );
-    },
+    isEnabled: () =>
+      editor.commands.canRun('image.insert', { src: '' }) ||
+      editor.commands.canRun('image.setAttributes', {}),
+    isActive: () => isImageSelected(editor),
+    renderPanel: (panel, self) => renderImagePanel(editor, panel, self),
   });
+
+  /** Double-clic sur une image dans le contenu : le core a sélectionné le nœud. */
+  const onImageEdit = (): void => {
+    if (!editor.commands.canRun('image.setAttributes', {})) return;
+    dropdown.update();
+    dropdown.close(false);
+    dropdown.open();
+  };
+  editor.element.addEventListener(IMAGE_EDIT_EVENT, onImageEdit);
+
+  return {
+    element: dropdown.element,
+    update: dropdown.update,
+    destroy: () => {
+      editor.element.removeEventListener(IMAGE_EDIT_EVENT, onImageEdit);
+      dropdown.destroy();
+    },
+  };
+}
+
+function renderImagePanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dropdown): void {
+  const t = (key: string): string => editor.i18n.t(key);
+  const editing = isImageSelected(editor) && editor.commands.canRun('image.setAttributes', {});
+  const current = editing ? currentImage(editor) : {};
+  panel.setAttribute('aria-label', t(editing ? 'ui.image.edit' : 'ui.image.title'));
+  panel.classList.toggle('aster-image-dialog--editing', editing);
+  const suffix = Math.random().toString(36).slice(2, 8);
+
+  const url = field(`aster-image-url-${suffix}`, t('ui.image.url'), {
+    type: 'url',
+    placeholder: 'https://',
+    autofocus: '',
+  });
+  const alt = field(`aster-image-alt-${suffix}`, t('ui.image.alt'), {
+    type: 'text',
+    autofocus: editing ? '' : undefined,
+  });
+  const title = field(`aster-image-title-${suffix}`, t('ui.image.titleAttr'), { type: 'text' });
+  const width = field(`aster-image-width-${suffix}`, t('ui.image.width'), {
+    type: 'number',
+    min: '1',
+    step: '1',
+    placeholder: t('ui.image.widthAuto'),
+  });
+  alt.input.value = current.alt ?? '';
+  title.input.value = current.title ?? '';
+  const currentWidth = parseWidthInput(String(current.width ?? ''));
+  width.input.value = currentWidth === null ? '' : String(currentWidth);
+
+  const alignGroup = el('div', {
+    className: 'aster-dialog__field aster-image-dialog__align',
+    attrs: { role: 'radiogroup', 'aria-label': t('ui.image.align') },
+  });
+  alignGroup.append(el('span', { className: 'aster-dialog__label', text: t('ui.image.align') }));
+  const radios = el('div', { className: 'aster-image-dialog__radios' });
+  const alignName = `aster-image-align-${suffix}`;
+  const alignInputs: HTMLInputElement[] = [];
+  for (const value of IMAGE_ALIGNMENTS) {
+    const id = `${alignName}-${value}`;
+    const radio = el('input', {
+      className: 'aster-image-dialog__radio',
+      attrs: { type: 'radio', name: alignName, id, value },
+    });
+    radio.checked = current.align === value;
+    alignInputs.push(radio);
+    radios.append(
+      el('label', { className: 'aster-image-dialog__radio-label', attrs: { for: id } }, [
+        radio,
+        t(`ui.image.align.${value}`),
+      ]),
+    );
+  }
+  alignGroup.append(radios);
+
+  const selectedAlign = (): ImageAlign | undefined => {
+    const value = alignInputs.find((radio) => radio.checked)?.value;
+    return isImageAlign(value) ? value : undefined;
+  };
+
+  const submit = (): void => {
+    const altValue = alt.input.value.trim();
+    const titleValue = title.input.value.trim();
+    const widthValue = parseWidthInput(width.input.value);
+    const align = selectedAlign();
+
+    if (editing) {
+      editor.commands.run('image.setAttributes', {
+        alt: altValue,
+        title: titleValue,
+        width: widthValue ?? 0,
+        ...(align ? { align } : {}),
+      });
+    } else {
+      const src = url.input.value.trim();
+      if (!isAcceptableImageUrl(src)) {
+        url.input.setAttribute('aria-invalid', 'true');
+        url.input.focus();
+        return;
+      }
+      const inserted = editor.commands.run('image.insert', {
+        src,
+        ...(altValue ? { alt: altValue } : {}),
+        ...(titleValue ? { title: titleValue } : {}),
+        ...(widthValue !== null ? { width: widthValue } : {}),
+      });
+      if (inserted && align) {
+        editor.commands.run('image.setAttributes', { align });
+      }
+    }
+    dropdown.close(false);
+    editor.focus();
+  };
+  // Sur les inputs, pas sur `panel` : celui-ci est réutilisé à chaque ouverture et
+  // accumulerait des écouteurs liés à des champs détachés.
+  for (const { input } of [url, alt, title, width]) {
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        submit();
+      }
+    });
+  }
+
+  const ok = createPlainButton({
+    className: 'aster-dialog__button aster-dialog__button--primary',
+    text: t(editing ? 'ui.image.apply' : 'ui.image.ok'),
+  });
+  ok.addEventListener('click', submit);
+  const cancel = createPlainButton({
+    className: 'aster-dialog__button',
+    text: t('ui.image.cancel'),
+  });
+  cancel.addEventListener('click', () => dropdown.close(true));
+  const actions = el('div', { className: 'aster-dialog__actions' }, [cancel, ok]);
+
+  if (!editing && editor.commands.has('image.upload')) {
+    const fileInput = el('input', {
+      className: 'aster-image-dialog__file',
+      attrs: {
+        type: 'file',
+        accept: 'image/*',
+        hidden: '',
+        'aria-hidden': 'true',
+        tabindex: '-1',
+      },
+    });
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      editor.commands.run('image.upload', { file });
+      dropdown.close(false);
+      editor.focus();
+    });
+    const fromFile = createPlainButton({
+      className: 'aster-dialog__button aster-image-dialog__from-file',
+      icon: 'image-upload',
+      text: t('ui.image.fromFile'),
+    });
+    fromFile.disabled = !editor.commands.canRun('image.upload', { file: new File([], '') });
+    fromFile.addEventListener('click', () => fileInput.click());
+    panel.append(el('div', { className: 'aster-dialog__field' }, [fromFile, fileInput]));
+  }
+
+  if (!editing) panel.append(url.wrapper);
+  panel.append(alt.wrapper, title.wrapper, width.wrapper, alignGroup, actions);
 }

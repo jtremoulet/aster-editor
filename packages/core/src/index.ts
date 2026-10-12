@@ -54,6 +54,23 @@ export {
   type ShortcutBinding,
   type ShortcutsExtensionOptions,
 } from './extensions/shortcuts';
-export { createImageExtension, IMAGE_ALIGNMENTS } from './extensions/image';
+export {
+  createImageExtension,
+  clampImageWidth,
+  isImageAlignment,
+  parseImageWidth,
+  renderImageNodeView,
+  ImageNodeView,
+  IMAGE_ALIGNMENTS,
+  IMAGE_CLASS,
+  IMAGE_DEFAULT_DRAG_WIDTH,
+  IMAGE_EDIT_EVENT,
+  IMAGE_HANDLE_CLASS,
+  IMAGE_MIN_WIDTH,
+  IMAGE_SELECTED_CLASS,
+  type ImageAlignment,
+  type ImageEditEventDetail,
+} from './extensions/image';
+export { toImageAttributes, type ImageAttributeUpdate } from './commands/images';
 export { normalizeOutputHtml } from './html/normalize-output';
 export { CONTENT_CLASS } from './editor/aster-editor';

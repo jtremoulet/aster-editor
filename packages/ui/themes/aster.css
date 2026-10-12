@@ -3,5 +3,6 @@
  * Importe-la telle quelle, ou importe `base.css` + un seul thème pour alléger.
  */
 @import './base.css';
+@import './images-tables.css';
 @import './light.css';
 @import './night.css';

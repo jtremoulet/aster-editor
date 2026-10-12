@@ -41,7 +41,7 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     createLinkExtension(context.linkPolicy),
     TaskList,
     TaskItem.configure({ nested: true }),
-    TableKit.configure({ table: { resizable: false } }),
+    TableKit.configure({ table: { resizable: true, cellMinWidth: 48 } }),
     // Pas de `defaultAlignment` : en v3 c'est un défaut d'attribut, donc chaque bloc
     // le porterait et sérialiserait `text-align: left` partout. On garde `null` pour
     // un HTML propre ; c'est la commande `alignLeft` qui traite « absent » comme gauche.
