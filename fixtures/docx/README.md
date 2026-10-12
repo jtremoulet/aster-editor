@@ -10,9 +10,9 @@ Points à vérifier avant dépôt : aucune donnée personnelle, aucun nom de cli
 
 ## 📋 Inventaire
 
-| Fichier                  | Provenance                                | Contenu                                                          | Statut               |
-| ------------------------ | ----------------------------------------- | ---------------------------------------------------------------- | -------------------- |
-| `01-headings-lists.docx` | Généré par `scripts/generate-fixtures.ts` | Titres H1-H3, listes puces et numéros imbriquées sur 3 niveaux   | À générer en phase 0 |
-| `02-tables.docx`         | Généré                                    | Table avec ligne d'en-tête, cellules fusionnées, table imbriquée | À générer en phase 0 |
-| `03-images.docx`         | Généré                                    | Image inline PNG, image avec légende                             | À générer en phase 0 |
-| `04-mixed-client.docx`   | Joris, document réel anonymisé            | Mélange titres, listes, tables, images, notes de bas de page     | En attente de dépôt  |
+| Fichier                  | Provenance                                | Contenu                                                            | Statut              |
+| ------------------------ | ----------------------------------------- | ------------------------------------------------------------------ | ------------------- |
+| `01-headings-lists.docx` | Généré par `scripts/generate-fixtures.ts` | Titres H1-H3, listes puces et numéros imbriquées sur 3 niveaux     | Généré              |
+| `02-tables.docx`         | Généré                                    | Table avec ligne d'en-tête en gras, table avec cellule `colspan=2` | Généré              |
+| `03-images.docx`         | Généré                                    | Image PNG inline avec `alt`, note de bas de page                   | Généré              |
+| `04-mixed-client.docx`   | Joris, document réel anonymisé            | Mélange titres, listes, tables, images, notes de bas de page       | En attente de dépôt |
