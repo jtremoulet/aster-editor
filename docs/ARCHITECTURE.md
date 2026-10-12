@@ -173,15 +173,16 @@ Variables définies sur `.aster` et redéfinies sur `.aster[data-theme="night"]`
 
 ## ⚖️ Licences des dépendances de production
 
-| Paquet                                         | Licence                             |
-| ---------------------------------------------- | ----------------------------------- |
-| @tiptap/*                                      | MIT                                 |
-| prosemirror-* via @tiptap/pm                   | MIT                                 |
-| mammoth                                        | BSD-2-Clause                        |
-| jszip (via mammoth)                            | MIT ou GPLv3 au choix, on prend MIT |
-| @xmldom/xmldom (via mammoth)                   | MIT                                 |
-| docx (should, export + génération de fixtures) | MIT                                 |
-| @angular/*                                     | MIT                                 |
+| Paquet                                      | Licence                             |
+| ------------------------------------------- | ----------------------------------- |
+| @tiptap/*                                   | MIT                                 |
+| prosemirror-* via @tiptap/pm                | MIT                                 |
+| mammoth                                     | BSD-2-Clause                        |
+| jszip (via mammoth)                         | MIT ou GPLv3 au choix, on prend MIT |
+| @xmldom/xmldom (via mammoth)                | MIT                                 |
+| docx (export .docx, génération de fixtures) | MIT                                 |
+| @playwright/test (dev uniquement, e2e)      | Apache-2.0                          |
+| @angular/*                                  | MIT                                 |
 
 Toute nouvelle dépendance s'ajoute ici avant d'entrer dans le code.
 

@@ -142,3 +142,15 @@
 - Deux de ces bugs sont invisibles sous jsdom (focus au `mousedown`) : argument de plus pour les e2e Playwright (L12 en cours).
 - Lot L9a lancé (`affbe982`) pour tout corriger avec un test par finding. Correctif A-2 porté dans le core : `setHTML(html, false)` écrit désormais hors historique, JSDoc du contrat mise à jour.
 - `test:coverage` ajouté au paquet angular par l'orchestrateur, et `npm run test` racine simplifié.
+
+### 00:11 — L9a correctifs Angular rendu et intégré (agent 10 min, 187k tokens, 96 outils)
+- Les 12 findings corrigés, chacun avec un test, plus les tests manquants listés par le relecteur. angular 19 → 30 tests, demo 9 → 20, ui +7, core +3.
+- Changement de comportement du core à mettre au changelog : `setHTML/setJSON(…, false)` hors historique d'annulation.
+- `createPlainButton` neutralise désormais le `mousedown` de tous les boutons UI : à valider en e2e sur les dialogues avec champs texte (L12).
+- Flake `image-upload.spec.ts` signalé par un 3e agent : passe en lot L9b (core) avec les retours de R-word.
+
+### 00:15 — L10 export .docx rendu et intégré (agent 20 min, 224k tokens, 85 outils)
+- 53 nouveaux tests, paquet word à 216 tests et 98 %. Aller-retour `exportDocx` → `importDocx` sans avertissement, vérifié aussi **en navigateur réel** via le playground (10 kB, structure identique au retour, `type="a"` perdu à l'import car mammoth ne le relit pas).
+- Décision validée : `onWarning` en option plutôt qu'un retour `{ blob, warnings }`, le `Blob` nu reste pratique pour un bouton de téléchargement.
+- L10 a trouvé par le test d'aller-retour un piège de la lib docx (`tableHeader: false` sérialisé et lu comme vrai par mammoth) : le test clé imposé dans le brief a payé.
+- À vérifier par Joris : ouvrir un .docx exporté dans Word réel (puces 9 niveaux, style Citation, image, bordures).
