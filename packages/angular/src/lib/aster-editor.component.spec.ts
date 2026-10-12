@@ -35,17 +35,23 @@ interface Mounted {
  * Lit une fixture `.docx` du dépôt. Les modules Node sont chargés par un import dynamique
  * à spécificateur variable : le tsconfig de spec Angular n'a pas les types `node`, et le
  * test tourne pourtant dans Node (environnement jsdom de Vitest). Le chemin part de
- * `process.cwd()` (racine du monorepo) : `import.meta.url` n'est pas fiable ici, le builder
- * Angular rebundle les specs et l'URL change entre un run normal et un run avec couverture.
+ * `process.cwd()` remonté jusqu'à la racine du monorepo (dossier contenant `fixtures/`), car
+ * npm exécute le script depuis `packages/angular` et `ng` depuis la racine ; `import.meta.url`
+ * n'est pas fiable ici, le builder Angular rebundle les specs et l'URL change avec la couverture.
  */
 async function readFixture(pathFromRoot: string): Promise<Uint8Array<ArrayBuffer>> {
   const fsModule = 'node:fs';
   const processModule = 'node:process';
   const fs = (await import(/* @vite-ignore */ fsModule)) as {
     readFileSync(path: string): Uint8Array;
+    existsSync(path: string): boolean;
   };
   const process = (await import(/* @vite-ignore */ processModule)) as { cwd(): string };
-  const bytes = fs.readFileSync(`${process.cwd()}/${pathFromRoot}`);
+  let root = process.cwd();
+  for (let i = 0; i < 4 && !fs.existsSync(`${root}/fixtures`); i += 1) {
+    root = `${root}/..`;
+  }
+  const bytes = fs.readFileSync(`${root}/${pathFromRoot}`);
   // Copie dans un ArrayBuffer dédié : le Buffer Node partage un pool, `File` veut un ArrayBuffer strict.
   return new Uint8Array(bytes);
 }

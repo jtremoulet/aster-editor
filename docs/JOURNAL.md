@@ -132,42 +132,49 @@
 - `npm run check` complet : **546 tests verts**. Bump **0.2.0**. Critère d'acceptation n° 5 (reactive form) atteint.
 
 ### 00:00 — L7 should-features rendu et intégré (agent 15 min, 229k tokens, 69 outils)
+
 - +23 tests core (288, 95 %), +35 tests ui (125, 98 %). Tout additif, contrat intact, `search.*` enregistrées hors `STANDARD_COMMAND_IDS`.
 - Vérifié en navigateur : `search.open` → panneau, 4 correspondances surlignées « 1 / 4 », `next`, `replaceAll`, vue source avec HTML modifié au retour et toolbar grisée pendant, plein écran `position: fixed` et sortie à Échap. 34 items de toolbar en preset `full`.
 - Différé : icônes inline des 3 composants à rapatrier dans `icons/index.ts` (confié à L11), ajout des ids `search.*` au contrat au prochain dégel, recherche indisponible en lecture seule (le registre refuse `run`) → L9.
 - 0.2.0 → prochain bump 0.3.0 après L10/L11/L12.
 
 ### 00:05 — Revue R-angular rendue (agent 7 min, 156k tokens, 54 outils)
+
 - 4 findings bloquants prouvés ou avec scénario précis : `touched` posé dès un clic sur la toolbar (le `mousedown` vole le focus), `writeValue` annulable par Ctrl+Z (pas d'`addToHistory: false`), validateur de la démo refusant une image seule, erreur du corps conditionnée par `form.touched` au lieu de `body.touched`. 8 mineurs (SSR charge `word` inutilement via un `effect`, a11y, titres de routes, `[value]` sur `<select>`).
 - Deux de ces bugs sont invisibles sous jsdom (focus au `mousedown`) : argument de plus pour les e2e Playwright (L12 en cours).
 - Lot L9a lancé (`affbe982`) pour tout corriger avec un test par finding. Correctif A-2 porté dans le core : `setHTML(html, false)` écrit désormais hors historique, JSDoc du contrat mise à jour.
 - `test:coverage` ajouté au paquet angular par l'orchestrateur, et `npm run test` racine simplifié.
 
 ### 00:11 — L9a correctifs Angular rendu et intégré (agent 10 min, 187k tokens, 96 outils)
+
 - Les 12 findings corrigés, chacun avec un test, plus les tests manquants listés par le relecteur. angular 19 → 30 tests, demo 9 → 20, ui +7, core +3.
 - Changement de comportement du core à mettre au changelog : `setHTML/setJSON(…, false)` hors historique d'annulation.
 - `createPlainButton` neutralise désormais le `mousedown` de tous les boutons UI : à valider en e2e sur les dialogues avec champs texte (L12).
 - Flake `image-upload.spec.ts` signalé par un 3e agent : passe en lot L9b (core) avec les retours de R-word.
 
 ### 00:15 — L10 export .docx rendu et intégré (agent 20 min, 224k tokens, 85 outils)
+
 - 53 nouveaux tests, paquet word à 216 tests et 98 %. Aller-retour `exportDocx` → `importDocx` sans avertissement, vérifié aussi **en navigateur réel** via le playground (10 kB, structure identique au retour, `type="a"` perdu à l'import car mammoth ne le relit pas).
 - Décision validée : `onWarning` en option plutôt qu'un retour `{ blob, warnings }`, le `Blob` nu reste pratique pour un bouton de téléchargement.
 - L10 a trouvé par le test d'aller-retour un piège de la lib docx (`tableHeader: false` sérialisé et lu comme vrai par mammoth) : le test clé imposé dans le brief a payé.
 - À vérifier par Joris : ouvrir un .docx exporté dans Word réel (puces 9 niveaux, style Citation, image, bordures).
 
 ### 00:20 — L11 markdown/autosave/extras rendu et intégré (agent 15 min, 258k tokens, 102 outils)
+
 - +35 tests core (323, 94 %), +21 tests ui (146, 98 %). Tiptap 3.31 n'embarque pas de markdown natif (`@tiptap/markdown` séparé, non installé) : convertisseur maison sans dépendance, aller-retour testé.
 - `print.css` ajouté à `aster.css` (6 imports). Preset `full` : dernier groupe à 5 widgets.
 - **Flake `image-upload.spec.ts` corrigé par l'orchestrateur** : 3 `flush()` à base de `setTimeout` remplacés par `vi.waitFor` sur le HTML attendu. 3 runs complets verts d'affilée. Cause : `FileReader` sous jsdom résout à un moment non déterministe.
 - 3 propositions de contrat différées (`getMarkdown` sur `AsterEditor`, `autosave` dans `AsterOptions`, JSDoc des widgets).
 
 ### 00:22 — Revue R-word rendue (agent 25 min, preuves exécutables)
+
 - 3 bloquants : **2 regex quadratiques** (`isWordHtml` sur chaque collage, `parseListFormats`) exploitables par un site hostile au `copy` (2,3 Mo → 137 s), et `mso-yfti-firstrow:yes` pris pour un marqueur d'en-tête alors que Word le pose sur la première ligne de toute table → toutes les tables Word collées perdaient leur première ligne de données en `<th>`. 12 mineurs (sécurité par liste blanche confirmée mais `template`/`iframe`/`form` laissés, `importDocx(null)`, `Uint8Array` refusé, marqueurs `c.`/`1.1.`, overrides `lfo`, Google `list-style-type`).
 - Méthode du relecteur à retenir : un fichier de preuves `proofs.scratch.spec.ts` avec un test par finding assertant le comportement **obtenu**, qui passera au rouge une fois corrigé. Zéro finding sans entrée concrète.
 - Passes DOM mesurées linéaires jusqu'à 3 Mo. Lot L9b lancé (`a?`) pour les 15 findings.
 - Note : `export/` (L10) non relu par R-word, livré pendant la revue → revue dédiée à prévoir.
 
 ### 00:30 — L12 e2e Playwright rendu et intégré (agent 19 min, 223k tokens, 67 outils)
+
 - 21 tests e2e (16 playground, 5 démo), 3 runs verts, rejoués par l'orchestrateur : **21/21 en 15 s**. Captures dans `e2e/output/` (gitignoré) et 2 copiées dans `docs/captures/`.
 - 2 bugs trouvés que jsdom ne pouvait pas voir : Échap en plein écran inerte depuis l'éditeur (ProseMirror capture la touche et `preventDefault`), menu contextuel de table `position: fixed` sans clamp dans le viewport. → L9c après R-ui.
 - Piège Vite à froid : le premier `importDocx` sur `ng serve` déclenche l'optimisation de `mammoth` et recharge la page. Contourné par un retry dans le test ; à noter dans le guide d'intégration.
@@ -175,11 +182,13 @@
 - `data-testid` proposés pour découpler les e2e des libellés FR : à faire en V1.1.
 
 ### 00:35 — Revue R-ui rendue (agent 30 min, 9 specs de preuve)
+
 - 9 bloquants, tous d'accessibilité ou de focus : `aria-pressed` sur des boutons non-toggle, focus perdu au re-clic du déclencheur et au passage en lecture seule, Tab ne ferme pas les menus, `getIcon('constructor')` renvoie une fonction (pollution DOM, pas de XSS), menu contextuel jamais resynchronisé, vue source laissée en lecture seule définitive si la toolbar est détruite, panneau coupé en plein écran, contraste du surlignage night à 4,05. Aucune fuite d'écouteur, aucun `innerHTML` non constant, variables CSS toutes consommées.
 - Lot L9c lancé sur ui avec ces 9 bloquants + les 2 bugs des e2e (Échap plein écran, clamp du menu contextuel) + un test de contraste automatisé sur les thèmes.
 - Observation REX : les trois revues ont chacune trouvé 3 à 9 bloquants dans du code à 94-99 % de couverture. Les TU des agents testent ce qu'ils ont construit ; la revue adverse teste ce qu'ils n'ont pas imaginé. Les deux sont nécessaires.
 
 ### 00:40 — Revue R-core rendue (agent 35 min, sondes exécutées puis supprimées)
+
 - 3 bloquants : `setReadOnly` émet `change` (Tiptap `setEditable` émet `update` par défaut) → le wrapper Angular salit le formulaire à chaque `disabled` ; politique de liens non appliquée au parsing des `<img>` (`javascript:` et `data:text/html` conservés) alors que le README promettait le contraire ; `paragraph`/`heading` via `setNode` mutent le document même en échouant (`run` → `false` mais l'item de liste est éjecté).
 - Perf mesurée : `getHTML()` 45 ms sur 500 paragraphes + 10 tables (62 % dans le reparse de `normalizeOutputHtml`), appelé à chaque frappe par Angular → cache par identité de `state.doc`.
 - Diagnostic du flake confirmé : `FileReader` jsdom = 3 `setImmediate` imbriqués contre 2 `setTimeout(0)` ; 30/30 pertes sous charge. Mon correctif `vi.waitFor` est valide, le relecteur propose `waitForEvent` : équivalent.
@@ -187,22 +196,33 @@
 - Lot L9d lancé. Les 4 lots de correctifs L9a-d couvrent 54 findings au total.
 
 ### 00:45 — L9c correctifs ui rendu et intégré (agent 17 min, 274k tokens, 146 outils)
+
 - 17 findings corrigés, ui 146 → 188 tests, e2e 21/21 vérifiés par l'agent, E-1 et E-2 revérifiés en vrai navigateur par l'agent lui-même.
 - Nouveau test de contraste WCAG lisant les CSS des thèmes : tout thème futur sera contrôlé automatiquement.
 - `THEMING.md` aligné par l'orchestrateur (sélecteur d'image, classe flip, note `images-tables.css`). E2E : contournement `button.focus()` du test plein écran à retirer en V1.1 (non bloquant).
 
 ### 00:50 — L9b correctifs word rendu et intégré (agent 20 min, 288k tokens, 127 outils)
+
 - 15 findings corrigés, word 216 → 260 tests, 98,8 %. Le fichier de preuves du relecteur passe à 17/17 rouge comme attendu : la boucle revue → preuve → correctif → preuve inversée fonctionne.
 - Décisions validées : `svg`/`math` supprimés au collage, liens relatifs déballés (Word n'émet que des ancres `#_Toc` mortes, Google des URL absolues), `start` posé aussi pour alpha/romain.
 - Friction récurrente notée : l'outil Write convertit ` ` en NBSP littéral. Trois agents l'ont rencontrée.
 
 ### 00:55 — Revue R-export rendue (agent 25 min, a lu le code de la lib docx)
+
 - 4 bloquants : caractères de contrôle écrits bruts dans le XML (`docx` n'assainit que `& " ' < >`) → .docx « contenu illisible » dans Word ; NBSP écrasés par `\s` (typographie française) ; `start` des `<ol>` ignoré ; sous-listes de même format partageant un `abstractNum` → numérotation qui continue dans Word. 7 mineurs. Échappement XML et robustesse salués.
 - Lot L9e lancé. Mesure de charge : 2 000 paragraphes + 20 tables exportés en 233 ms.
 
 ### 00:57 — L9d correctifs core rendu et intégré (agent 30 min, 301k tokens, 131 outils)
+
 - 13 findings corrigés, core 323 → 363 tests, `getHTML` 17,8 ms → 0 ms entre deux transactions.
 - Décision validée contre mon brief : `paragraph`/`heading` sur un bloc déjà du type → `false` sans mutation (sémantique ProseMirror pure, `heading` n'est plus une bascule). Cohérent avec « pas de titre dans les listes en V1 ».
 - Décision hors brief acceptée avec réserve : `focus()` synchrone en navigateur (détection `Range.prototype.getClientRects`) pour tenir le contrat « API synchrone » et supprimer une course e2e (grille de table → `type` avant le rAF de Tiptap). À réexaminer en V1.1 : alternative propre côté `ui` (ne pas reconstruire un panneau pendant un clic).
 - `data:image/svg+xml` accepté dans `<img>` (pas d'exécution de script), SVG toujours refusé à l'upload.
 - Échec transitoire d'un `ng test` pendant un e2e concurrent : le builder Angular bundle `ui`/`word` pendant que d'autres agents y écrivent. À noter dans le REX : ne pas lancer deux agents qui exécutent des e2e en même temps.
+
+### 01:05 — L9e intégré, check complet, 0.3.0
+
+- L9e (agent 12 min, 180k tokens, 61 outils) : 11 findings corrigés, word 260 → 281 tests, charge 182 ms.
+- `npm run check` : un échec, le spec Angular résolvait les fixtures depuis `process.cwd()` (différent entre `npm run test --workspaces` et `ng test`). Corrigé par remontée jusqu'au dossier `fixtures/`.
+- État final vérifié : **core 363, word 281, ui 188, angular 30, demo 20 = 882 tests unitaires + 21 e2e**, build vert, e2e 21/21 en 6 s.
+- Bump **0.3.0**, changelog détaillé (Added / Changed / Fixed). L8bis lancé pour aligner toute la doc sur l'état final.
