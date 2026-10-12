@@ -154,3 +154,9 @@
 - Décision validée : `onWarning` en option plutôt qu'un retour `{ blob, warnings }`, le `Blob` nu reste pratique pour un bouton de téléchargement.
 - L10 a trouvé par le test d'aller-retour un piège de la lib docx (`tableHeader: false` sérialisé et lu comme vrai par mammoth) : le test clé imposé dans le brief a payé.
 - À vérifier par Joris : ouvrir un .docx exporté dans Word réel (puces 9 niveaux, style Citation, image, bordures).
+
+### 00:20 — L11 markdown/autosave/extras rendu et intégré (agent 15 min, 258k tokens, 102 outils)
+- +35 tests core (323, 94 %), +21 tests ui (146, 98 %). Tiptap 3.31 n'embarque pas de markdown natif (`@tiptap/markdown` séparé, non installé) : convertisseur maison sans dépendance, aller-retour testé.
+- `print.css` ajouté à `aster.css` (6 imports). Preset `full` : dernier groupe à 5 widgets.
+- **Flake `image-upload.spec.ts` corrigé par l'orchestrateur** : 3 `flush()` à base de `setTimeout` remplacés par `vi.waitFor` sur le HTML attendu. 3 runs complets verts d'affilée. Cause : `FileReader` sous jsdom résout à un moment non déterministe.
+- 3 propositions de contrat différées (`getMarkdown` sur `AsterEditor`, `autosave` dans `AsterOptions`, JSDoc des widgets).
