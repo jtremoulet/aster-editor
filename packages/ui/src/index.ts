@@ -37,3 +37,21 @@ export { createLinkDialog, isAcceptableUrl } from './components/link-dialog';
 export { createImageDialog } from './components/image-dialog';
 export type { TableContextMenu } from './components/table-context-menu';
 export { createTableContextMenu } from './components/table-context-menu';
+export type { SearchPanelState } from './components/search-panel';
+export { createSearchPanel, readSearchState } from './components/search-panel';
+export type { SourceView } from './components/source-view';
+export {
+  SOURCE_TEXTAREA_CLASS,
+  SOURCE_VIEW_CLASS,
+  createSourceButton,
+  createSourceView,
+  formatSourceHtml,
+  getSourceView,
+} from './components/source-view';
+export type { Fullscreen } from './components/fullscreen';
+export {
+  FULLSCREEN_CLASS,
+  createFullscreen,
+  createFullscreenButton,
+  getFullscreen,
+} from './components/fullscreen';

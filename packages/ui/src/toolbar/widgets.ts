@@ -1,16 +1,19 @@
 import type { AsterEditor } from '@aster-editor/core';
 import { createColorPicker } from '../components/color-picker';
 import { createFontFamilyMenu, createFontSizeMenu } from '../components/font-menu';
+import { createFullscreenButton } from '../components/fullscreen';
 import { createHeadingMenu } from '../components/heading-menu';
 import { createImageDialog } from '../components/image-dialog';
 import { createLinkDialog } from '../components/link-dialog';
+import { createSearchPanel } from '../components/search-panel';
+import { createSourceButton } from '../components/source-view';
 import { createTableGridPicker } from '../components/table-grid-picker';
 import type { ToolbarWidget, WidgetFactory } from '../types';
 
 /** Un widget connu : sa fabrique et les commandes dont il a besoin pour exister. */
 interface WidgetDefinition {
   readonly factory: WidgetFactory;
-  /** Au moins une de ces commandes doit être enregistrée pour que le widget soit rendu. */
+  /** Au moins une de ces commandes doit être enregistrée pour que le widget soit rendu. Vide : aucune condition. */
   readonly requires: readonly string[];
 }
 
@@ -33,6 +36,10 @@ export const WIDGETS: Readonly<Record<string, WidgetDefinition>> = {
   },
   fontFamily: { factory: createFontFamilyMenu, requires: ['fontFamily'] },
   fontSize: { factory: createFontSizeMenu, requires: ['fontSize'] },
+  search: { factory: createSearchPanel, requires: ['search.open'] },
+  // Vue source et plein écran ne dépendent d'aucune commande du core.
+  source: { factory: createSourceButton, requires: [] },
+  fullscreen: { factory: createFullscreenButton, requires: [] },
 };
 
 /**
@@ -46,7 +53,10 @@ export function createWidget(editor: AsterEditor, name: string): ToolbarWidget |
     console.warn(`[aster-ui] unknown toolbar widget "${name}"`);
     return null;
   }
-  if (!definition.requires.some((id) => editor.commands.has(id))) {
+  if (
+    definition.requires.length > 0 &&
+    !definition.requires.some((id) => editor.commands.has(id))
+  ) {
     console.warn(
       `[aster-ui] widget "${name}" skipped: none of [${definition.requires.join(', ')}] is registered`,
     );

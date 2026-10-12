@@ -4,5 +4,6 @@
  */
 @import './base.css';
 @import './images-tables.css';
+@import './search-source.css';
 @import './light.css';
 @import './night.css';

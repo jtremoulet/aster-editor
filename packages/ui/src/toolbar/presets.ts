@@ -19,6 +19,7 @@ export const FULL_PRESET: readonly ToolbarGroup[] = [
   [widget('link'), widget('image'), widget('table')],
   ['blockquote', 'codeBlock', 'horizontalRule'],
   ['clearFormatting'],
+  [widget('search'), widget('source'), widget('fullscreen')],
 ];
 
 /** Toolbar standard : sans couleurs, police, taille ni indice/exposant. */

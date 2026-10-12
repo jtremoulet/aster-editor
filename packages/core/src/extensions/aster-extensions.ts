@@ -11,6 +11,7 @@ import { StarterKit } from '@tiptap/starter-kit';
 import type { AsterEditor, AsterOptions } from '../api';
 import { createImageExtension } from './image';
 import { createLinkExtension, type ResolvedLinkPolicy } from './link-safety';
+import { Search } from './search';
 import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
 
 /** Dépendances de l'assemblage, fournies par l'éditeur au montage. */
@@ -56,6 +57,7 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
       placeholder: () => options.placeholder ?? editor.i18n.t('editor.placeholder'),
     }),
     CharacterCount,
+    Search,
     createShortcutsExtension(context.shortcuts),
     ...(options.extensions ?? []),
   ];

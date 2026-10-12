@@ -23,6 +23,26 @@ export { createImageCommands } from './commands/images';
 export { TABLE_COMMANDS } from './commands/tables';
 export { TEXT_STYLE_COMMANDS } from './commands/text-style';
 export { HISTORY_COMMANDS } from './commands/history';
+export {
+  SEARCH_COMMANDS,
+  SEARCH_COMMAND_IDS,
+  SEARCH_OPEN_EVENT,
+  getSearchStorage,
+  type SearchCommandArgs,
+  type SearchCommandId,
+  type SearchOpenEventDetail,
+} from './commands/search';
+export {
+  Search,
+  SEARCH_CURRENT_CLASS,
+  SEARCH_EXTENSION_NAME,
+  SEARCH_MATCH_CLASS,
+  findMatches,
+  searchPluginKey,
+  type SearchMatch,
+  type SearchQueryOptions,
+  type SearchStorage,
+} from './extensions/search';
 
 export { createAsterExtensions, type AsterExtensionsContext } from './extensions/aster-extensions';
 export {

@@ -21,6 +21,16 @@ export interface AsterInstance {
   /** Élément racine `.aster[data-theme]` créé dans l'hôte. */
   readonly element: HTMLElement;
   setTheme(theme: AsterTheme): void;
+  /**
+   * Bascule entre l'éditeur et la vue source HTML (`<textarea class="aster-source">`).
+   * Pendant la vue source, l'éditeur est en lecture seule et la toolbar désactivée ;
+   * le retour applique le HTML modifié. Sans effet si l'éditeur est déjà en lecture seule.
+   */
+  toggleSource(): void;
+  isSourceView(): boolean;
+  /** Ajoute ou retire `aster--fullscreen` sur `.aster` (position fixe plein écran). Échap quitte. */
+  setFullscreen(value: boolean): void;
+  isFullscreen(): boolean;
   destroy(): void;
 }
 
