@@ -226,3 +226,15 @@
 - `npm run check` : un échec, le spec Angular résolvait les fixtures depuis `process.cwd()` (différent entre `npm run test --workspaces` et `ng test`). Corrigé par remontée jusqu'au dossier `fixtures/`.
 - État final vérifié : **core 363, word 281, ui 188, angular 30, demo 20 = 882 tests unitaires + 21 e2e**, build vert, e2e 21/21 en 6 s.
 - Bump **0.3.0**, changelog détaillé (Added / Changed / Fixed). L8bis lancé pour aligner toute la doc sur l'état final.
+
+### 01:27 — Gel. L8bis intégré, 0.3.0 finale sur `develop`
+
+- L8bis (agent 21 min, 381k tokens, 86 outils) : 9 docs réécrites depuis le code, tous les exemples typecheckés, compteurs vérifiés par script (48 + 6 commandes, 66 icônes, 30 variables, 58 + 76 clés i18n, 882 tests). Deux écarts **code** remontés par l'agent docs et corrigés par l'orchestrateur : `Mod-f` consommait la touche sans panneau de recherche (événement rendu annulable, `search.open` rend `false` sans preneur), 4 commandes `search.*` sans icône.
+- État final : **883 tests unitaires + 21 e2e verts, lint, typecheck, build verts**, 42 commits sur `develop`, `main` intacte.
+- Livrables de fin : `BILAN.md` (5 min), `docs/REX.md` (méthode en 9 points), captures dans `docs/captures/`, mémoire Claude mise à jour.
+
+## 🧭 Reprendre le travail
+
+1. Lire `BILAN.md` puis la section « À vérifier par toi ».
+2. Les 10 propositions de contrat différées sont dans les entrées L1, L6, L7, L10, L11 ci-dessus : à instruire en V1.1 avec un dégel explicite de `packages/core/src/api/`.
+3. Serveurs encore lancés en fin de nuit : playground esbuild (4300) et `ng serve` (4200), à tuer si besoin.
