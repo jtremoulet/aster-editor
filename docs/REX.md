@@ -22,18 +22,18 @@ Les questions auxquelles on veut répondre :
 
 ### Par lot
 
-| Lot              | Lancé | Rendu | Durée agent | Check initial | Allers-retours | Tests | Couv. | Findings revue (bloquant/mineur) | Changements de contrat proposés |
-| ---------------- | ----- | ----- | ----------- | ------------- | -------------- | ----- | ----- | -------------------------------- | ------------------------------- |
-| P0               |       |       |             |               |                |       |       |                                  |                                 |
-| L1 core          |       |       |             |               |                |       |       |                                  |                                 |
-| L2 word-paste    |       |       |             |               |                |       |       |                                  |                                 |
-| L3 word-docx     |       |       |             |               |                |       |       |                                  |                                 |
-| L4 ui            |       |       |             |               |                |       |       |                                  |                                 |
-| L5 angular+démo  |       |       |             |               |                |       |       |                                  |                                 |
-| L6 tables/images |       |       |             |               |                |       |       |                                  |                                 |
-| L7 should        |       |       |             |               |                |       |       |                                  |                                 |
-| L8 docs          |       |       |             |               |                |       |       |                                  |                                 |
-| R1-R4 revues     |       |       |             |               |                |       |       |                                  |                                 |
+| Lot              | Lancé | Rendu | Durée agent                    | Check initial | Allers-retours | Tests | Couv.              | Findings revue (bloquant/mineur) | Changements de contrat proposés |
+| ---------------- | ----- | ----- | ------------------------------ | ------------- | -------------- | ----- | ------------------ | -------------------------------- | ------------------------------- |
+| P0               |       |       |                                |               |                |       |                    |                                  |                                 |
+| L1 core          |       |       |                                |               |                |       |                    |                                  |                                 |
+| L2 word-paste    |       |       |                                |               |                |       |                    |                                  |                                 |
+| L3 word-docx     |       |       |                                |               |                |       |                    |                                  |                                 |
+| L4 ui            |       |       |                                |               |                |       |                    |                                  |                                 |
+| L5 angular+démo  |       |       |                                |               |                |       |                    |                                  |                                 |
+| L6 tables/images | 23:25 | 23:41 | 16 min, 227k tokens, 67 outils | vert          | 0              | +46   | core 94 %, ui 97 % | 0/0                              | 4 (différées V1.1)              |
+| L7 should        |       |       |                                |               |                |       |                    |                                  |                                 |
+| L8 docs          |       |       |                                |               |                |       |                    |                                  |                                 |
+| R1-R4 revues     |       |       |                                |               |                |       |                    |                                  |                                 |
 
 ### Globales
 
@@ -76,6 +76,8 @@ Notés au fil de l'eau, avec l'heure.
 - 22:46 — Phase 0 bouclée en 12 minutes au lieu des 90 prévues, grâce aux docs de cadrage très précises : chaque fichier était déjà spécifié.
 - 23:15 — Les trois premiers lots sont rentrés en 11 à 20 minutes, tous verts au premier check, zéro fichier hors périmètre, zéro proposition de changement de contrat. Le contrat figé + le brief très précis (fichiers nommés, définition de fini en cases, ordre de sacrifice) fonctionnent.
 - 23:15 — Les rapports au format imposé se lisent en 1 minute et donnent directement les points à vérifier. Les « Décisions prises » sont la matière du REX.
+- 23:28 — La vérification en navigateur réel juste après l'intégration de la vague 1 a trouvé en 3 minutes un bug que 470 tests unitaires ne pouvaient pas voir (bouton Lien grisé : deux lots conformes à leurs briefs, incompatibles à l'intégration). Un playground vanilla sans framework, bundlé depuis les sources, est l'outil de vérification le plus rentable de la nuit.
+- 23:40 — L'agent docs a typechecké tous ses exemples et compté programmatiquement commandes et variables CSS : zéro invention. C'est la méthode à imposer dans tout brief de documentation.
 
 ## 🧱 Blocages et frictions
 
@@ -90,15 +92,20 @@ Notés au fil de l'eau, avec l'heure, la cause et le contournement.
 - 22:47 — Un `node -e` inline avec des backticks dans un script bash a été mangé par le shell et a vidé des mots du REX. Contournement : script dans un fichier `.cjs`. Leçon : jamais de code multi-lignes avec backticks en argument inline.
 - 23:13 — Deux agents ont signalé que `Write`/`Edit` décodent ` ` en caractère littéral, ce qui déclenche ESLint `no-irregular-whitespace`. À mettre dans les briefs : utiliser `String.fromCharCode(160)`.
 - 23:13 — Un agent a perdu du temps sur des heredocs bash avec des apostrophes françaises. À mettre dans les briefs : écrire les fichiers avec l'outil Write.
+- 23:41 — L6 a lancé `npx vitest run -w packages/core` en croyant à un flag workspace : c'est le mode watch, processus orphelin à tuer. À mettre dans les briefs : `cd packages/x && npx vitest run`.
+- 23:25 — `preview_start` a lu le `launch.json` du workspace parent et lancé un autre projet : les outils de preview ne sont pas fiables dans un sous-dossier d'un workspace multi-projets. Serveur lancé à la main.
 - 23:10 — Mon propre `sed` a mangé un `s` dans une regex en passant par le shell : commit de correction derrière. Leçon : pour patcher du code, passer par un script Node dans un fichier, jamais par sed avec des backslashes.
 
 ## 🧭 Décisions de process prises en route
 
-| Heure | Décision                                     | Pourquoi                                                         |
-| ----- | -------------------------------------------- | ---------------------------------------------------------------- |
-| 22:05 | Toolbar vanilla plutôt qu'Angular            | Portabilité React/Vue demandée par Joris                         |
-| 22:05 | 4 paquets au lieu de 2                       | Lots disjoints pour le parallélisme, tree-shaking de mammoth     |
-| 22:30 | `tsc` pur au lieu d'un bundler pour les libs | TS 6.0 imposé, moins d'outillage à risque, sortie ESM suffisante |
+| Heure | Décision                                                                              | Pourquoi                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 22:05 | Toolbar vanilla plutôt qu'Angular                                                     | Portabilité React/Vue demandée par Joris                                                                         |
+| 22:05 | 4 paquets au lieu de 2                                                                | Lots disjoints pour le parallélisme, tree-shaking de mammoth                                                     |
+| 22:30 | `tsc` pur au lieu d'un bundler pour les libs                                          | TS 6.0 imposé, moins d'outillage à risque, sortie ESM suffisante                                                 |
+| 22:46 | Agents dans l'arbre principal, pas en worktree                                        | `node_modules` absent des worktrees sous Windows                                                                 |
+| 23:25 | L7 sérialisé après L6 au lieu d'un parallélisme à 4                                   | Les deux touchent `create-aster.ts`, dictionnaires UI et CSS ; le temps ne manque pas, les conflits coûtent plus |
+| 23:25 | Chaque lot UI ajoute sa propre feuille CSS (`images-tables.css`, `search-source.css`) | Éviter les conflits sur `base.css`, l'orchestrateur assemble dans `aster.css`                                    |
 
 ## 🧠 Leçons 🕐
 

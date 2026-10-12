@@ -31,7 +31,7 @@ Responsabilités :
 
 - `createEditor(options)` : instancie Tiptap avec le jeu d'extensions Aster, retourne un `AsterEditor`.
 - **Registre de commandes** : chaque action éditable est une `AsterCommand` nommée, avec `run`, `canRun`, `isActive`, clé i18n, icône, raccourci. La toolbar et le wrapper Angular ne parlent qu'au registre, jamais à Tiptap directement.
-- **Extensions Aster** : enveloppes fines des extensions Tiptap avec la config Aster par défaut, plus les extensions maison : `Shortcuts`, `LinkSafety` qui rejette `javascript:`, `ImageUpload` avec hook, `HtmlSanitizeOnPaste`.
+- **Extensions Aster** : enveloppes fines des extensions Tiptap avec la config Aster par défaut, plus les extensions maison : `Shortcuts`, `LinkSafety` qui rejette `javascript:`, `ImageUpload` avec hook, `PastePipeline` qui chaîne les transformateurs de collage. Pas de sanitizer HTML dédié : le schéma ProseMirror est le filtre, voir `docs/GUIDE_INTEGRATION.md` section sécurité.
 - **i18n** : `t(key, params)` avec dictionnaires `fr` et `en`, extensibles.
 - **Événements** : émetteur typé, `on/off`.
 - **Sérialisation** : `getHTML`, `setHTML`, `getJSON`, `setJSON`, `getText`.
@@ -66,7 +66,7 @@ Responsabilités :
   8. `normalizeWhitespace`
 - `isWordHtml(html)` et `isGoogleDocsHtml(html)` : détecteurs.
 - `normalizeGoogleDocsHtml(html)` : pipeline plus court.
-- Extension Tiptap `WordPaste` qui branche tout ça sur `transformPastedHTML`, exportée pour `core.options.pasteTransformers`.
+- `wordPasteTransformer(options)` : fabrique un `PasteTransformer` (détection Word / Google Docs, normalisation, passthrough sinon) à passer dans `AsterOptions.pasteTransformers`. Ce n'est pas une extension Tiptap : le core possède le hook `transformPastedHTML`.
 
 Le parsing HTML se fait avec le `DOMParser` du navigateur, et avec jsdom en test. Aucune dépendance à un parseur tiers.
 
@@ -77,7 +77,7 @@ packages/word/src/
 ├── docx/             importDocx, styleMap, postprocess/
 ├── paste/            normalizeWordHtml, passes/, detectors
 ├── google/           normalizeGoogleDocsHtml
-├── extension/        WordPaste (Tiptap)
+├── extension/        wordPasteTransformer (PasteTransformer)
 └── index.ts
 ```
 

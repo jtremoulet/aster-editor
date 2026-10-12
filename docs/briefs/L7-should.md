@@ -9,18 +9,22 @@ Monorepo `C:\workspace\aster-editor`, `develop`, tout installé. Lire `CLAUDE.md
 ## Lot
 
 ### Recherche / remplacement (core + ui)
+
 - Core `extensions/search.ts` : extension Tiptap `Search` avec plugin ProseMirror de décorations (`aster-search-match`, `aster-search-match--current`), état `{ query, caseSensitive, matches, currentIndex }` dans `storage`, commandes Tiptap `setSearchQuery`, `nextMatch`, `previousMatch`, `replaceCurrent`, `replaceAll`, `clearSearch`. Recherche sur le texte des blocs (concaténation des nœuds texte, positions mappées). Commandes Aster custom enregistrées via `options.commands`-like interne : ajouter au registre standard les ids `search.open`, `search.next`, `search.previous`, `search.replace`, `search.replaceAll`, `search.clear` **sans toucher `STANDARD_COMMAND_IDS`** (contrat figé) : elles sont enregistrées par le core comme commandes supplémentaires, typées `AsterCommand<{ query: string; replacement?: string; caseSensitive?: boolean }>`. Raccourci `Mod-f` sur `search.open` (émet un événement custom `aster:search-open` sur `editor.element`, l'UI écoute).
 - UI `components/search-panel.ts` : widget `search` (barre repliable sous la toolbar ou panneau dropdown `dialog`) : champ recherche, champ remplacement, case « respecter la casse », compteur `n / total`, boutons précédent/suivant/remplacer/tout remplacer/fermer. Ouverture sur `aster:search-open` et par le bouton de toolbar. Ajouter `search` au preset `full`.
 - Clés `ui.search.*` fr/en. CSS dans `themes/search-source.css` (nouveau, **pas `base.css`**) : surlignage des correspondances, panneau.
 
 ### Vue source HTML (ui)
+
 - `components/source-view.ts` : widget `source` : bascule la zone de contenu en `<textarea class="aster-source">` contenant `getHTML()` formaté (indentation simple par balises de bloc), retour → `setHTML(textarea.value)`. Pendant la vue source, la toolbar est désactivée sauf le bouton source (`aria-pressed`). Ajouter `source` au preset `full`.
 - `createAster` : exposer `instance.toggleSource()` et `instance.isSourceView()` dans `AsterInstance` (ajout **additif** au type `types.ts`).
 
 ### Plein écran (ui)
+
 - `createAster` : `instance.setFullscreen(boolean)` / `isFullscreen()` : ajoute `aster--fullscreen` sur `.aster` (position fixed, inset 0, z-index), Échap quitte. Widget `fullscreen` dans la toolbar (`aria-pressed`). Ajouter au preset `full`.
 
 ### Tests
+
 Core : recherche (matches, casse, next/previous cyclique, replace courant, replaceAll, clear, décorations présentes dans `view.dom`), raccourci `Mod-f`. UI : panneau (ouverture, saisie → `setSearchQuery`, boutons), vue source (bascule, contenu, retour avec modification, toolbar désactivée), plein écran (classe, Échap). Couvertures maintenues (core ≥ 75 %, ui ≥ 70 %).
 
 ## Périmètre

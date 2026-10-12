@@ -94,13 +94,29 @@
 - Bump **0.1.0**, changelog. Vague 1 close à 23:25, soit 33 min après le lancement des agents, contre 3h prévues.
 
 ### 23:25 — Vague 2 lancée : L5 angular+démo (`af7b93f6`), L6 tables/images (`abc0fc4a`), L8 docs (`a4b4b6df`)
+
 - L7 (recherche, vue source, plein écran) volontairement différé après L6 : les deux toucheraient `create-aster.ts`, les dictionnaires UI et les CSS. Le temps ne manque pas, la sérialisation coûte moins que les conflits.
 - `preview_start` du playground a lancé le mauvais serveur (launch.json du workspace parent `C:\workspace`, « escrime-site »). Contournement : serveur esbuild lancé à la main en arrière-plan sur 4300.
 
 ### 23:28 — Vérification navigateur du playground vanilla (0.1.0)
+
 - Rendu complet toolbar `full` (31 items), contenu stylé, compteur de mots. Captures dans `docs/captures/`.
 - Vérifié par JS dans le vrai navigateur : collage Word listes imbriquées (`<ol type="a">` conservé), collage table Word (`th`, `colspan`), collage Google Docs, **import .docx réel via le bundle navigateur de mammoth** (titres, listes 3 niveaux, image base64 + alt, note de bas de page), gras par bouton, menu titres, grille de table 2×3, undo, bascule fr/en des tooltips, lecture seule grise les boutons, roving tabindex (1 seul tabbable), thème `night`.
 - **Bug trouvé** : bouton Lien toujours grisé. Le dialogue testait `canRun('link.set', { href: '' })` et le core rejette l'URL vide. Deux agents conformes à leurs briefs, incompatibles à l'intégration : c'est exactement le type de bug que seul un test de bout en bout attrape. Corrigé côté UI, commit `52cbd31`.
 - Point d'attention : insérer une table avec la sélection dans un titre coupe le titre en deux (comportement Tiptap). À documenter, pas bloquant.
 - 23:33 — Clavier vérifié en vrai navigateur : frappe, `Ctrl+A`/`Ctrl+B`, `Enter`, `Ctrl+Shift+8`, `Tab` pour imbriquer, `Ctrl+Alt+2`. Note : `Ctrl+Alt+2` dans un item de liste sort l'item en titre (comportement Tiptap `toggleHeading`), acceptable.
 - Brief L7 rédigé dans `docs/briefs/L7-should.md`, en attente de L6.
+
+### 23:40 — L8 docs rendu et intégré (agent 13 min, 289k tokens, 129 outils)
+
+- 7 fichiers, 1 800 lignes, Prettier vert. L'agent a typechecké tous les exemples contre les sources et compté programmatiquement commandes et variables CSS : méthode à garder.
+- 10 écarts code/docs remontés. Corrigés : CHANGELOG (48 commandes, 58 icônes), JSDoc `iconSvg` fantôme dans `button.ts`. À traiter plus tard : `ARCHITECTURE.md` cite `HtmlSanitizeOnPaste`, `setLocale()` sur l'éditeur et une extension `WordPaste` qui n'existent pas sous cette forme → mise à jour d'ARCHITECTURE au gel. Repli base64 absent quand un hook `upload` rejette (core) → documenté, candidat pour L9 durcissement.
+- Docs à rafraîchir après L6/L7 : exports core/ui, clés i18n, `images-tables.css`, README racine section Angular une fois L5 rendu.
+
+### 23:45 — L6 tables/images rendu et intégré (agent 16 min, 227k tokens, 67 outils)
+
+- +27 tests core (265, 94 %), +19 tests ui (90, 97 %). Rien hors périmètre, `base.css` intact, `images-tables.css` ajouté à `aster.css` par l'orchestrateur.
+- Vérifié en navigateur : `figure.aster-image` + poignée, drag 120 → 200 px, double-clic → dialogue en mode édition, menu contextuel de table avec 11 actions. Les poignées de colonnes n'apparaissent qu'au survol (prosemirror-tables), normal.
+- 4 propositions de contrat, toutes différées (additives, à traiter en V1.1) : `width/align: null` dans `image.setAttributes`, `align` dans `image.insert`, événement typé `imageEdit`, option `tableContextMenu`.
+- Signalé par L6 : flake possible dans `image-upload.spec.ts` (timers) → candidat L9 ; règles `img[data-align]` mortes dans `base.css` → L9.
+- L6 a été piégé par `npx vitest run -w` (watch, pas workspace) : à mettre dans les briefs.
