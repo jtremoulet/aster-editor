@@ -114,15 +114,29 @@ Notés au fil de l'eau, avec l'heure, la cause et le contournement.
 
 ### Ce que je referais pareil
 
--
+- **Cadrage écrit avant tout code**, validé par Joris, avec un contrat d'API figé en phase 0 : 12 lots d'implémentation, zéro conflit de fichiers, zéro aller-retour sur le contrat pendant la vague 1.
+- **Briefs très précis** : fichiers autorisés nommés, définition de fini en cases à cocher, ordre de sacrifice, format de rapport imposé. Les rapports se lisent en une minute et les « Décisions prises » sont la matière du REX.
+- **Phase 0 avec smoke tests** des deux hypothèses techniques les plus risquées (Tiptap 3 sous jsdom, mammoth en navigateur) avant tout parallélisme.
+- **Playground vanilla bundlé depuis les sources** : l'outil de vérification le plus rentable de la nuit, il a trouvé le premier bug d'intégration 5 minutes après la vague 1.
+- **Revues adverses en lecture seule avec preuves exécutables**, un relecteur par paquet, puis un lot de correctifs par paquet. 54 findings sur du code à 94-99 % de couverture : les TU des agents testent ce qu'ils ont construit, la revue teste ce qu'ils n'ont pas imaginé.
+- **E2E Playwright tôt** : 2 bugs invisibles sous jsdom (focus au mousedown, Échap capturé par ProseMirror).
+- **Journal tenu après chaque lot** et briefs archivés : le REX s'écrit tout seul.
 
 ### Ce que je ferais différemment
 
--
+- **Calibrer le plan sur des agents 5 à 10× plus rapides** que ce que j'avais prévu : la roadmap prévoyait 0.2.0 à 07:00, elle est tombée à 23:53. Prévoir dès le départ les vagues de durcissement, d'e2e et de features « could ».
+- **Relire les tsconfigs générés par un CLI contre la base flag par flag** et compiler un import croisé en phase 0 : le flag `noPropertyAccessFromIndexSignature` a bloqué le lot Angular.
+- **Mettre dans chaque brief les pièges d'outillage connus** dès qu'un agent les rencontre : ` ` converti par l'outil Write, `npx vitest run -w` = watch, heredocs bash avec apostrophes françaises. Trois agents ont payé le même piège.
+- **Lancer les revues adverses dès qu'un paquet est stable**, pas en fin de nuit : elles sont indépendantes et c'est elles qui ont trouvé les vrais bugs.
+- **Une feuille CSS par lot** dès le début (fait à partir de la vague 2) et un fichier de dictionnaire i18n par lot pour éviter la sérialisation L6 → L7.
+- **Ne jamais patcher du code par `sed`/`node -e` inline avec des backslashes** : deux commits de correction à cause du shell.
 
 ### Ce qui a surpris
 
--
+- La **qualité des rapports d'agents** : décisions argumentées, blocages contournés sans sortir du périmètre, propositions de contrat pertinentes (toutes additives). Aucun agent n'a touché un fichier interdit en 16 lots.
+- Un agent bloqué par une config hors de son périmètre (L5) a construit un tsconfig temporaire pour vérifier son lot, l'a supprimé, et a documenté le correctif en une ligne.
+- Les relecteurs ont systématiquement produit des **fichiers de preuve** qui passent au rouge après correction : un contrat de test implicite entre deux agents qui ne se parlent pas.
+- Le coût d'intégration orchestrateur par lot : 3 à 8 minutes (check scoped, lecture du rapport, revue rapide, commit par chemins, journal). Le goulot n'est pas le dev, c'est la lecture.
 
 ## 📐 Méthode recommandée pour la prochaine nuit 🕐
 
