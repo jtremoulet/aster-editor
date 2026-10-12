@@ -14,7 +14,7 @@ export const TOOLBAR_ITEM_ATTR = 'data-toolbar-item';
 export interface PlainButtonOptions {
   /** Classe additionnelle. */
   className?: string;
-  /** Nom d'icône du jeu interne, ou SVG inline complet si `iconSvg` est fourni. */
+  /** Nom d'icône du jeu interne (voir `getIcon`). */
   icon?: string;
   /** Texte visible dans le bouton, en plus ou à la place de l'icône. */
   text?: string;
