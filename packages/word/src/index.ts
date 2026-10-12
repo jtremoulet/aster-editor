@@ -1,14 +1,19 @@
 /**
  * @aster-editor/word — point d'entrée public.
  *
- * Phase 0 : stubs. Le lot L2 fournit `paste/`, `google/` et `extension/`,
- * le lot L3 fournit `docx/`.
+ * - `docx/` : `importDocx`, conversion .docx → HTML sémantique via mammoth (import dynamique)
+ *   et post-traitements DOM ;
+ * - `paste/` : `normalizeWordHtml`, détecteurs et les huit passes du collage Word ;
+ * - `google/` : `normalizeGoogleDocsHtml`, pipeline court pour Google Docs ;
+ * - `extension/` : `wordPasteTransformer`, branchement sur `pasteTransformers` du core ;
+ * - `export/` : `exportDocx`, `downloadDocx`, `jsonToHtml`, HTML → .docx via `docx`.
  */
 export type {
   DocxImportOptions,
   DocxImportResult,
   DocxImportWarning,
   DocxImportWarningCode,
+  DocxInput,
   HtmlParser,
 } from './docx/types';
 export { importDocx } from './docx/import-docx';

@@ -1,11 +1,4 @@
-import {
-  collectTextNodes,
-  getStyleProperty,
-  isBlank,
-  renameElement,
-  selectAll,
-  unwrap,
-} from '../dom-utils';
+import { collectTextNodes, isBlank, renameElement, selectAll, unwrap } from '../dom-utils';
 import type { PastePass } from '../types';
 
 /** Attributs de cellule conservés ; la fusion de cellules est la seule information de structure. */
@@ -34,11 +27,12 @@ function isBoldCell(cell: Element): boolean {
   return texts.every((text) => text.parentElement?.closest('strong, b') !== null);
 }
 
-/** Vrai si la ligne porte le marqueur Word de première ligne ou si toutes ses cellules sont en gras. */
+/**
+ * Vrai si toutes les cellules de la ligne sont en gras : c'est le seul indice fiable.
+ * `mso-yfti-firstrow:yes` n'en est pas un, Word le pose sur la première ligne de
+ * n'importe quelle table, données comprises (W-3).
+ */
 function isHeaderRow(row: Element): boolean {
-  if (/yes/i.test(getStyleProperty(row, 'mso-yfti-firstrow') ?? '')) {
-    return true;
-  }
   const cells = Array.from(row.children).filter(
     (cell) => cell.localName === 'td' || cell.localName === 'th',
   );
@@ -60,13 +54,23 @@ function promoteHeaderRow(doc: Document, table: Element, row: Element): void {
   table.insertBefore(thead, table.firstChild);
 }
 
-/** Déballe le paragraphe unique d'une cellule : `<td><p>x</p></td>` → `<td>x</td>`. */
+/**
+ * Déballe le paragraphe unique d'une cellule : `<td><p>x</p></td>` → `<td>x</td>`.
+ * Un `<p>` qui porte encore un attribut (alignement conservé par `cleanInlineStyles`)
+ * est gardé, sinon l'information serait perdue (W-9).
+ */
 function unwrapSingleParagraph(cell: Element): void {
   const children = Array.from(cell.childNodes).filter(
     (node) => node.nodeType === 1 || (node.nodeType === 3 && !isBlank(node.textContent)),
   );
   const [only] = children;
-  if (children.length === 1 && only && only.nodeType === 1 && (only as Element).localName === 'p') {
+  if (
+    children.length === 1 &&
+    only &&
+    only.nodeType === 1 &&
+    (only as Element).localName === 'p' &&
+    (only as Element).attributes.length === 0
+  ) {
     unwrap(only as Element);
   }
 }
@@ -74,8 +78,8 @@ function unwrapSingleParagraph(cell: Element): void {
 /**
  * Normalise les tables Word : retire tout le layout (`border`, `cellspacing`, `width`,
  * `valign`, styles de bordure et de padding), conserve `colspan`/`rowspan`, détecte la
- * ligne d'en-tête (`mso-yfti-firstrow:yes` ou toutes les cellules en gras) et la déplace
- * dans `<thead>` avec des `<th>`, puis déballe le `<p>` unique de chaque cellule.
+ * ligne d'en-tête (toutes les cellules en gras) et la déplace dans `<thead>` avec des
+ * `<th>`, puis déballe le `<p>` unique et sans attribut de chaque cellule.
  * Une table à une seule ligne n'a pas d'en-tête : ce serait une table sans corps.
  */
 export const normalizeTables: PastePass = (doc) => {
@@ -85,7 +89,6 @@ export const normalizeTables: PastePass = (doc) => {
     }
     const rows = selectAll(table, 'tr').filter((row) => row.closest('table') === table);
     const [firstRow] = rows;
-    // Lu avant le nettoyage : `mso-yfti-firstrow` vit dans le style de la ligne.
     const hasHeader = rows.length > 1 && firstRow !== undefined && isHeaderRow(firstRow);
     stripAttributes(table);
     for (const element of selectAll(table, 'thead, tbody, tfoot, tr')) {

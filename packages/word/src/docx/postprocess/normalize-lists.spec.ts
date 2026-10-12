@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../testing/dom';
+import { parseFragment, runPass } from '../testing/dom';
 import { normalizeLists } from './normalize-lists';
+import { runPostprocess } from './run-postprocess';
 
 describe('normalizeLists', () => {
+  it('n’insère pas de paragraphe vide devant un titre ou une citation en tête de li (W-13)', () => {
+    const input = '<ol><li><h2>Titre</h2></li><li><blockquote><p>q</p></blockquote></li></ol>';
+    expect(runPass(normalizeLists, input).html).toBe(input);
+  });
+
+  it('ne laisse aucun paragraphe vide visible dans les li après tout le post-traitement (W-13)', () => {
+    const doc = parseFragment(
+      '<ol><li><h2>Titre</h2></li><li><p>a</p><p> </p></li><li><ol><li>b</li></ol></li></ol>',
+    );
+    runPostprocess(doc, { options: { footnotes: true }, warnings: [] });
+    expect(doc.body.innerHTML).toBe(
+      '<ol><li><h2>Titre</h2></li><li><p>a</p></li><li><p></p><ol><li><p>b</p></li></ol></li></ol>',
+    );
+  });
+
   it('enveloppe le texte inline d’un li dans un paragraphe', () => {
     const { html } = runPass(normalizeLists, '<ul><li>a</li><li><strong>b</strong> c</li></ul>');
     expect(html).toBe('<ul><li><p>a</p></li><li><p><strong>b</strong> c</p></li></ul>');

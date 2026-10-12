@@ -9,7 +9,10 @@ const WORD_HINTS: readonly RegExp[] = [
   /class=["']?Mso[A-Za-z]/,
   /\bmso-[a-z-]+\s*:/i,
   /<o:p\b/i,
-  /<meta[^>]+name=["']?ProgId["']?[^>]+content=["']?Word\.Document/i,
+  // Pas de `[^>]+` libre entre les deux attributs : deux balayages enchaînés rendaient le
+  // motif quadratique sur un `<meta` jamais fermé (ReDoS, W-1). Word écrit toujours
+  // `name=ProgId content=Word.Document` côte à côte.
+  /name=["']?ProgId["']?\s+content=["']?Word\.Document/i,
 ];
 
 /** Indice laissé par Google Docs : un `<b>` enveloppant avec un GUID interne. */

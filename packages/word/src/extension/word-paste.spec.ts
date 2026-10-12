@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import type { PasteContext } from '@aster-editor/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { untyped } from '../testing/untyped';
 import { wordPasteTransformer } from './word-paste';
 
 const fixture = (name: string): string =>
   readFileSync(`${import.meta.env.ASTER_FIXTURES}word-html/${name}.html`, 'utf8');
 
-/** Le transformateur n'utilise pas le contexte : un objet vide typé suffit. */
-const context = { plainText: '' } as unknown as PasteContext;
+/** Le transformateur n'utilise pas le contexte : un éditeur factice n'apporterait rien. */
+const context = untyped<PasteContext>({ plainText: '' });
 
 describe('wordPasteTransformer', () => {
   afterEach(() => {
@@ -45,5 +46,8 @@ describe('wordPasteTransformer', () => {
     const html = '<p class=MsoNormal>x</p>';
     expect(wordPasteTransformer({ parse })(html, context)).toBe(html);
     expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toMatch(
+      /^\[aster-editor\/word\] normalisation du collage échouée/,
+    );
   });
 });

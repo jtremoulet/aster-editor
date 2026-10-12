@@ -2,7 +2,13 @@ import type { UploadHandler } from '@aster-editor/core';
 import type mammothTypes from 'mammoth';
 import { runPostprocess } from './postprocess/run-postprocess';
 import { buildStyleMap } from './style-map';
-import type { DocxImportOptions, DocxImportResult, DocxImportWarning, HtmlParser } from './types';
+import type {
+  DocxImportOptions,
+  DocxImportResult,
+  DocxImportWarning,
+  DocxInput,
+  HtmlParser,
+} from './types';
 
 type Mammoth = typeof mammothTypes;
 type MammothInput = Parameters<Mammoth['convertToHtml']>[0];
@@ -12,10 +18,19 @@ type MammothImage = Parameters<Parameters<Mammoth['images']['imgElement']>[0]>[0
 /**
  * Vrai si l'entrée est un `File`/`Blob` (jsdom et navigateurs exposent `arrayBuffer()`).
  * Pas d'`instanceof` : en test, le `File` de jsdom et l'`ArrayBuffer` de Node vivent dans
- * des realms différents.
+ * des realms différents. `null` et les primitives sont écartés avant tout accès (W-4).
  */
-function isBlobLike(input: File | ArrayBuffer): input is File {
-  return typeof (input as File).arrayBuffer === 'function';
+function isBlobLike(input: unknown): input is File {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    typeof (input as { arrayBuffer?: unknown }).arrayBuffer === 'function'
+  );
+}
+
+/** Message d'une erreur quelconque, pour les avertissements et les rejets enveloppés. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /** Détection d'`ArrayBuffer` robuste aux realms (jsdom vs Node), contrairement à `instanceof`. */
@@ -80,8 +95,9 @@ async function toDataUrl(image: MammothImage): Promise<string> {
 
 /**
  * Construit le convertisseur d'images : avec un hook `upload`, chaque image est lue en
- * `File`, envoyée au hook et l'URL retournée devient `src`. En cas d'échec on avertit
- * (`image-upload-failed`) et on replie en base64 pour ne jamais perdre l'image.
+ * `File`, envoyée au hook et l'URL retournée devient `src`. En cas d'échec, ou si le hook
+ * résout autre chose qu'une chaîne non vide (W-5), on avertit (`image-upload-failed`)
+ * et on replie en base64 pour ne jamais perdre l'image.
  */
 function createImageConverter(
   mammoth: Mammoth,
@@ -98,12 +114,16 @@ function createImageConverter(
       const file = new File([new Uint8Array(bytes)], imageFileName(image.contentType, index), {
         type: image.contentType,
       });
-      return { src: await upload(file) };
+      // Typé `unknown` : un hook JavaScript peut résoudre n'importe quoi malgré la signature.
+      const url: unknown = await upload(file);
+      if (typeof url !== 'string' || url.trim() === '') {
+        throw new Error("le hook upload n'a pas renvoyé d'URL");
+      }
+      return { src: url };
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
       warnings.push({
         code: 'image-upload-failed',
-        message: `Upload de l'image ${String(index)} échoué, repli en base64 : ${reason}`,
+        message: `Upload de l'image ${String(index)} échoué, repli en base64 : ${describeError(error)}`,
       });
       try {
         return { src: await toDataUrl(image) };
@@ -116,15 +136,27 @@ function createImageConverter(
   });
 }
 
-/** Résout l'entrée en `ArrayBuffer` et valide la signature zip avant d'appeler mammoth. */
-async function resolveBuffer(input: File | ArrayBuffer): Promise<ArrayBuffer> {
+/**
+ * Résout l'entrée en `ArrayBuffer` et valide la signature zip avant d'appeler mammoth.
+ * Une vue typée est copiée sur sa seule fenêtre : un `Buffer` Node partage souvent un
+ * pool bien plus large que lui (W-14).
+ */
+async function resolveBuffer(input: DocxInput): Promise<ArrayBuffer> {
   let buffer: ArrayBuffer;
   if (isArrayBuffer(input)) {
     buffer = input;
+  } else if (ArrayBuffer.isView(input)) {
+    buffer = new Uint8Array(input.buffer, input.byteOffset, input.byteLength).slice().buffer;
   } else if (isBlobLike(input)) {
-    buffer = await input.arrayBuffer();
+    try {
+      buffer = await input.arrayBuffer();
+    } catch (error) {
+      throw invalidDocx(`lecture du fichier impossible : ${describeError(error)}`);
+    }
   } else {
-    throw invalidDocx("l'entrée doit être un File ou un ArrayBuffer");
+    throw invalidDocx(
+      "l'entrée doit être un File, un ArrayBuffer ou une vue typée (Uint8Array, Buffer)",
+    );
   }
   if (!hasZipSignature(buffer)) {
     throw invalidDocx("le contenu n'est pas une archive .docx (signature zip absente)");
@@ -143,12 +175,14 @@ function resolveParser(parse: HtmlParser | undefined): HtmlParser {
 
 /**
  * Convertit un document Word (.docx) en HTML sémantique prêt pour `AsterEditor.setHTML`
- * ou `insertHTML`. Ne lève jamais pour un document Word valide : les éléments non
+ * ou `insertHTML`. Accepte un `File`, un `ArrayBuffer` ou une vue typée (`Uint8Array`,
+ * `Buffer` Node). Ne lève jamais pour un document Word valide : les éléments non
  * convertis fidèlement sont signalés dans `warnings`. Rejette avec une erreur
- * `invalid-docx` si l'entrée n'est pas une archive .docx lisible.
+ * `DocxImportError` (message `invalid-docx: …`) si l'entrée n'est ni l'un de ces types,
+ * ni une archive .docx lisible.
  */
 export async function importDocx(
-  input: File | ArrayBuffer,
+  input: DocxInput,
   options: DocxImportOptions = {},
 ): Promise<DocxImportResult> {
   const buffer = await resolveBuffer(input);
@@ -164,8 +198,7 @@ export async function importDocx(
       ignoreEmptyParagraphs: true,
     });
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw invalidDocx(`mammoth n'a pas pu lire le document : ${reason}`);
+    throw invalidDocx(`mammoth n'a pas pu lire le document : ${describeError(error)}`);
   }
 
   for (const message of raw.messages) {

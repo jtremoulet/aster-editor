@@ -149,3 +149,25 @@ export function collectTextNodes(root: Node, skipTags: ReadonlySet<string> = new
   visit(root);
   return result;
 }
+
+/**
+ * Caractères de contrôle, blancs et séparateurs invisibles que les navigateurs ignorent
+ * au début d'une URL (`java\tscript:` s'exécute comme `javascript:`). Construit depuis
+ * une chaîne ASCII, comme dans le core, pour ne jamais écrire de séparateur Unicode
+ * en dur dans un littéral.
+ */
+const URL_NOISE = new RegExp(
+  // eslint-disable-next-line no-control-regex -- plage de contrôle intentionnelle, voir ci-dessus
+  '[\\u0000-\\u0020\\u007f-\\u009f\\u200b-\\u200d\\u2028\\u2029\\ufeff]',
+  'g',
+);
+
+/**
+ * Schéma d'une URL en minuscules, `null` si elle est relative. Réécriture locale de
+ * `extractScheme` du core : importer sa valeur tirerait tout `@aster-editor/core` (et
+ * Tiptap) dans un normaliseur qui n'a besoin que de ces cinq lignes.
+ */
+export function readUrlScheme(url: string): string | null {
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(url.replace(URL_NOISE, ''));
+  return match?.[1] ? match[1].toLowerCase() : null;
+}

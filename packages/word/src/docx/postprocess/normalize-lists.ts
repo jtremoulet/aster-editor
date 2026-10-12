@@ -45,8 +45,12 @@ export const normalizeLists: PostprocessPass = (doc) => {
   }
   for (const item of Array.from(doc.querySelectorAll('li'))) {
     wrapInlineChildren(item, LI_BLOCK_TAGS);
-    // Le schéma Tiptap exige `paragraph block*` : un li qui ouvre sur une sous-liste reçoit un p vide.
-    if (!isElement(item.firstChild, 'p'))
+    // Le schéma Tiptap exige `paragraph block*` : seul un li vide ou qui ouvre sur une
+    // sous-liste reçoit un p vide. Un li qui ouvre sur un titre ou une citation reste tel
+    // quel, Tiptap le réconcilie sans paragraphe fantôme visible (W-13).
+    const first = item.firstElementChild;
+    if (first === null || hasTag(first, 'ul', 'ol')) {
       item.insertBefore(doc.createElement('p'), item.firstChild);
+    }
   }
 };

@@ -1,5 +1,6 @@
 import {
   parseStyle,
+  readUrlScheme,
   renameElement,
   selectAll,
   serializeStyle,
@@ -43,6 +44,34 @@ const DEFAULT_COLORS: ReadonlySet<string> = new Set(['windowtext', 'black', '#00
 
 /** Alignements qui méritent d'être conservés ; `left` est la valeur par défaut. */
 const ALIGNMENTS: ReadonlySet<string> = new Set(['center', 'right', 'justify']);
+
+/**
+ * Valeur de `color` acceptable avec `keepColors` : hexadécimal, nom CSS, `rgb()`/`hsl()`.
+ * Tout le reste (guillemets, `expression()`, `url()`) est jeté avec le span (W-10).
+ */
+const COLOR_VALUE = /^(#[0-9a-f]{3,8}|[a-z]{3,20}|rgba?\([\d\s,.%]+\)|hsla?\([\d\s,.%]+\))$/i;
+
+/** Schémas acceptés sur `href` : un lien relatif, sans `href` ou d'un autre schéma est déballé (W-10). */
+const LINK_SCHEMES: ReadonlySet<string> = new Set(['http', 'https', 'mailto', 'tel']);
+
+/**
+ * Schémas acceptés sur `src` d'image. `data:` et `blob:` sont les replis d'upload ;
+ * `file:` est inoffensif ici et rejeté plus loin par la politique du core.
+ */
+const IMAGE_SCHEMES: ReadonlySet<string> = new Set(['http', 'https', 'data', 'blob', 'file']);
+
+/** Vrai si le lien pointe vers un schéma autorisé ; un `href` absent, vide ou relatif ne l'est pas. */
+function hasSafeHref(link: Element): boolean {
+  const href = link.getAttribute('href')?.trim() ?? '';
+  const scheme = readUrlScheme(href);
+  return scheme !== null && LINK_SCHEMES.has(scheme);
+}
+
+/** Vrai si la source de l'image est relative ou d'un schéma autorisé. */
+function hasSafeSrc(image: Element): boolean {
+  const scheme = readUrlScheme(image.getAttribute('src')?.trim() ?? '');
+  return scheme === null || IMAGE_SCHEMES.has(scheme);
+}
 
 interface SemanticHints {
   strong: boolean;
@@ -107,8 +136,13 @@ function filterStyle(
         }
         break;
       case 'color':
-        if (options.keepColors && !insideLink && !DEFAULT_COLORS.has(value)) {
-          kept.push([name, rawValue]);
+        if (
+          options.keepColors &&
+          !insideLink &&
+          !DEFAULT_COLORS.has(value) &&
+          COLOR_VALUE.test(rawValue.trim())
+        ) {
+          kept.push([name, rawValue.trim()]);
         }
         break;
       default:
@@ -157,10 +191,13 @@ function cleanAttributes(element: Element, style: string | null): void {
  * - jette `mso-*`, polices, tailles, interlignes, marges, retraits, fonds ;
  * - `font-weight:bold` → `strong`, `font-style:italic` → `em`, `underline` → `u`,
  *   `line-through` → `s`, `vertical-align:sub/super` → `sub`/`sup`, `mso-highlight` → `mark` ;
- * - `color` conservé seulement avec `keepColors` (et jamais le noir par défaut) ;
+ * - `color` conservé seulement avec `keepColors`, jamais le noir par défaut, et seulement
+ *   si la valeur ressemble à une couleur ;
  * - `text-align` conservé seulement avec `keepAlignment` (vrai par défaut), `align=` inclus ;
  * - `b`/`i`/`strike` renommés en `strong`/`em`/`s` ;
- * - `class`, `lang`, `width`/`height` de bloc et tous les autres attributs tombent ;
+ * - `class`, `lang`, `width`/`height` de bloc, `on*` et tous les autres attributs tombent ;
+ * - les `<a>` sans `href` ou d'un schéma autre que `http`, `https`, `mailto`, `tel` sont
+ *   déballés, les `<img>` à `src` actif (`javascript:`…) sont supprimées ;
  * - les `span` et `font` sans attribut restant sont déballés.
  * Les balises de table sont laissées à `normalizeTables`, qui a besoin de leurs styles.
  */
@@ -180,6 +217,14 @@ export const cleanInlineStyles: PastePass = (doc, options) => {
     }
     const { style, hints } = filterStyle(element, options);
     cleanAttributes(element, style);
+    if (element.localName === 'a' && !hasSafeHref(element)) {
+      unwrap(element);
+      continue;
+    }
+    if (element.localName === 'img' && !hasSafeSrc(element)) {
+      element.parentNode?.removeChild(element);
+      continue;
+    }
     if (element.localName === 'span' || element.localName === 'font') {
       applySemanticHints(doc, element, hints);
       const span = element.localName === 'font' ? renameElement(doc, element, 'span') : element;

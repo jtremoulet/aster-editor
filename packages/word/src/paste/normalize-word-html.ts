@@ -30,14 +30,22 @@ const END_FRAGMENT = '<!--EndFragment-->';
  * Isole le fragment réellement copié. Word et Chrome balisent la sélection avec
  * `StartFragment`/`EndFragment` ; tout ce qui est autour (`<head>`, `<style>`, corps
  * complet) n'est que de l'enrobage. Sans marqueurs, on garde tout le HTML.
+ *
+ * Un `StartFragment` sans `EndFragment` signale un presse-papier tronqué : une balise
+ * ouverte et jamais fermée en fin de chaîne (`…<` ou `…<!--EndFr`) deviendrait du texte
+ * visible, on la retire (W-12). Sans regex `/<[^>]*$/`, quadratique sur `<<<<…>`.
  */
 export function extractFragment(html: string): string {
   const start = html.indexOf(START_FRAGMENT);
-  const end = html.indexOf(END_FRAGMENT);
-  if (start === -1 || end === -1 || end < start) {
+  if (start === -1) {
     return html;
   }
-  return html.slice(start + START_FRAGMENT.length, end);
+  const end = html.indexOf(END_FRAGMENT);
+  if (end !== -1) {
+    return end < start ? html : html.slice(start + START_FRAGMENT.length, end);
+  }
+  const lastOpen = html.lastIndexOf('<');
+  return lastOpen !== -1 && html.indexOf('>', lastOpen) === -1 ? html.slice(0, lastOpen) : html;
 }
 
 /**

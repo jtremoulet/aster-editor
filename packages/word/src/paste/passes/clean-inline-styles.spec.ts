@@ -90,4 +90,40 @@ describe('cleanInlineStyles', () => {
     expect(runPass(html, cleanInlineStyles)).toContain('mso-yfti-firstrow:yes');
     expect(runPass(html, cleanInlineStyles)).toContain('border="1"');
   });
+
+  it('déballe les liens sans href, relatifs ou d’un schéma non autorisé, garde http(s), mailto et tel (W-10)', () => {
+    const html =
+      '<a href="javascript:alert(1)">j</a><a href="JaVaScRiPt:alert(1)">k</a>' +
+      '<a href="java&#9;script:alert(1)">l</a><a name="_Toc1"></a><a name="_Hlk1">ancre</a>' +
+      '<a href="#_Toc1">interne</a><a href="file:///C:/doc.docx">local</a><a href="">vide</a>' +
+      '<a href="https://x.io">h</a><a href="mailto:a@b.c">m</a><a href="tel:+33">t</a>' +
+      '<a href=" HTTP://X.IO ">maj</a>';
+    expect(runPass(html, cleanInlineStyles)).toBe(
+      'jklancreinternelocalvide<a href="https://x.io">h</a><a href="mailto:a@b.c">m</a>' +
+        '<a href="tel:+33">t</a><a href=" HTTP://X.IO ">maj</a>',
+    );
+  });
+
+  it('supprime une image dont la source est active, garde http(s), data, blob et relatif (W-10)', () => {
+    const html =
+      '<img src="javascript:alert(1)" alt="x"><img src="data:image/png;base64,AA" alt="d">' +
+      '<img src="blob:https://x.io/1" alt="b"><img src="img/a.png" alt="r"><img src="https://x.io/a.png" alt="h">';
+    expect(runPass(html, cleanInlineStyles)).toBe(
+      '<img src="data:image/png;base64,AA" alt="d"><img src="blob:https://x.io/1" alt="b">' +
+        '<img src="img/a.png" alt="r"><img src="https://x.io/a.png" alt="h">',
+    );
+  });
+
+  it('ne garde avec keepColors qu’une valeur de couleur plausible (W-10)', () => {
+    const hostile = `<span style='color:red"onmouseover="alert(1)'>x</span>`;
+    expect(runPass(hostile, cleanInlineStyles, { keepColors: true })).toBe('x');
+    const valid =
+      "<span style='color:#ff0000'>a</span><span style='color: rgb(255, 0, 0) '>b</span>" +
+      "<span style='color:hsla(0,100%,50%,.5)'>c</span><span style='color:expression(alert(1))'>d</span>" +
+      "<span style='color:url(https://evil)'>e</span>";
+    expect(runPass(valid, cleanInlineStyles, { keepColors: true })).toBe(
+      '<span style="color:#ff0000">a</span><span style="color:rgb(255, 0, 0)">b</span>' +
+        '<span style="color:hsla(0,100%,50%,.5)">c</span>de',
+    );
+  });
 });

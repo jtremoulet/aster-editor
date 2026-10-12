@@ -66,10 +66,10 @@ export const normalizeWhitespace: PastePass = (doc) => {
     const texts = collectTextNodes(block, PRESERVED_TAGS);
     const first = texts[0];
     const last = texts[texts.length - 1];
-    if (first) {
+    if (first && touchesBlockEdge(first, block, 'start')) {
       first.data = first.data.replace(/^ +/, '');
     }
-    if (last) {
+    if (last && touchesBlockEdge(last, block, 'end')) {
       last.data = last.data.replace(/ +$/, '');
     }
   }
@@ -79,6 +79,28 @@ export const normalizeWhitespace: PastePass = (doc) => {
     }
   }
 };
+
+/**
+ * Vrai si rien de visible ne sépare le nœud texte du bord du bloc : en remontant vers le
+ * bloc, aucun ancêtre n'a de frère de ce côté, hormis un `<br>` qui ouvre une ligne.
+ * Un texte qui suit ou précède une image inline n'est pas en bord de bloc : l'espace
+ * qui le sépare de l'image est significatif (W-6).
+ */
+function touchesBlockEdge(text: Text, block: Element, side: 'start' | 'end'): boolean {
+  let node: Node = text;
+  while (node !== block) {
+    const sibling = side === 'start' ? node.previousSibling : node.nextSibling;
+    if (sibling !== null && !(sibling.nodeType === 1 && (sibling as Element).localName === 'br')) {
+      return false;
+    }
+    const parent = node.parentNode;
+    if (!parent) {
+      return false;
+    }
+    node = parent;
+  }
+  return true;
+}
 
 /** Fusionne les nœuds texte adjacents (déballages de spans) puis réduit chaque suite de blancs à un espace. */
 function collapseRuns(body: HTMLElement): void {

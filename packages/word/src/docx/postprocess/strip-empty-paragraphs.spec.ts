@@ -8,9 +8,26 @@ describe('stripEmptyParagraphs', () => {
     expect(html).toBe('<p>a</p><p>b</p>');
   });
 
-  it('garde les paragraphes vides dans les cellules et les li', () => {
+  it('garde le paragraphe vide qui est le seul bloc d’une cellule ou d’un li', () => {
     const input =
       '<table><tbody><tr><td><p></p></td></tr></tbody></table><ul><li><p></p></li></ul>';
+    expect(runPass(stripEmptyParagraphs, input).html).toBe(input);
+  });
+
+  it('supprime les paragraphes vides d’une cellule ou d’un li quand un autre bloc reste (W-13)', () => {
+    const { html } = runPass(
+      stripEmptyParagraphs,
+      '<table><tbody><tr><td><p>a</p><p> </p></td><th><p></p><p>b</p></th></tr></tbody></table>' +
+        '<ul><li><p>a</p><p>&nbsp;</p></li><li><p></p><p>b</p></li></ul>',
+    );
+    expect(html).toBe(
+      '<table><tbody><tr><td><p>a</p></td><th><p>b</p></th></tr></tbody></table>' +
+        '<ul><li><p>a</p></li><li><p>b</p></li></ul>',
+    );
+  });
+
+  it('garde le paragraphe vide de tête d’un li qui ouvre sur une sous-liste', () => {
+    const input = '<ul><li><p></p><ul><li><p>b</p></li></ul></li></ul>';
     expect(runPass(stripEmptyParagraphs, input).html).toBe(input);
   });
 

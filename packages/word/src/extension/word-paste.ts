@@ -21,7 +21,7 @@ export function wordPasteTransformer(options: WordPasteOptions = {}): PasteTrans
       }
       return html;
     } catch (error: unknown) {
-      console.warn('[aster-editor/word] paste normalization failed, pasting raw HTML', error);
+      console.warn('[aster-editor/word] normalisation du collage échouée, HTML brut inséré', error);
       return html;
     }
   };

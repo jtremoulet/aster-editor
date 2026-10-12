@@ -45,6 +45,32 @@ describe('normalizeGoogleDocsHtml', () => {
     expect(normalizeGoogleDocsHtml('<p><b style="font-weight:normal">x</b></p>')).toBe('<p>x</p>');
   });
 
+  it('remonte list-style-type des li en attribut type du ol (W-11)', () => {
+    const alpha = `${GUID}<ol start="3"><li style="list-style-type:lower-alpha;"><p><span>c</span></p></li></ol></b>`;
+    expect(normalizeGoogleDocsHtml(alpha)).toBe('<ol start="3" type="a"><li><p>c</p></li></ol>');
+    const nested =
+      `${GUID}<ol><li style="list-style-type:upper-roman"><p>I</p></li>` +
+      `<ol><li style="list-style-type:upper-alpha"><p>A</p></li></ol>` +
+      `<li style="list-style-type:decimal"><p>II</p></li></ol></b>`;
+    expect(normalizeGoogleDocsHtml(nested)).toBe(
+      '<ol type="I"><li><p>I</p><ol type="A"><li><p>A</p></li></ol></li><li><p>II</p></li></ol>',
+    );
+    expect(
+      normalizeGoogleDocsHtml(`${GUID}<ul><li style="list-style-type:disc"><p>u</p></li></ul></b>`),
+    ).toBe('<ul><li><p>u</p></li></ul>');
+  });
+
+  it('déballe le div sans attribut utile autour d’une table (W-11)', () => {
+    const html = `${GUID}<div dir="ltr" align="left"><table><tbody><tr><td><p><span>A</span></p></td><td><p>B</p></td></tr></tbody></table></div></b>`;
+    expect(normalizeGoogleDocsHtml(html)).toBe(
+      '<table><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
+    );
+    const centered = `${GUID}<div align="center"><table><tbody><tr><td><p>A</p></td></tr></tbody></table></div></b>`;
+    expect(normalizeGoogleDocsHtml(centered)).toBe(
+      '<div style="text-align:center"><table><tbody><tr><td>A</td></tr></tbody></table></div>',
+    );
+  });
+
   it('ne lève pas sur une entrée vide ou tronquée', () => {
     expect(normalizeGoogleDocsHtml('')).toBe('');
     expect(normalizeGoogleDocsHtml(fixture('google-docs-basic').slice(0, 700))).not.toContain(

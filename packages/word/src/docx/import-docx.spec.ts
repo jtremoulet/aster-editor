@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
+import { untyped } from '../testing/untyped';
 import { importDocx } from './import-docx';
 import { normalizeHtml, parseFragment } from './testing/dom';
+import type { DocxInput } from './types';
 
 /** Charge une fixture .docx en `ArrayBuffer` détaché du pool de buffers Node. */
 function loadFixture(name: string): ArrayBuffer {
@@ -118,9 +120,40 @@ describe('importDocx', () => {
       await expect(importDocx(fake.buffer as ArrayBuffer)).rejects.toThrow(/invalid-docx: mammoth/);
     });
 
-    it('rejette une entrée qui n’est ni File ni ArrayBuffer', async () => {
-      await expect(importDocx({} as unknown as ArrayBuffer)).rejects.toThrow(
-        /invalid-docx: l'entrée/,
+    it('rejette une entrée qui n’est ni File, ni ArrayBuffer, ni vue typée', async () => {
+      await expect(importDocx(untyped<DocxInput>({}))).rejects.toThrow(/invalid-docx: l'entrée/);
+    });
+
+    it('rejette null et undefined avec DocxImportError, pas un TypeError (W-4)', async () => {
+      for (const input of [null, undefined, 42, 'doc.docx']) {
+        const rejection = expect(importDocx(untyped<DocxInput>(input))).rejects;
+        await rejection.toThrow(/^invalid-docx: l'entrée doit être un File/);
+        await rejection.toHaveProperty('name', 'DocxImportError');
+      }
+    });
+
+    it('accepte une Uint8Array et un Buffer Node, en ne lisant que leur fenêtre (W-14)', async () => {
+      const bytes = new Uint8Array(loadFixture('01-headings-lists'));
+      expect((await importDocx(bytes)).html).toContain('<h1>Titre principal</h1>');
+      // Fenêtre décalée dans un buffer plus large : seul [byteOffset, byteOffset + byteLength) compte.
+      const padded = new Uint8Array(bytes.length + 16);
+      padded.set(bytes, 8);
+      const view = new Uint8Array(padded.buffer, 8, bytes.length);
+      expect((await importDocx(view)).html).toContain('<h1>Titre principal</h1>');
+      expect((await importDocx(Buffer.from(bytes))).html).toContain('<h1>Titre principal</h1>');
+    });
+
+    it('rejette un buffer de 3 octets, trop court pour une signature zip', async () => {
+      await expect(importDocx(new Uint8Array([0x50, 0x4b, 0x03]))).rejects.toThrow(
+        /invalid-docx: le contenu n'est pas une archive/,
+      );
+    });
+
+    it('enveloppe en invalid-docx un File dont arrayBuffer() rejette', async () => {
+      const file = new File([new Uint8Array(4)], 'cassé.docx');
+      file.arrayBuffer = () => Promise.reject(new Error('disque débranché'));
+      await expect(importDocx(file)).rejects.toThrow(
+        /^invalid-docx: lecture du fichier impossible : disque débranché/,
       );
     });
 
@@ -180,6 +213,22 @@ describe('importDocx', () => {
       const upload = vi.fn(() => Promise.reject('boom'));
       const { warnings } = await importDocx(loadFixture('03-images'), { upload });
       expect(warnings[0]?.message).toContain('boom');
+    });
+
+    it('replie en base64 et avertit quand le hook résout autre chose qu’une URL (W-5)', async () => {
+      for (const resolved of [42, undefined, null, '', '   ', { url: 'x' }]) {
+        const upload = vi.fn(async () => untyped<string>(resolved));
+        const { html, warnings } = await importDocx(loadFixture('03-images'), { upload });
+        expect(parseFragment(html).querySelector('img')?.getAttribute('src')).toMatch(
+          /^data:image\/png;base64,/,
+        );
+        expect(warnings).toEqual([
+          {
+            code: 'image-upload-failed',
+            message: expect.stringContaining("le hook upload n'a pas renvoyé d'URL"),
+          },
+        ]);
+      }
     });
   });
 

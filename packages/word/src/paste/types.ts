@@ -20,6 +20,15 @@ export type ListLevelFormat =
   'bullet' | 'decimal' | 'alpha-lower' | 'alpha-upper' | 'roman-lower' | 'roman-upper';
 
 /**
+ * Déclaration d'un niveau de liste lue dans le `<style>` Word : son format et, quand
+ * `mso-level-start-at` est présent, le numéro de départ.
+ */
+export interface ListLevelDeclaration {
+  readonly format: ListLevelFormat;
+  readonly start?: number | undefined;
+}
+
+/**
  * Options résolues passées à chaque passe du pipeline. Les valeurs par défaut sont
  * appliquées une seule fois par `normalizeWordHtml`, les passes n'ont plus à les deviner.
  */
@@ -27,11 +36,12 @@ export interface ResolvedPasteOptions {
   readonly keepColors: boolean;
   readonly keepAlignment: boolean;
   /**
-   * Formats déclarés dans le `<style>` Word, indexés par `lX:levelN`
-   * (ex. `l0:level1`). Vide quand le presse-papier ne contient pas de feuille de style,
-   * auquel cas les passes se rabattent sur le texte du marqueur de liste.
+   * Déclarations lues dans le `<style>` Word, indexées par `lX:levelN` (ex. `l0:level1`)
+   * pour une définition, `lfoM:lX:levelN` pour l'override d'une instance. Vide quand le
+   * presse-papier ne contient pas de feuille de style, auquel cas les passes se rabattent
+   * sur le texte du marqueur de liste.
    */
-  readonly listFormats: ReadonlyMap<string, ListLevelFormat>;
+  readonly listFormats: ReadonlyMap<string, ListLevelDeclaration>;
 }
 
 /** Signature commune des passes : elles mutent le `Document` en place et ne renvoient rien. */
@@ -40,7 +50,7 @@ export type PastePass = (doc: Document, options: ResolvedPasteOptions) => void;
 /** Construit des options résolues avec les valeurs par défaut du normaliseur. */
 export function resolvePasteOptions(
   options: WordPasteOptions = {},
-  listFormats: ReadonlyMap<string, ListLevelFormat> = new Map(),
+  listFormats: ReadonlyMap<string, ListLevelDeclaration> = new Map(),
 ): ResolvedPasteOptions {
   return {
     keepColors: options.keepColors ?? false,

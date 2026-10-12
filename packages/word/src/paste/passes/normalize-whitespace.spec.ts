@@ -39,4 +39,23 @@ describe('normalizeWhitespace', () => {
     const html = '<pre>  a   b  </pre>';
     expect(runPass(html, normalizeWhitespace)).toBe(html);
   });
+
+  it('ne trime pas l’espace qui sépare un texte d’une image inline (W-6)', () => {
+    expect(runPass('<p>Fin <img src="b.png" alt="b"></p>', normalizeWhitespace)).toBe(
+      '<p>Fin <img src="b.png" alt="b"></p>',
+    );
+    expect(runPass('<p><img src="a.png" alt="a"> Légende</p>', normalizeWhitespace)).toBe(
+      '<p><img src="a.png" alt="a"> Légende</p>',
+    );
+    expect(runPass('<p> <img src="a.png" alt="a"> x </p>', normalizeWhitespace)).toBe(
+      '<p><img src="a.png" alt="a"> x</p>',
+    );
+  });
+
+  it('trime toujours un texte en bord de bloc à travers des marques, et après un <br>', () => {
+    expect(runPass('<p><span><em> a </em></span></p>', normalizeWhitespace)).toBe(
+      '<p><span><em>a</em></span></p>',
+    );
+    expect(runPass('<p><br> b </p>', normalizeWhitespace)).toBe('<p><br>b</p>');
+  });
 });

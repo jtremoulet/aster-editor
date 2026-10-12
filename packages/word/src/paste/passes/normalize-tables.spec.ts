@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { runPass } from '../../testing/html-compare';
 import { normalizeTables } from './normalize-tables';
 
+/** Cellule Word après `cleanInlineStyles` : attributs de layout encore présents, `<p>` déjà nettoyé. */
 const cell = (content: string, attrs = ''): string =>
-  `<td width=200 valign=top style='border:solid 1pt;padding:0cm' ${attrs}><p class=MsoNormal>${content}</p></td>`;
+  `<td width=200 valign=top style='border:solid 1pt;padding:0cm' ${attrs}><p>${content}</p></td>`;
 
 describe('normalizeTables', () => {
   it('retire les attributs de layout de la table, des lignes et des cellules', () => {
@@ -21,11 +22,36 @@ describe('normalizeTables', () => {
     expect(runPass(html, normalizeTables)).not.toContain('rowspan');
   });
 
-  it('promeut la première ligne en thead quand Word la marque mso-yfti-firstrow', () => {
-    const html = `<table><tr style='mso-yfti-firstrow:yes'>${cell('Nom')}</tr><tr>${cell('Alice')}</tr></table>`;
+  it('conserve colspan et rowspan combinés sur une même cellule', () => {
+    const html =
+      `<table><tr>${cell('a', 'colspan=2 rowspan=2')}${cell('b')}</tr>` +
+      `<tr>${cell('c')}</tr><tr>${cell('d')}${cell('e')}${cell('f')}</tr></table>`;
+    expect(runPass(html, normalizeTables)).toContain('<td colspan="2" rowspan="2">a</td>');
+  });
+
+  it('garde le <p> unique d’une cellule quand il porte un alignement (W-9)', () => {
+    const html =
+      `<table><tr><td><p style="text-align:right">12,50 €</p></td></tr>` +
+      `<tr><td><p style="text-align:center">x</p><p>y</p></td></tr></table>`;
     expect(runPass(html, normalizeTables)).toBe(
-      '<table><thead><tr><th>Nom</th></tr></thead><tbody><tr><td>Alice</td></tr></tbody></table>',
+      '<table><tbody><tr><td><p style="text-align:right">12,50 €</p></td></tr><tr><td><p style="text-align:center">x</p><p>y</p></td></tr></tbody></table>',
     );
+  });
+
+  it('ignore mso-yfti-firstrow:yes, que Word pose sur la première ligne de toute table (W-3)', () => {
+    const html =
+      `<table><tr style='mso-yfti-irow:0;mso-yfti-firstrow:yes'>${cell('Alice')}${cell('<strong>Dev</strong>')}</tr>` +
+      `<tr style='mso-yfti-irow:1;mso-yfti-lastrow:yes'>${cell('Bob')}${cell('Design')}</tr></table>`;
+    expect(runPass(html, normalizeTables)).toBe(
+      '<table><tbody><tr><td>Alice</td><td><strong>Dev</strong></td></tr><tr><td>Bob</td><td>Design</td></tr></tbody></table>',
+    );
+  });
+
+  it('ne promeut pas une table de données dont la première ligne n’est pas en gras', () => {
+    const html = `<table><tr>${cell('2024')}${cell('12')}</tr><tr>${cell('2025')}${cell('15')}</tr></table>`;
+    const out = runPass(html, normalizeTables);
+    expect(out).not.toContain('<thead>');
+    expect(out).not.toContain('<th>');
   });
 
   it('promeut la première ligne en thead quand toutes ses cellules sont en gras, sans garder le gras', () => {
