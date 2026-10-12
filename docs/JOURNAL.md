@@ -120,3 +120,13 @@
 - 4 propositions de contrat, toutes différées (additives, à traiter en V1.1) : `width/align: null` dans `image.setAttributes`, `align` dans `image.insert`, événement typé `imageEdit`, option `tableContextMenu`.
 - Signalé par L6 : flake possible dans `image-upload.spec.ts` (timers) → candidat L9 ; règles `img[data-align]` mortes dans `base.css` → L9.
 - L6 a été piégé par `npx vitest run -w` (watch, pas workspace) : à mettre dans les briefs.
+
+### 23:50 — L5 angular+démo rendu et intégré (agent 23 min, 251k tokens, 128 outils)
+
+- 19 tests lib (94 %), 9 tests démo, build prod 269 kB initial, mammoth en chunk lazy. L'agent a vérifié lui-même en navigateur sur un build prod servi depuis le scratchpad.
+- **Blocage levé par l'orchestrateur** : le `tsconfig.json` racine généré par Angular CLI mettait `noPropertyAccessFromIndexSignature: true` alors que la base dit `false` → 5 erreurs TS4111 dans le core compilé via les `paths`. Une ligne. Leçon REX : les tsconfigs générés par un CLI doivent être relus contre la base en phase 0, flag par flag.
+- Décision L5 validée : inputs dédiés `undefined` par défaut pour que `provideAster` puisse fixer thème/locale/toolbar globalement.
+- `angular.json` : `allowedCommonJsDependencies` pour mammoth et ses dépendances (proposé par L5, appliqué).
+- Vérifié en navigateur : playground (31 items de toolbar, contenu riche), formulaire réactif (frappe → `value.body` mis à jour, blur), lecture seule (thème night, pas de toolbar, `contenteditable=false`). Zéro erreur console. Capture `03-demo-angular-playground.jpg`.
+- Revue : 2 remarques non bloquantes (placeholder à chaud via internals Tiptap, fenêtre de quelques ms avant le chargement lazy de `word`).
+- `npm run check` complet : **546 tests verts**. Bump **0.2.0**. Critère d'acceptation n° 5 (reactive form) atteint.

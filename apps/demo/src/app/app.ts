@@ -1,12 +1,18 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+/** Coquille de la démo : barre de navigation et sortie de routeur. */
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styleUrl: './app.css',
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
 })
 export class App {
-  protected readonly title = signal('demo');
+  protected readonly links = [
+    { path: '/', label: 'Playground', exact: true },
+    { path: '/form', label: 'Reactive form', exact: false },
+    { path: '/import', label: 'Import Word', exact: false },
+    { path: '/readonly', label: 'Lecture seule', exact: false },
+  ] as const;
 }

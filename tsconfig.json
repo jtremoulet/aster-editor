@@ -2,7 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compileOnSave": false,
   "compilerOptions": {
-    "noPropertyAccessFromIndexSignature": true,
+    "noPropertyAccessFromIndexSignature": false,
     "noImplicitReturns": true,
     "experimentalDecorators": true,
     "importHelpers": true,
@@ -17,9 +17,17 @@
   },
   "files": [],
   "references": [
-    { "path": "./apps/demo/tsconfig.app.json" },
-    { "path": "./apps/demo/tsconfig.spec.json" },
-    { "path": "./packages/angular/tsconfig.lib.json" },
-    { "path": "./packages/angular/tsconfig.spec.json" }
+    {
+      "path": "./apps/demo/tsconfig.app.json"
+    },
+    {
+      "path": "./apps/demo/tsconfig.spec.json"
+    },
+    {
+      "path": "./packages/angular/tsconfig.lib.json"
+    },
+    {
+      "path": "./packages/angular/tsconfig.spec.json"
+    }
   ]
 }

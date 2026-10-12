@@ -23,7 +23,17 @@
                 "input": "apps/demo/public"
               }
             ],
-            "styles": ["apps/demo/src/styles.css"]
+            "styles": ["apps/demo/src/styles.css"],
+            "allowedCommonJsDependencies": [
+              "mammoth",
+              "lop",
+              "base64-js",
+              "jszip",
+              "dingbat-to-unicode",
+              "xmlbuilder",
+              "@xmldom/xmldom",
+              "@xmldom/xmldom/lib/dom"
+            ]
           },
           "configurations": {
             "production": {
