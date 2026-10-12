@@ -10,7 +10,7 @@
 | Unitaire DOM         | Vitest + jsdom                                 | `createEditor`, commandes, sérialisation, toolbar rendue, événements                | V1                      |
 | Composant Angular    | Vitest via `@angular/build:unit-test`, TestBed | CVA, inputs/outputs, cycle de vie, zoneless                                         | V1                      |
 | Intégration manuelle | App démo + navigateur intégré de Claude        | Collage réel, import .docx réel, clavier                                            | V1, vérif de fin de lot |
-| E2E graphique        | Playwright                                     | Parcours utilisateur complets, captures                                             | V1.1                    |
+| E2E graphique        | Playwright                                     | Parcours utilisateur complets, captures (dossier e2e, 21 tests, npm run e2e)        | V1, livré en 0.3.0      |
 
 ## 📐 Règles
 

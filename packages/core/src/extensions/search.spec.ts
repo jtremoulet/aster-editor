@@ -197,14 +197,14 @@ describe('recherche / remplacement', () => {
       ]) {
         const command = mounted.editor.commands.get(id);
         expect(command?.labelKey).toBe(`command.${id}`);
-        expect(command?.icon).toBe(id.replace(/\./g, '-'));
+        expect(['search', 'search-next', 'search-previous', 'close']).toContain(command?.icon);
         expect(mounted.editor.i18n.has(`command.${id}`)).toBe(true);
       }
       expect(mounted.editor.commands.get('search.open')?.shortcut).toBe('Mod-f');
     });
 
     it('search.open émet aster:search-open sur l’hôte et applique la requête fournie', () => {
-      const handler = vi.fn();
+      const handler = vi.fn((event: Event) => event.preventDefault());
       mounted.element.addEventListener(SEARCH_OPEN_EVENT, handler);
       expect(mounted.editor.commands.run('search.open')).toBe(true);
       expect(handler).toHaveBeenCalledTimes(1);
@@ -214,6 +214,13 @@ describe('recherche / remplacement', () => {
       expect(event.detail).toEqual({ query: 'chat' });
       expect(storage().matches).toHaveLength(3);
       expect(mounted.editor.commands.isActive('search.open')).toBe(true);
+    });
+
+    it('search.open sans écouteur ni requête rend false pour laisser Mod-f au navigateur', () => {
+      expect(mounted.editor.commands.run('search.open')).toBe(false);
+      expect(mounted.editor.commands.run('search.open', { query: 'chat' })).toBe(true);
+      expect(mounted.editor.commands.get('search.open')?.icon).toBe('search');
+      expect(mounted.editor.commands.get('search.clear')?.icon).toBe('close');
     });
 
     it('Mod-f déclenche search.open', () => {

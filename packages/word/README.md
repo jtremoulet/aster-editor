@@ -13,10 +13,8 @@ Peer dependency : `@aster-editor/core`. Dépendance embarquée : `mammoth` (BSD-
 ## 📥 `importDocx`
 
 ```ts
-function importDocx(
-  input: File | ArrayBuffer | ArrayBufferView,
-  options?: DocxImportOptions,
-): Promise<DocxImportResult>;
+type DocxInput = File | ArrayBuffer | ArrayBufferView;
+function importDocx(input: DocxInput, options?: DocxImportOptions): Promise<DocxImportResult>;
 ```
 
 Convertit un `.docx` en HTML prêt pour `editor.setHTML` ou `editor.insertHTML`. L'entrée (`DocxInput`) est un `File`, un `ArrayBuffer` ou une vue typée (`Uint8Array`, `Buffer` Node) dont seule la fenêtre `byteOffset`/`byteLength` est lue. Ne lève jamais pour un document Word valide : ce qui n'est pas converti fidèlement remonte dans `warnings`. Rejette une erreur nommée `DocxImportError` (message préfixé `invalid-docx:`) si l'entrée n'est pas de l'un de ces types (`null`, chaîne, objet quelconque), n'est pas une archive zip, ne peut pas être lue (`arrayBuffer()` qui rejette) ou si mammoth ne peut pas la décoder.
@@ -102,7 +100,7 @@ function isGoogleDocsHtml(html: string): boolean;
 
 Fonctions **pures** : elles parsent le HTML dans un `Document` neuf, ne touchent jamais au `document` global et renvoient `body.innerHTML` nettoyé. Chaîne vide → chaîne vide. Le fragment réellement copié est isolé entre `<!--StartFragment-->` et `<!--EndFragment-->` quand les marqueurs existent ; si `EndFragment` manque (presse-papier tronqué), la balise ouverte et jamais fermée en fin de chaîne est retirée plutôt que rendue en texte.
 
-Les deux normaliseurs sont aussi une barrière : balises actives supprimées avec leur contenu (`script`, `iframe`, `object`, `embed`, `form`, `template`, `noscript`, `frame`, `svg`, `math`, `meta`, `style`), tout attribut `on*` jeté, liens limités aux schémas `http`, `https`, `mailto`, `tel` (les autres sont déballés en texte), images limitées à `http(s)`, `data`, `blob`, `file` et relatif, valeur de `color` validée avant conservation. Le core applique ensuite sa propre politique de liens à l'insertion.
+Les deux normaliseurs sont aussi une barrière : balises actives supprimées avec leur contenu (`script`, `iframe`, `object`, `embed`, `form`, `template`, `noscript`, `frame`, `frameset`, `svg`, `math`, `meta`, `style`), tout attribut `on*` jeté, liens limités aux schémas `http`, `https`, `mailto`, `tel` (les autres sont déballés en texte), images limitées à `http(s)`, `data`, `blob`, `file` et relatif, valeur de `color` validée avant conservation. Le core applique ensuite sa propre politique de liens et d'images à l'insertion (`file:` et `data:` non-image y sont rejetés). Cette barrière est figée par une suite de tests dédiée (`paste/security.spec.ts`) qui couvre aussi les deux regex quadratiques corrigées en 0.3.0 (`isWordHtml`, `parseListFormats` : un collage de 2 Mo se détecte en moins d'une milliseconde) et les fragments tronqués au milieu d'un vecteur.
 
 ### Options (`WordPasteOptions`)
 
@@ -223,7 +221,7 @@ Le texte est assaini avant d'entrer dans le XML : les caractères de contrôle q
 - **`<ol start>`** : écrit dans `numbering.xml` (`w:start` et `startOverride`), honoré par Word, mais **non relu par mammoth** : l'aller-retour rend un `<ol>` sans `start`.
 - **Bloc dans un inline** (`<span><div>…</div></span>`) : le bloc ne peut plus devenir un paragraphe, son texte est isolé par des sauts de ligne dans le paragraphe courant.
 
-Ces trois dégradations sont figées par des tests d'aller-retour (`lists.spec.ts`) pour qu'une régression soit visible.
+Les trois premières dégradations sont figées par des tests d'aller-retour (`export/lists.spec.ts`, cas X-3, M-1 et M-2 des revues) et la quatrième par `export/html-to-docx.spec.ts` (M-5), pour qu'une régression soit visible.
 
 ### Exemple avec un bouton
 
@@ -247,7 +245,9 @@ document.querySelector('#export')?.addEventListener('click', async () => {
 });
 ```
 
-`downloadDocx` crée un `<a download>` éphémère et révoque l'URL objet après le clic ; à appeler depuis un gestionnaire d'événement utilisateur. Hors navigateur (SSR, Node), envoie plutôt les octets : `Buffer.from(await blob.arrayBuffer())`.
+`downloadDocx` crée un `<a download rel="noopener">` éphémère et révoque l'URL objet juste après le clic ; le nom reçoit `.docx` s'il ne l'a pas et ses caractères interdits (`\ / : * ? " < > |`) sont remplacés par `-`, `document.docx` par défaut. À appeler depuis un gestionnaire d'événement utilisateur. Hors navigateur (SSR, Node), la fonction lève : envoie plutôt les octets, `Buffer.from(await blob.arrayBuffer())`.
+
+Un `exportDocx` sans `DOMParser` global ni `options.parse` lève aussi une erreur explicite, et une entrée qui n'est ni chaîne ni objet est refusée avant tout chargement de `docx`.
 
 ## ⚠️ Limites connues
 
@@ -260,9 +260,9 @@ document.querySelector('#export')?.addEventListener('click', async () => {
 - **Google Docs** : les `li` gardent leur `<p>` ; les couleurs et tailles posées par Google sont jetées comme pour Word.
 - **Aller-retour export → import** : une liste dans une citation, un `li` multi-paragraphes avec sous-liste et `<ol start>` sont exportés fidèlement pour Word mais dégradés par mammoth à la réimportation. Détail et HTML obtenu dans [Limites connues de l'export](#limites-connues-de-lexport).
 
-## ⚖️ Poids de mammoth et import dynamique
+## ⚖️ Poids de mammoth et de docx, import dynamique
 
-mammoth pèse environ **660 kB non minifié**. `importDocx` le charge via `await import('mammoth')` au premier appel : il n'entre dans le bundle initial que si ton bundler suit le code-splitting (esbuild, Vite, Angular CLI le font). Pour aller plus loin, importe aussi le paquet à la demande :
+mammoth pèse environ **660 kB non minifié**, la lib `docx` environ **1,3 MB**. `importDocx` charge mammoth via `await import('mammoth')` au premier appel et `exportDocx` fait de même pour `docx` : ni l'un ni l'autre n'entre dans le bundle initial si ton bundler suit le code-splitting (esbuild, Vite, Angular CLI le font). Pour aller plus loin, importe aussi le paquet à la demande :
 
 ```ts
 async function loadDocx(file: File): Promise<string> {
@@ -271,7 +271,7 @@ async function loadDocx(file: File): Promise<string> {
 }
 ```
 
-`wordPasteTransformer`, `normalizeWordHtml` et `normalizeGoogleDocsHtml` n'ont **aucune dépendance** à mammoth : les importer statiquement ne coûte que le code du normaliseur.
+`wordPasteTransformer`, `normalizeWordHtml`, `normalizeGoogleDocsHtml`, `jsonToHtml` et `downloadDocx` n'ont **aucune dépendance** à mammoth ni à `docx` : les importer statiquement ne coûte que leur propre code. Sur `ng serve`, le tout premier `importDocx` ou `exportDocx` d'une session peut recharger la page : l'optimiseur de dépendances de Vite découvre mammoth ou `docx` à ce moment-là (voir le [guide d'intégration](../../docs/GUIDE_INTEGRATION.md)).
 
 ## 🧾 Exports
 

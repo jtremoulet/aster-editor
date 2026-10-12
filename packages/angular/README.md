@@ -1,7 +1,7 @@
 # ✳️ @aster-editor/angular
 
 > Composant Angular standalone pour [Aster Editor](../../README.md) : `<aster-editor>` avec
-> reactive forms, signals, zoneless, et import Word à la demande.
+> reactive forms, signals, zoneless, nom accessible, et import / export Word à la demande.
 
 ## 📦 Installation
 
@@ -52,9 +52,12 @@ composant.
 
 Le composant implémente `ControlValueAccessor` : la valeur du contrôle est le HTML sémantique de
 `getHTML()`. `dirty` passe à vrai à la frappe, `touched` au blur vers l'extérieur de l'éditeur
-(cliquer la toolbar ne compte pas), `disabled` met l'éditeur en lecture seule. `writeValue`
-n'émet rien, n'entre pas dans l'historique d'annulation, et ignore une valeur identique au
-contenu courant (la sélection ne bouge pas).
+(cliquer la toolbar, un menu ou un dialogue ne compte pas), `disabled` met l'éditeur en lecture
+seule **sans émettre `change`** (`setDisabledState` ne salit jamais le contrôle). `writeValue`
+est idempotent : il n'émet rien, n'entre pas dans l'historique d'annulation, vide l'historique
+antérieur (un `Ctrl+Z` qui suit ne rejoue pas l'ancien document) et ignore une valeur identique
+au contenu courant (la sélection ne bouge pas). Une valeur reçue avant le montage devient le
+contenu initial.
 
 ```ts
 import { Component } from '@angular/core';
@@ -102,7 +105,15 @@ export class ArticleFormComponent {
 | `ariaLabelledBy` | `string \| undefined`     | aucun           | Oui : `aria-labelledby` sur le contenteditable              |
 
 Un contenteditable ne s'associe pas à un `<label for>` : nomme la zone de saisie avec
-`ariaLabel`, ou `ariaLabelledBy` pointant sur l'`id` de ton libellé visible.
+`ariaLabel`, ou `ariaLabelledBy` pointant sur l'`id` de ton libellé visible. Les deux sont
+appliqués sur `editor.contentElement` (le `.ProseMirror`), retirés quand la valeur est vide,
+et survivent à un remontage.
+
+Le remontage déclenché par `toolbar` recrée l'instance `createAster` : le HTML courant est
+réinjecté comme contenu initial, `autofocus` est neutralisé et le focus est restauré en fin de
+document s'il était dans l'éditeur, `ready` est réémis avec la nouvelle instance. Un
+`importDocx` en cours pendant un remontage ou une destruction rend son résultat sans écrire
+dans l'éditeur.
 
 | Output    | Payload       | Quand                                                                                          |
 | --------- | ------------- | ---------------------------------------------------------------------------------------------- |
@@ -114,8 +125,20 @@ Un contenteditable ne s'associe pas à un `<label for>` : nomme la zone de saisi
 API publique du composant :
 
 - `editor` : `Signal<AsterEditor | null>`, l'éditeur du core (`getHTML`, `getJSON`, `getCounts`,
-  `commands.run(...)`, `tiptap`…), `null` avant le montage.
+  `commands.run(...)`, `tiptap`…), `null` avant le montage et après la destruction.
 - `importDocx(file: File): Promise<DocxImportResult>` : voir plus bas.
+
+La vue source, le plein écran et le menu contextuel de table de `@aster-editor/ui` sont montés
+par `createAster` et donc disponibles dans le composant : via les widgets `source` /
+`fullscreen` d'une toolbar déclarative ou du preset `full`, ou au clavier (`Mod-f` ouvre le
+panneau de recherche si le widget `search` est monté, `Échap` quitte le plein écran). Le composant n'expose pas `AsterInstance` : pour
+piloter ces fonctions par code, passe par les contrôleurs partagés de `ui`
+(`getSourceView(editor)`, `getFullscreen(editor)`) avec l'éditeur du signal.
+
+Types réexportés pour ne pas dépendre de `core`, `ui` ou `word` : `AsterEditor`,
+`AsterDocument`, `AsterCounts`, `AsterLocale`, `AsterTheme`, `LinkPolicy`,
+`PasteTransformer`, `ToolbarConfig`, `ToolbarPreset`, `UploadHandler`, `AsterUiOptions`,
+`DocxImportResult`, `DocxImportWarning`.
 
 Un input dédié laissé à `undefined` n'écrase pas la valeur venue de `config` ou de
 `provideAster`. Passe des objets **stables** dans `config` (champ de classe, pas un littéral dans
@@ -201,19 +224,63 @@ export class ImportComponent {
 `importDocx` charge `@aster-editor/word` par `import()` : mammoth reste dans un chunk séparé et
 n'est téléchargé qu'au premier import. Le contenu est remplacé avec émission de `change`, un
 formulaire lié voit donc la nouvelle valeur. Le handler d'upload de l'éditeur est réutilisé pour
-les images embarquées.
+les images embarquées. Appelé avant le montage, il rejette avec une erreur explicite.
+
+> ⚠️ **Vite à froid** : sur `ng serve`, le tout premier `importDocx` d'une session déclenche
+> l'optimisation de `mammoth` par Vite et **recharge la page** en plein import, sans erreur.
+> C'est un comportement du serveur de dev, pas du build : relance l'import. Le test e2e de la
+> démo fait de même (`toPass` avec nouvelle sélection du fichier).
+
+## 📤 Export .docx
+
+Même recette que l'import, avec `exportDocx` et `downloadDocx` chargés à la demande (la lib
+`docx` reste dans son chunk) :
+
+```ts
+@Component({
+  selector: 'app-export',
+  imports: [AsterEditorComponent],
+  template: `
+    <aster-editor />
+    <button type="button" (click)="exportWord()">Exporter .docx</button>
+  `,
+})
+export class ExportComponent {
+  private readonly editor = viewChild.required(AsterEditorComponent);
+
+  async exportWord(): Promise<void> {
+    const editor = this.editor().editor();
+    if (!editor) return;
+    const { exportDocx, downloadDocx } = await import('@aster-editor/word');
+    const blob = await exportDocx(editor.getHTML(), { title: 'Article' });
+    downloadDocx(blob, 'article');
+  }
+}
+```
+
+Options, mapping HTML → Word et limites dans le [README word](../word/README.md).
 
 ## 📋 Collage depuis Word
 
-Avec `wordPaste` (vrai par défaut), le composant charge `@aster-editor/word` au montage et branche
-`wordPasteTransformer()` en tête des `pasteTransformers` : le HTML de Word et de Google Docs est
-nettoyé avant d'atteindre l'éditeur, tes propres transformateurs reçoivent du HTML propre. Si le
-paquet `word` n'est pas installé, un avertissement est journalisé et le collage reste brut.
+Avec `wordPaste` (vrai par défaut), le composant charge `@aster-editor/word` au montage (jamais
+côté serveur) et branche `wordPasteTransformer()` en tête des `pasteTransformers` : le HTML de
+Word et de Google Docs est nettoyé avant d'atteindre l'éditeur, tes propres transformateurs
+reçoivent du HTML propre. Si le paquet `word` n'est pas installé, un avertissement est journalisé
+et le collage reste brut. Passer `wordPaste` à `false` laisse le module chargé mais inactif.
+
+## 🧭 App démo
+
+`apps/demo` (`npm run demo`, http://localhost:4200) montre quatre pages chargées à la demande,
+chacune avec son titre de document : `/` playground (preset, thème, langue, lecture seule,
+compteurs, sortie HTML / JSON), `/form` reactive form avec validateur « requis » sur le contenu
+riche, `/import` dépôt de `.docx` avec avertissements, `/readonly` rendu figé en thème `night`.
 
 ## 🧪 Tests
 
 ```bash
-npx ng test aster-angular --watch=false
+npx ng test aster-angular --watch=false   # 30 tests du composant et de provideAster
+npx ng test demo --watch=false            # 20 tests des pages de la démo
+npm run e2e -- --project=demo             # 5 tests Playwright sur la démo (ng serve lancé par Playwright)
 ```
 
 TestBed + Vitest, environnement jsdom. Monte le composant, appelle `fixture.detectChanges()`

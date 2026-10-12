@@ -64,7 +64,7 @@ function defineSearchCommand(
   const command: AsterCommand<SearchCommandArgs> = {
     id,
     labelKey: `command.${id}`,
-    icon: iconIdFor(id),
+    icon: SEARCH_ICONS[id] ?? iconIdFor(id),
     run: spec.run,
   };
   if (spec.shortcut) Object.assign(command, { shortcut: spec.shortcut });
@@ -73,13 +73,25 @@ function defineSearchCommand(
   return command;
 }
 
+/** Icônes du jeu `ui` pour les commandes de recherche (le jeu n'a pas de `search-open`). */
+const SEARCH_ICONS: Readonly<Record<string, string>> = {
+  'search.open': 'search',
+  'search.next': 'search-next',
+  'search.previous': 'search-previous',
+  'search.replace': 'search',
+  'search.replaceAll': 'search',
+  'search.clear': 'close',
+};
+
 /**
  * Commandes Aster de recherche / remplacement. Elles enveloppent les commandes Tiptap
  * de l'extension `Search` et passent par le registre comme les autres : raccourci,
  * lecture seule et tolérance aux erreurs sont donc gérés uniformément.
  *
  * - `search.open` (`Mod-f`) : avec `query`, lance la recherche ; dans tous les cas émet
- *   `aster:search-open` sur `editor.element` pour que l'UI affiche son panneau.
+ *   `aster:search-open` (annulable) sur `editor.element` pour que l'UI affiche son panneau.
+ *   Sans `query` et sans écouteur qui appelle `preventDefault()`, la commande rend `false` :
+ *   `Mod-f` n'est alors pas consommé et la recherche native du navigateur reste disponible.
  * - `search.next` / `search.previous` : naviguent, en appliquant `query` d'abord si fournie.
  * - `search.replace` / `search.replaceAll` : remplacent par `replacement` (vide par défaut).
  * - `search.clear` : efface la requête et les surlignages.
@@ -92,8 +104,10 @@ export const SEARCH_COMMANDS: readonly AsterCommand[] = [
       if (!syncQuery(editor, parsed)) return false;
       const detail: SearchOpenEventDetail =
         parsed.query === undefined ? {} : { query: parsed.query };
-      editor.element.dispatchEvent(new CustomEvent(SEARCH_OPEN_EVENT, { bubbles: true, detail }));
-      return true;
+      const handled = !editor.element.dispatchEvent(
+        new CustomEvent(SEARCH_OPEN_EVENT, { bubbles: true, cancelable: true, detail }),
+      );
+      return handled || parsed.query !== undefined;
     },
     isActive: (editor) => getSearchStorage(editor).query.length > 0,
   }),

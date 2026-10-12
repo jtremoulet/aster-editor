@@ -28,8 +28,9 @@ export interface ToolbarDropdownItem {
 
 /**
  * Composant UI spécialisé fourni par `ui` : sélecteur de couleur, grille de table,
- * dialogue de lien, etc. Identifiants connus : `heading`, `table`, `link`, `image`,
- * `textColor`, `backgroundColor`, `fontFamily`, `fontSize`.
+ * dialogue de lien, etc. Identifiants fournis par `ui` : `heading`, `table`, `link`, `image`,
+ * `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `search`, `source`, `fullscreen`,
+ * `specialChars`, `print`.
  */
 export interface ToolbarWidgetItem {
   type: 'widget';

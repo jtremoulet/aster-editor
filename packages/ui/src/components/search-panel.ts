@@ -225,6 +225,8 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
   dropdown.panel.addEventListener('keydown', onPanelKeyDown, true);
 
   const onSearchOpen = (event: Event): void => {
+    // Signale au core que le panneau prend la main : Mod-f est alors consommé.
+    event.preventDefault();
     const detail = (event as CustomEvent<SearchOpenEventDetail | undefined>).detail;
     if (!dropdown.isOpen()) dropdown.open();
     if (!dropdown.isOpen() || !queryInput) return;
