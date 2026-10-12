@@ -190,3 +190,8 @@
 - 17 findings corrigés, ui 146 → 188 tests, e2e 21/21 vérifiés par l'agent, E-1 et E-2 revérifiés en vrai navigateur par l'agent lui-même.
 - Nouveau test de contraste WCAG lisant les CSS des thèmes : tout thème futur sera contrôlé automatiquement.
 - `THEMING.md` aligné par l'orchestrateur (sélecteur d'image, classe flip, note `images-tables.css`). E2E : contournement `button.focus()` du test plein écran à retirer en V1.1 (non bloquant).
+
+### 00:50 — L9b correctifs word rendu et intégré (agent 20 min, 288k tokens, 127 outils)
+- 15 findings corrigés, word 216 → 260 tests, 98,8 %. Le fichier de preuves du relecteur passe à 17/17 rouge comme attendu : la boucle revue → preuve → correctif → preuve inversée fonctionne.
+- Décisions validées : `svg`/`math` supprimés au collage, liens relatifs déballés (Word n'émet que des ancres `#_Toc` mortes, Google des URL absolues), `start` posé aussi pour alpha/romain.
+- Friction récurrente notée : l'outil Write convertit ` ` en NBSP littéral. Trois agents l'ont rencontrée.
