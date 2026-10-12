@@ -185,3 +185,8 @@
 - Diagnostic du flake confirmé : `FileReader` jsdom = 3 `setImmediate` imbriqués contre 2 `setTimeout(0)` ; 30/30 pertes sous charge. Mon correctif `vi.waitFor` est valide, le relecteur propose `waitForEvent` : équivalent.
 - Décisions produit prises par l'orchestrateur pour L9d : pas de titre dans les items de liste en V1, pas de tables imbriquées en V1, `clearFormatting` conserve les liens.
 - Lot L9d lancé. Les 4 lots de correctifs L9a-d couvrent 54 findings au total.
+
+### 00:45 — L9c correctifs ui rendu et intégré (agent 17 min, 274k tokens, 146 outils)
+- 17 findings corrigés, ui 146 → 188 tests, e2e 21/21 vérifiés par l'agent, E-1 et E-2 revérifiés en vrai navigateur par l'agent lui-même.
+- Nouveau test de contraste WCAG lisant les CSS des thèmes : tout thème futur sera contrôlé automatiquement.
+- `THEMING.md` aligné par l'orchestrateur (sélecteur d'image, classe flip, note `images-tables.css`). E2E : contournement `button.focus()` du test plein écran à retirer en V1.1 (non bloquant).
