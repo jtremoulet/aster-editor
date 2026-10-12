@@ -1,0 +1,113 @@
+/*
+ * Aster Editor — caractères spéciaux, bouton d'impression, impression de la page.
+ * Complète `base.css` ; mêmes variables `--aster-*`, aucune valeur en dur hors repli.
+ * La fenêtre d'impression ouverte par le widget `print` embarque sa propre feuille
+ * (`PRINT_CONTENT_STYLES`) : les règles `@media print` ci-dessous couvrent le cas où
+ * c'est la page hôte elle-même qui est imprimée.
+ */
+
+/* ---------- Caractères spéciaux ------------------------------------------ */
+
+.aster-special-chars {
+  min-width: 0;
+  gap: var(--aster-space-2);
+}
+
+.aster-special-chars__tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--aster-border);
+  padding-bottom: var(--aster-space-1);
+}
+
+.aster-special-chars__tab {
+  height: auto;
+  min-height: 28px;
+  padding: 0 var(--aster-space-2);
+  border-radius: var(--aster-radius) var(--aster-radius) 0 0;
+}
+
+.aster-special-chars__tab--active,
+.aster-special-chars__tab[aria-selected='true'] {
+  background: var(--aster-accent-soft);
+  color: var(--aster-accent);
+}
+
+.aster-special-chars__grid {
+  /* 7 colonnes : doit suivre `SPECIAL_CHARS_COLUMNS` pour la navigation haut/bas. */
+  display: grid;
+  grid-template-columns: repeat(7, var(--aster-button-size));
+  gap: 2px;
+}
+
+.aster-special-chars__char {
+  width: var(--aster-button-size);
+  min-width: 0;
+  padding: 0;
+  font-family: var(--aster-font-content);
+  font-size: 1.1em;
+}
+
+/* ---------- Impression de la page hôte ----------------------------------- */
+
+@media print {
+  .aster {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    color: #000;
+  }
+
+  .aster__toolbar,
+  .aster-dropdown__panel,
+  .aster-tooltip,
+  .aster-table-context-menu,
+  .aster-source,
+  .aster-content .ProseMirror .column-resize-handle,
+  .aster-content .ProseMirror .is-empty::before,
+  .aster-content .ProseMirror p.is-editor-empty:first-child::before {
+    display: none !important;
+  }
+
+  .aster--fullscreen {
+    position: static;
+    overflow: visible;
+  }
+
+  .aster-content .ProseMirror {
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .aster-content .ProseMirror .selectedCell::after,
+  .aster-content .ProseMirror .aster-search-match,
+  .aster-content .ProseMirror .aster-search-match--current {
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .aster-content .ProseMirror img.ProseMirror-selectednode {
+    outline: none;
+  }
+
+  .aster-content .ProseMirror h1,
+  .aster-content .ProseMirror h2,
+  .aster-content .ProseMirror h3,
+  .aster-content .ProseMirror h4,
+  .aster-content .ProseMirror h5,
+  .aster-content .ProseMirror h6 {
+    page-break-after: avoid;
+  }
+
+  .aster-content .ProseMirror pre,
+  .aster-content .ProseMirror img,
+  .aster-content .ProseMirror tr {
+    page-break-inside: avoid;
+  }
+
+  .aster-content .ProseMirror a {
+    color: #000;
+  }
+}

@@ -1,4 +1,5 @@
 import type { AsterEditor, Unsubscribe } from '@aster-editor/core';
+import { getIcon } from '../icons';
 import type { ToolbarWidget } from '../types';
 import { el, setIcon } from '../utils/dom';
 import { createPlainButton, setDisabled } from './button';
@@ -9,12 +10,6 @@ export const SOURCE_VIEW_CLASS = 'aster--source';
 
 /** Classe du `<textarea>` de la vue source. */
 export const SOURCE_TEXTAREA_CLASS = 'aster-source';
-
-/** Icône « code source » : chevrons et barre oblique. */
-const SOURCE_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
-  'aria-hidden="true" focusable="false"><path d="M6 6l-4 4 4 4M14 6l4 4-4 4M12 4l-4 12"/></svg>';
 
 /** Contrôleur de la vue source d'un éditeur. Un seul par éditeur, voir `getSourceView`. */
 export interface SourceView {
@@ -264,7 +259,7 @@ export function createSourceButton(editor: AsterEditor): ToolbarWidget {
   const view = getSourceView(editor);
   const button = createPlainButton({ className: 'aster-source-button', toolbarItem: true });
   const icon = el('span', { className: 'aster-toolbar__icon' });
-  setIcon(icon, SOURCE_ICON);
+  setIcon(icon, getIcon('source'));
   button.append(icon);
 
   const update = (): void => {

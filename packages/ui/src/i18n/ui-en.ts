@@ -77,4 +77,11 @@ export const uiEn: AsterDictionary = {
   'ui.source.toggle': 'Show HTML source',
   'ui.fullscreen.enter': 'Full screen',
   'ui.fullscreen.exit': 'Exit full screen',
+  'ui.specialChars.title': 'Special characters',
+  'ui.specialChars.symbols': 'Symbols',
+  'ui.specialChars.emojis': 'Emojis',
+  'ui.specialChars.nbsp': 'Non-breaking space',
+  'ui.specialChars.insert': 'Insert {char}',
+  'ui.print.label': 'Print',
+  'ui.print.documentTitle': 'Document',
 };

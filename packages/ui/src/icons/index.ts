@@ -150,6 +150,19 @@ const ICONS: Readonly<Record<string, string>> = {
   check: stroke('<path d="M4 10.5l4 4 8-9"/>'),
   close: stroke('<path d="M5 5l10 10M15 5L5 15"/>'),
   none: stroke('<circle cx="10" cy="10" r="7"/><path d="M5 15L15 5"/>'),
+  // Widgets de la toolbar sans commande du core : recherche, vue source, plein écran,
+  // caractères spéciaux, impression.
+  search: stroke('<circle cx="8.5" cy="8.5" r="5"/><path d="M12.5 12.5L17 17"/>'),
+  'search-previous': stroke('<path d="M6 12l4-4 4 4"/>'),
+  'search-next': stroke('<path d="M6 8l4 4 4-4"/>'),
+  source: stroke('<path d="M6 6l-4 4 4 4M14 6l4 4-4 4M12 4l-4 12"/>'),
+  fullscreen: stroke('<path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/>'),
+  'fullscreen-exit': stroke('<path d="M8 3v5H3M12 3v5h5M17 12h-5v5M3 12h5v5"/>'),
+  'special-chars': fill(glyph('Ω', 10, 15, 14)),
+  print: stroke(
+    '<path d="M6 7V3h8v4M6 14H4.5A1.5 1.5 0 0 1 3 12.5v-4A1.5 1.5 0 0 1 4.5 7h11A1.5 1.5 0 0 1 17 8.5v4a1.5 1.5 0 0 1-1.5 1.5H14"/>' +
+      '<rect x="6" y="11" width="8" height="6" rx="1"/>',
+  ),
 };
 
 /** Icône de repli visible (point d'interrogation) pour un nom inconnu. */

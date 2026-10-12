@@ -55,3 +55,17 @@ export {
   createFullscreenButton,
   getFullscreen,
 } from './components/fullscreen';
+export type { SpecialChar, SpecialCharGroup } from './components/special-chars';
+export {
+  SPECIAL_CHAR_GROUPS,
+  SPECIAL_CHARS_COLUMNS,
+  createSpecialChars,
+} from './components/special-chars';
+export type { PrintDocumentOptions, WindowOpener } from './components/print';
+export {
+  PRINT_CONTENT_CLASS,
+  PRINT_CONTENT_STYLES,
+  buildPrintDocument,
+  createPrintButton,
+  printEditor,
+} from './components/print';

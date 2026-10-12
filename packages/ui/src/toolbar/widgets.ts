@@ -5,8 +5,10 @@ import { createFullscreenButton } from '../components/fullscreen';
 import { createHeadingMenu } from '../components/heading-menu';
 import { createImageDialog } from '../components/image-dialog';
 import { createLinkDialog } from '../components/link-dialog';
+import { createPrintButton } from '../components/print';
 import { createSearchPanel } from '../components/search-panel';
 import { createSourceButton } from '../components/source-view';
+import { createSpecialChars } from '../components/special-chars';
 import { createTableGridPicker } from '../components/table-grid-picker';
 import type { ToolbarWidget, WidgetFactory } from '../types';
 
@@ -37,9 +39,12 @@ export const WIDGETS: Readonly<Record<string, WidgetDefinition>> = {
   fontFamily: { factory: createFontFamilyMenu, requires: ['fontFamily'] },
   fontSize: { factory: createFontSizeMenu, requires: ['fontSize'] },
   search: { factory: createSearchPanel, requires: ['search.open'] },
-  // Vue source et plein écran ne dépendent d'aucune commande du core.
+  // Vue source, plein écran, caractères spéciaux et impression ne dépendent d'aucune
+  // commande du core.
   source: { factory: createSourceButton, requires: [] },
   fullscreen: { factory: createFullscreenButton, requires: [] },
+  specialChars: { factory: createSpecialChars, requires: [] },
+  print: { factory: (editor) => createPrintButton(editor), requires: [] },
 };
 
 /**

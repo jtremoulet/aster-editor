@@ -22,6 +22,23 @@ describe('icons', () => {
     expect(ICON_NAMES).toContain('close');
   });
 
+  it('fournit les icônes des widgets sans commande du core', () => {
+    for (const name of [
+      'search',
+      'search-previous',
+      'search-next',
+      'source',
+      'fullscreen',
+      'fullscreen-exit',
+      'special-chars',
+      'print',
+    ]) {
+      expect(hasIcon(name), `icône manquante : ${name}`).toBe(true);
+    }
+    expect(getIcon('fullscreen')).not.toBe(getIcon('fullscreen-exit'));
+    expect(getIcon('search-previous')).not.toBe(getIcon('search-next'));
+  });
+
   it('retourne un repli visible pour un nom inconnu', () => {
     const fallback = getIcon('does-not-exist');
     expect(fallback.startsWith('<svg')).toBe(true);

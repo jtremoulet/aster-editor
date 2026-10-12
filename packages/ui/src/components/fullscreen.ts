@@ -1,4 +1,5 @@
 import type { AsterEditor, Unsubscribe } from '@aster-editor/core';
+import { getIcon } from '../icons';
 import type { ToolbarWidget } from '../types';
 import { el, setIcon } from '../utils/dom';
 import { createPlainButton } from './button';
@@ -6,18 +7,6 @@ import { applyTooltip } from './tooltip';
 
 /** Classe posée sur la racine `.aster` en plein écran. */
 export const FULLSCREEN_CLASS = 'aster--fullscreen';
-
-/** Icône « agrandir » : quatre coins vers l'extérieur. */
-const ENTER_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
-  'aria-hidden="true" focusable="false"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/></svg>';
-
-/** Icône « réduire » : quatre coins vers l'intérieur. */
-const EXIT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
-  'aria-hidden="true" focusable="false"><path d="M8 3v5H3M12 3v5h5M17 12h-5v5M3 12h5v5"/></svg>';
 
 /** Contrôleur du plein écran d'un éditeur. Un seul par éditeur, voir `getFullscreen`. */
 export interface Fullscreen {
@@ -109,7 +98,7 @@ export function createFullscreenButton(editor: AsterEditor): ToolbarWidget {
 
   const update = (): void => {
     const active = fullscreen.isActive();
-    setIcon(icon, active ? EXIT_ICON : ENTER_ICON);
+    setIcon(icon, getIcon(active ? 'fullscreen-exit' : 'fullscreen'));
     applyTooltip(button, editor.i18n.t(active ? 'ui.fullscreen.exit' : 'ui.fullscreen.enter'));
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
     button.classList.toggle('aster-toolbar__button--active', active);

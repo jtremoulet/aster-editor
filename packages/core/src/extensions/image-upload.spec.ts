@@ -20,10 +20,12 @@ function fileList(files: File[]): FileList {
 }
 
 /** Laisse les promesses d'upload et de lecture se résoudre. */
-const flush = async (): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-};
+/**
+ * Attend que le HTML de l'éditeur contienne `fragment`. Un `FileReader` sous jsdom résout
+ * à un moment non déterministe : attendre une condition plutôt qu'un nombre de ticks.
+ */
+const waitForHtml = (editor: MountedEditor['editor'], fragment: string): Promise<void> =>
+  vi.waitFor(() => expect(editor.getHTML()).toContain(fragment), { timeout: 2000 });
 
 describe('upload d’image', () => {
   describe('helpers purs', () => {
@@ -139,9 +141,8 @@ describe('upload d’image', () => {
       const file = png();
       expect(mounted.editor.commands.canRun('image.upload', { file })).toBe(true);
       expect(mounted.editor.commands.run('image.upload', { file })).toBe(true);
-      await flush();
+      await waitForHtml(mounted.editor, 'src="https://x/a.png"');
       expect(upload).toHaveBeenCalledWith(file);
-      expect(mounted.editor.getHTML()).toContain('src="https://x/a.png"');
     });
   });
 
@@ -157,8 +158,7 @@ describe('upload d’image', () => {
       const props = createImageUploadProps(mounted.editor, undefined);
       const event = { clipboardData: { files: fileList([png()]) } } as unknown as ClipboardEvent;
       expect(props.handlePaste(mounted.editor.tiptap.view, event)).toBe(true);
-      await flush();
-      expect(mounted.editor.getHTML()).toContain('<img src="data:image/png;base64,');
+      await waitForHtml(mounted.editor, '<img src="data:image/png;base64,');
     });
 
     it('handlePaste laisse passer un collage sans image', () => {
@@ -180,8 +180,7 @@ describe('upload d’image', () => {
         clientY: 0,
       } as unknown as DragEvent;
       expect(props.handleDrop(mounted.editor.tiptap.view, event, null, false)).toBe(true);
-      await flush();
-      expect(mounted.editor.getHTML()).toContain('src="https://x/dropped.png"');
+      await waitForHtml(mounted.editor, 'src="https://x/dropped.png"');
     });
 
     it('handleDrop ignore un déplacement interne et un dépôt sans image', () => {

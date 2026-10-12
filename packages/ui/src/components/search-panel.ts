@@ -1,25 +1,10 @@
 import type { AsterEditor, SearchOpenEventDetail } from '@aster-editor/core';
 import { SEARCH_OPEN_EVENT } from '@aster-editor/core';
+import { getIcon } from '../icons';
 import type { ToolbarWidget } from '../types';
 import { el, setIcon } from '../utils/dom';
 import { createPlainButton, setDisabled } from './button';
 import { createDropdown } from './dropdown';
-
-/** Icône « loupe ». */
-const SEARCH_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
-  'aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="5"/><path d="M12.5 12.5L17 17"/></svg>';
-
-/** Chevrons haut / bas pour précédent / suivant. */
-const UP_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
-  'aria-hidden="true" focusable="false"><path d="M6 12l4-4 4 4"/></svg>';
-const DOWN_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20" fill="none" ' +
-  'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
-  'aria-hidden="true" focusable="false"><path d="M6 8l4 4 4-4"/></svg>';
 
 /** État de recherche tel que l'UI en a besoin. */
 export interface SearchPanelState {
@@ -120,8 +105,16 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
         className: 'aster-search-panel__count',
         attrs: { 'aria-live': 'polite' },
       });
-      const previous = iconButton('aster-search-panel__nav', UP_ICON, t('ui.search.previous'));
-      const next = iconButton('aster-search-panel__nav', DOWN_ICON, t('ui.search.next'));
+      const previous = iconButton(
+        'aster-search-panel__nav',
+        getIcon('search-previous'),
+        t('ui.search.previous'),
+      );
+      const next = iconButton(
+        'aster-search-panel__nav',
+        getIcon('search-next'),
+        t('ui.search.next'),
+      );
 
       const caseBox = el('input', {
         className: 'aster-dialog__checkbox',
@@ -220,9 +213,8 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
     },
   });
 
-  // L'icône de loupe n'est pas dans le jeu `icons/` : on la pose directement.
   const triggerIcon = el('span', { className: 'aster-toolbar__icon' });
-  setIcon(triggerIcon, SEARCH_ICON);
+  setIcon(triggerIcon, getIcon('search'));
   dropdown.trigger.prepend(triggerIcon);
 
   const onSearchOpen = (event: Event): void => {

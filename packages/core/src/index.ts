@@ -94,3 +94,18 @@ export {
 export { toImageAttributes, type ImageAttributeUpdate } from './commands/images';
 export { normalizeOutputHtml } from './html/normalize-output';
 export { CONTENT_CLASS } from './editor/aster-editor';
+export {
+  getMarkdown,
+  setMarkdown,
+  htmlToMarkdown,
+  markdownToHtml,
+  escapeHtml,
+  parseInline,
+  type HtmlParser,
+} from './markdown';
+export {
+  AUTOSAVE_DEFAULT_INTERVAL,
+  createAutosave,
+  type Autosave,
+  type AutosaveOptions,
+} from './extensions/autosave';
