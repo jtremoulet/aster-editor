@@ -9,18 +9,23 @@ Monorepo `C:\workspace\aster-editor`, `develop`, 0.2.0+. Lire `CLAUDE.md`, `docs
 ## Lot
 
 ### Markdown (core)
+
 - `packages/core/src/markdown/` : `htmlToMarkdown(html, parse?)` et `markdownToHtml(md)` **ou** méthodes `editor.getMarkdown()` / `editor.setMarkdown(md, emit?)` ajoutées à l'implémentation (le contrat `AsterEditor` est figé : expose-les comme fonctions exportées `getMarkdown(editor)` / `setMarkdown(editor, md)` dans `packages/core/src/markdown/index.ts`, ré-exportées par `index.ts`). Tests d'aller-retour sur un document complet.
 
 ### Autosave (core)
+
 - `packages/core/src/extensions/autosave.ts` : `createAutosave(editor, { interval: 2000, onSave: (html) => Promise<void> | void, debounce?: boolean })` retourne `{ flush(), destroy(), isDirty() }`. Sauvegarde après inactivité (`debounce`) ou à intervalle fixe, uniquement si le contenu a changé depuis la dernière sauvegarde, `flush()` force, `destroy()` sur `editor.on('destroy')`. Tests avec `vi.useFakeTimers()`. Export dans `index.ts`. Pas de modification de `AsterOptions` (contrat figé) : fonction compagnon.
 
 ### Caractères spéciaux et emojis (ui)
+
 - `components/special-chars.ts` : widget `specialChars` : dropdown avec onglets « Symboles » (`→ ← ↑ ↓ … – — « » € £ ¥ © ® ™ ° ± × ÷ ≠ ≤ ≥ ∞ § ¶ †`), « Emojis » (20 courants), clic → `editor.tiptap.chain().focus().insertContent(char).run()`. Clés `ui.specialChars.*`. Ajout au preset `full`.
 
 ### Impression (ui)
+
 - `components/print.ts` : widget `print` : ouvre `window.open('', '_blank')`, écrit un document HTML avec `getHTML()` et la feuille de contenu minimale (copie des règles `.aster-content` de `base.css` en version imprimable inline, ou `@media print` dans `search-source.css`… non : crée `themes/print.css` nouveau fichier), puis `print()`. En jsdom, `window.open` est mocké dans le test. Ajout au preset `full`.
 
 ### CSS
+
 `packages/ui/themes/print.css` (nouveau) uniquement. L'orchestrateur l'ajoute à `aster.css`.
 
 ## Périmètre

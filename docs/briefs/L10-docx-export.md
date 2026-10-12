@@ -9,6 +9,7 @@ Monorepo `C:\workspace\aster-editor`, `develop`, 0.2.0. Lire `CLAUDE.md`, `docs/
 ## Lot
 
 `exportDocx(input: string | AsterDocument, options?: DocxExportOptions): Promise<Blob>` dans `packages/word/src/export/` :
+
 - Entrée HTML (string) ou JSON ProseMirror. Parsing du HTML via `DOMParser` injectable (`options.parse`), jamais de `document` global. Pour le JSON, convertir d'abord en HTML via un sérialiseur minimal interne (ou accepter uniquement HTML et documenter que le JSON passe par `editor.getHTML()` : choisis la voie la plus simple et robuste, documente-la).
 - Mapping : `h1`-`h6` → `HeadingLevel`, `p` → `Paragraph` avec alignement (`text-align`), `strong`/`b` → `bold`, `em`/`i` → `italics`, `u` → `underline`, `s` → `strike`, `sub`/`sup`, `code` → police Consolas, `mark` → `highlight`, `a` → `ExternalHyperlink`, `ul`/`ol` imbriquées → `numbering` (puces et décimal, `type="a"` → `LevelFormat.LOWER_LETTER`, 3 niveaux min), `blockquote` → paragraphe indenté italique, `pre` → paragraphes Consolas, `hr` → paragraphe avec bordure basse, `br` → `break`, `img` → `ImageRun` (data URL base64 décodée ; URL http → ignorée avec avertissement sauf si `options.fetchImage` fourni), `table`/`thead`/`tbody`/`tr`/`th`/`td` → `Table` avec `columnSpan`/`rowSpan`, en-têtes en gras, largeur 100 %, `span style="color"` → `color`, `font-family`/`font-size` si présents.
 - `DocxExportOptions` : `parse?`, `fetchImage?: (src) => Promise<ArrayBuffer | null>`, `title?`, `creator?`, `pageSize?: 'A4' | 'LETTER'`.
