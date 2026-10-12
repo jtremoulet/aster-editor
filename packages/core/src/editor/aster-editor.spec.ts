@@ -172,6 +172,29 @@ describe('createEditor', () => {
       expect(change).not.toHaveBeenCalled();
     });
 
+    it('setHTML(html, false) n’entre pas dans l’historique : undo ne revient pas en arrière', () => {
+      mounted.editor.setHTML('<p>Silencieux</p>', false);
+      expect(mounted.editor.commands.canRun('undo')).toBe(false);
+      expect(mounted.editor.commands.run('undo')).toBe(false);
+      expect(mounted.editor.getHTML()).toBe('<p>Silencieux</p>');
+    });
+
+    it('setJSON(doc, false) n’entre pas dans l’historique non plus', () => {
+      mounted.editor.setJSON(
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'J' }] }] },
+        false,
+      );
+      expect(mounted.editor.commands.canRun('undo')).toBe(false);
+      expect(mounted.editor.getHTML()).toBe('<p>J</p>');
+    });
+
+    it('setHTML(html) avec émission reste annulable', () => {
+      mounted.editor.setHTML('<p>Annulable</p>');
+      expect(mounted.editor.commands.canRun('undo')).toBe(true);
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Bonjour</p>');
+    });
+
     it('émet selectionChange sur un simple déplacement de sélection, sans change', () => {
       const change = vi.fn();
       const selection = vi.fn();

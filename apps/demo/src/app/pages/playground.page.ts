@@ -32,25 +32,25 @@ const TOOLBARS: readonly ToolbarPreset[] = ['full', 'standard', 'minimal'];
       <div class="demo-controls">
         <label>
           Thème
-          <select [value]="theme()" (change)="theme.set(selected($event))">
+          <select (change)="theme.set(selected($event))">
             @for (item of themes; track item) {
-              <option [value]="item">{{ item }}</option>
+              <option [value]="item" [selected]="item === theme()">{{ item }}</option>
             }
           </select>
         </label>
         <label>
           Langue
-          <select [value]="locale()" (change)="locale.set(selected($event))">
+          <select (change)="locale.set(selected($event))">
             @for (item of locales; track item) {
-              <option [value]="item">{{ item }}</option>
+              <option [value]="item" [selected]="item === locale()">{{ item }}</option>
             }
           </select>
         </label>
         <label>
           Toolbar
-          <select [value]="toolbar()" (change)="toolbar.set(selectedPreset($event))">
+          <select (change)="toolbar.set(selectedPreset($event))">
             @for (item of toolbars; track item) {
-              <option [value]="item">{{ item }}</option>
+              <option [value]="item" [selected]="item === toolbar()">{{ item }}</option>
             }
           </select>
         </label>

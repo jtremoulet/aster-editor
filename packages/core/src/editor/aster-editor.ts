@@ -118,7 +118,7 @@ export class AsterEditorImpl implements AsterEditor {
   }
 
   setHTML(html: string, emit = true): void {
-    this.tiptap.commands.setContent(html, { emitUpdate: emit });
+    this.replaceContent(html, emit);
   }
 
   getJSON(): AsterDocument {
@@ -126,7 +126,27 @@ export class AsterEditorImpl implements AsterEditor {
   }
 
   setJSON(doc: AsterDocument, emit = true): void {
-    this.tiptap.commands.setContent(doc, { emitUpdate: emit });
+    this.replaceContent(doc, emit);
+  }
+
+  /**
+   * Remplace tout le document en une seule transaction. Sans `emit`, le remplacement
+   * est aussi exclu de l'historique (`addToHistory: false`) : une écriture programmatique
+   * silencieuse (`writeValue` d'un formulaire, resynchronisation) ne doit pas devenir une
+   * étape que Ctrl+Z annulerait. La chaîne partage la même transaction entre `setContent`
+   * et `command`, donc la méta s'applique bien à l'écriture elle-même.
+   */
+  private replaceContent(content: string | AsterDocument, emit: boolean): void {
+    this.tiptap
+      .chain()
+      .setContent(content, { emitUpdate: emit })
+      .command(({ tr }) => {
+        if (!emit) {
+          tr.setMeta('addToHistory', false);
+        }
+        return true;
+      })
+      .run();
   }
 
   getText(): string {

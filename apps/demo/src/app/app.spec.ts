@@ -25,4 +25,14 @@ describe('App', () => {
       '/readonly',
     ]);
   });
+
+  it('donne un titre de document à chaque page', () => {
+    const pages = routes.filter((route) => route.path !== '**');
+    expect(pages.map((route) => route.title)).toEqual([
+      'Playground · Aster',
+      'Reactive form · Aster',
+      'Import Word · Aster',
+      'Lecture seule · Aster',
+    ]);
+  });
 });

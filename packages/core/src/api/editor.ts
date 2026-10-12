@@ -26,9 +26,14 @@ export interface AsterEditor {
 
   /** HTML sémantique, stable : `setHTML(getHTML())` est idempotent. */
   getHTML(): string;
-  /** Remplace tout le contenu. `emit` à `false` n'émet pas `change`, pour `writeValue` côté Angular. */
+  /**
+   * Remplace tout le contenu. `emit` à `false` n'émet pas `change` et n'entre pas dans
+   * l'historique d'annulation (un `undo` qui suit ne restaure pas l'ancien document),
+   * pour `writeValue` côté Angular et toute resynchronisation silencieuse.
+   */
   setHTML(html: string, emit?: boolean): void;
   getJSON(): AsterDocument;
+  /** Pendant JSON de `setHTML` : mêmes règles pour `emit` (pas de `change`, hors historique). */
   setJSON(doc: AsterDocument, emit?: boolean): void;
   /** Texte brut, paragraphes séparés par des sauts de ligne. */
   getText(): string;

@@ -14,6 +14,8 @@ interface FormSnapshot {
   body: string;
   dirty: boolean;
   touched: boolean;
+  /** `touched` du seul contrôle `body` : l'erreur du corps ne doit pas dépendre du titre. */
+  bodyTouched: boolean;
   valid: boolean;
   disabled: boolean;
 }
@@ -43,8 +45,12 @@ const PREVIEW_LENGTH = 160;
         </label>
 
         <div class="demo-field">
-          <span>Corps</span>
-          <aster-editor formControlName="body" placeholder="Rédige le corps de l'article…" />
+          <span id="body-label">Corps</span>
+          <aster-editor
+            formControlName="body"
+            ariaLabelledBy="body-label"
+            placeholder="Rédige le corps de l'article…"
+          />
           @if (bodyError()) {
             <span class="demo-error">Le corps ne peut pas être vide.</span>
           }
@@ -101,8 +107,8 @@ export class FormPage {
   });
 
   protected readonly bodyError = computed(() => {
-    const { touched, disabled } = this.snapshot();
-    return touched && !disabled && this.form.controls.body.invalid;
+    const { bodyTouched, disabled } = this.snapshot();
+    return bodyTouched && !disabled && this.form.controls.body.invalid;
   });
 
   protected readonly payload = signal<string | null>(null);
@@ -131,6 +137,7 @@ export class FormPage {
       body: this.form.controls.body.value,
       dirty: this.form.dirty,
       touched: this.form.touched,
+      bodyTouched: this.form.controls.body.touched,
       valid: this.form.valid,
       disabled: this.form.controls.body.disabled,
     };

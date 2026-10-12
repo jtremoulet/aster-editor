@@ -10,7 +10,9 @@ describe('ImportPage', () => {
     await fixture.whenStable();
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('.demo-dropzone')).not.toBeNull();
-    expect(host.querySelector('input[type="file"]')?.getAttribute('accept')).toBe('.docx');
+    const fileInput = host.querySelector('input[type="file"]');
+    expect(fileInput?.getAttribute('accept')).toBe('.docx');
+    expect(fileInput?.getAttribute('aria-label')).toContain('.docx');
     expect(host.querySelector('aster-editor .aster-toolbar')).not.toBeNull();
     expect(host.querySelector('.demo-notice')?.textContent).toContain('Coller depuis Word');
   });

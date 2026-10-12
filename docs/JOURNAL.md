@@ -130,3 +130,15 @@
 - Vérifié en navigateur : playground (31 items de toolbar, contenu riche), formulaire réactif (frappe → `value.body` mis à jour, blur), lecture seule (thème night, pas de toolbar, `contenteditable=false`). Zéro erreur console. Capture `03-demo-angular-playground.jpg`.
 - Revue : 2 remarques non bloquantes (placeholder à chaud via internals Tiptap, fenêtre de quelques ms avant le chargement lazy de `word`).
 - `npm run check` complet : **546 tests verts**. Bump **0.2.0**. Critère d'acceptation n° 5 (reactive form) atteint.
+
+### 00:00 — L7 should-features rendu et intégré (agent 15 min, 229k tokens, 69 outils)
+- +23 tests core (288, 95 %), +35 tests ui (125, 98 %). Tout additif, contrat intact, `search.*` enregistrées hors `STANDARD_COMMAND_IDS`.
+- Vérifié en navigateur : `search.open` → panneau, 4 correspondances surlignées « 1 / 4 », `next`, `replaceAll`, vue source avec HTML modifié au retour et toolbar grisée pendant, plein écran `position: fixed` et sortie à Échap. 34 items de toolbar en preset `full`.
+- Différé : icônes inline des 3 composants à rapatrier dans `icons/index.ts` (confié à L11), ajout des ids `search.*` au contrat au prochain dégel, recherche indisponible en lecture seule (le registre refuse `run`) → L9.
+- 0.2.0 → prochain bump 0.3.0 après L10/L11/L12.
+
+### 00:05 — Revue R-angular rendue (agent 7 min, 156k tokens, 54 outils)
+- 4 findings bloquants prouvés ou avec scénario précis : `touched` posé dès un clic sur la toolbar (le `mousedown` vole le focus), `writeValue` annulable par Ctrl+Z (pas d'`addToHistory: false`), validateur de la démo refusant une image seule, erreur du corps conditionnée par `form.touched` au lieu de `body.touched`. 8 mineurs (SSR charge `word` inutilement via un `effect`, a11y, titres de routes, `[value]` sur `<select>`).
+- Deux de ces bugs sont invisibles sous jsdom (focus au `mousedown`) : argument de plus pour les e2e Playwright (L12 en cours).
+- Lot L9a lancé (`affbe982`) pour tout corriger avec un test par finding. Correctif A-2 porté dans le core : `setHTML(html, false)` écrit désormais hors historique, JSDoc du contrat mise à jour.
+- `test:coverage` ajouté au paquet angular par l'orchestrateur, et `npm run test` racine simplifié.

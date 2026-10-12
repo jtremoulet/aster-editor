@@ -96,6 +96,16 @@ describe('createDropdown', () => {
     expect(document.activeElement).toBe(items[0]);
   });
 
+  it('le mousedown du déclencheur ne vole pas le focus à l’éditeur', () => {
+    const dropdown = mount();
+    const mousedown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    dropdown.trigger.dispatchEvent(mousedown);
+    expect(mousedown.defaultPrevented).toBe(true);
+    expect(dropdown.isOpen()).toBe(false);
+    dropdown.trigger.click();
+    expect(dropdown.isOpen()).toBe(true);
+  });
+
   it('ArrowDown sur le déclencheur ouvre le menu', () => {
     const dropdown = mount();
     key(dropdown.trigger, 'ArrowDown');

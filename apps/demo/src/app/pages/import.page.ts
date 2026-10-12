@@ -27,7 +27,13 @@ import type { DocxImportWarning } from '@aster-editor/angular';
       >
         <strong>Glisse un fichier .docx ici</strong>
         <span>ou</span>
-        <input type="file" accept=".docx" (change)="onFileChange($event)" [disabled]="busy()" />
+        <input
+          type="file"
+          accept=".docx"
+          aria-label="Choisir un fichier .docx à importer"
+          (change)="onFileChange($event)"
+          [disabled]="busy()"
+        />
         @if (fileName(); as name) {
           <span>Importé : {{ name }}</span>
         }

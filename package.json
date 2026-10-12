@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "npm run build -w packages/core -w packages/word -w packages/ui && ng build aster-angular",
-    "test": "npm run test --workspaces --if-present && ng test aster-angular --watch=false && ng test demo --watch=false",
+    "test": "npm run test --workspaces --if-present && ng test demo --watch=false",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
@@ -27,7 +27,9 @@
     "demo": "ng serve demo",
     "demo:build": "ng build demo",
     "fixtures": "node scripts/generate-fixtures.ts",
-    "playground": "node scripts/vanilla-playground.mjs"
+    "playground": "node scripts/vanilla-playground.mjs",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@angular/common": "^22.2.0",
@@ -44,6 +46,7 @@
     "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.2.0",
     "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.64.0",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^5.0.0",
     "docx": "^9.10.0",

@@ -1,7 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ComponentFixture } from '@angular/core/testing';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import type { EnvironmentProviders, Provider } from '@angular/core';
 import type { AsterEditor } from '@aster-editor/core';
 import { describe, expect, it, vi } from 'vitest';
@@ -12,7 +12,15 @@ import { ASTER_UPLOAD_HANDLER } from './tokens';
 /** Inputs posables avant le premier rendu (valeurs libres : `setInput` n'est pas typé). */
 type Inputs = Partial<
   Record<
-    'toolbar' | 'theme' | 'locale' | 'placeholder' | 'readonly' | 'config' | 'wordPaste',
+    | 'toolbar'
+    | 'theme'
+    | 'locale'
+    | 'placeholder'
+    | 'readonly'
+    | 'config'
+    | 'wordPaste'
+    | 'ariaLabel'
+    | 'ariaLabelledBy',
     unknown
   >
 >;
@@ -116,6 +124,39 @@ describe('AsterEditorComponent', () => {
     expect(changed).not.toHaveBeenCalled();
   });
 
+  it('writeValue identique au HTML courant ne réécrit rien et ne bouge pas la sélection', async () => {
+    const { component, editor } = await mount();
+    component.writeValue('<p>Salut</p>');
+    editor.focus('end');
+    const before = editor.tiptap.state.selection.from;
+    const setHTML = vi.spyOn(editor, 'setHTML');
+    component.writeValue('<p>Salut</p>');
+    expect(setHTML).not.toHaveBeenCalled();
+    expect(editor.tiptap.state.selection.from).toBe(before);
+  });
+
+  it('writeValue n’entre pas dans l’historique : undo ne restaure pas l’ancienne valeur', async () => {
+    const { component, editor } = await mount();
+    const onChange = vi.fn();
+    component.registerOnChange(onChange);
+    component.writeValue('<p>Un</p>');
+    component.writeValue('<p>Deux</p>');
+    expect(editor.commands.canRun('undo')).toBe(false);
+    expect(editor.commands.run('undo')).toBe(false);
+    expect(editor.getHTML()).toBe('<p>Deux</p>');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('writeValue(null) reçu avant le montage l’emporte sur config.content', async () => {
+    TestBed.configureTestingModule({ imports: [AsterEditorComponent] });
+    const fixture = TestBed.createComponent(AsterEditorComponent);
+    fixture.componentRef.setInput('config', { content: '<p>Config</p>' });
+    fixture.componentInstance.writeValue(null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.editor()?.isEmpty()).toBe(true);
+  });
+
   it('writeValue reçu avant le montage devient le contenu initial', async () => {
     TestBed.configureTestingModule({ imports: [AsterEditorComponent] });
     const fixture = TestBed.createComponent(AsterEditorComponent);
@@ -152,6 +193,47 @@ describe('AsterEditorComponent', () => {
     editor.contentElement.dispatchEvent(new FocusEvent('blur'));
     expect(onTouched).toHaveBeenCalledTimes(1);
     expect(blurred).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignore le blur vers la toolbar mais pas vers un élément extérieur', async () => {
+    const { fixture, component, editor } = await mount();
+    const onTouched = vi.fn();
+    const blurred = vi.fn();
+    component.registerOnTouched(onTouched);
+    component.blurred.subscribe(blurred);
+    const bold = boldButton(fixture);
+    expect(bold).not.toBeNull();
+    editor.contentElement.dispatchEvent(new FocusEvent('blur', { relatedTarget: bold }));
+    expect(onTouched).not.toHaveBeenCalled();
+    expect(blurred).not.toHaveBeenCalled();
+
+    const outside = document.createElement('input');
+    document.body.append(outside);
+    try {
+      editor.contentElement.dispatchEvent(new FocusEvent('blur', { relatedTarget: outside }));
+      expect(onTouched).toHaveBeenCalledTimes(1);
+      expect(blurred).toHaveBeenCalledTimes(1);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it('applique ariaLabel et ariaLabelledBy sur le contenteditable, au montage et à chaud', async () => {
+    const { fixture, component, editor } = await mount({ ariaLabel: 'Corps' });
+    expect(editor.contentElement.getAttribute('aria-label')).toBe('Corps');
+    expect(editor.contentElement.hasAttribute('aria-labelledby')).toBe(false);
+
+    fixture.componentRef.setInput('ariaLabel', undefined);
+    fixture.componentRef.setInput('ariaLabelledBy', 'body-label');
+    fixture.detectChanges();
+    expect(editor.contentElement.hasAttribute('aria-label')).toBe(false);
+    expect(editor.contentElement.getAttribute('aria-labelledby')).toBe('body-label');
+
+    fixture.componentRef.setInput('toolbar', false);
+    fixture.detectChanges();
+    const next = component.editor();
+    expect(next).not.toBe(editor);
+    expect(next?.contentElement.getAttribute('aria-labelledby')).toBe('body-label');
   });
 
   it('setDisabledState passe en lecture seule, cumulé avec l’input readonly', async () => {
@@ -208,6 +290,49 @@ describe('AsterEditorComponent', () => {
     expect(ready).toHaveBeenCalledWith(next);
   });
 
+  it('après remontage, la frappe appelle onChange avec la nouvelle instance', async () => {
+    const { fixture, component } = await mount({ toolbar: 'minimal' });
+    const onChange = vi.fn();
+    const changed = vi.fn();
+    component.registerOnChange(onChange);
+    component.changed.subscribe(changed);
+    fixture.componentRef.setInput('toolbar', 'standard');
+    fixture.detectChanges();
+    const next = component.editor();
+    next?.tiptap.commands.insertContent('y');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('<p>y</p>');
+    expect(changed).toHaveBeenCalledWith('<p>y</p>');
+  });
+
+  it('ne repasse pas autofocus au remontage', async () => {
+    const { fixture, component, editor } = await mount({
+      toolbar: 'minimal',
+      config: { autofocus: true },
+    });
+    expect(editor.tiptap.options.autofocus).toBe('end');
+    fixture.componentRef.setInput('toolbar', false);
+    fixture.detectChanges();
+    const next = component.editor();
+    expect(next).not.toBe(editor);
+    expect(next?.tiptap.options.autofocus).toBe(false);
+  });
+
+  it('setDisabledState(true) avant le montage survit à un changement de toolbar', async () => {
+    TestBed.configureTestingModule({ imports: [AsterEditorComponent] });
+    const fixture = TestBed.createComponent(AsterEditorComponent);
+    fixture.componentRef.setInput('toolbar', 'minimal');
+    fixture.componentInstance.setDisabledState(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.editor()?.isReadOnly()).toBe(true);
+    fixture.componentRef.setInput('toolbar', 'standard');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.editor()?.isReadOnly()).toBe(true);
+    fixture.componentInstance.setDisabledState(false);
+    expect(fixture.componentInstance.editor()?.isReadOnly()).toBe(false);
+  });
+
   it('fusionne provideAster, config et inputs dédiés dans cet ordre de priorité', async () => {
     const { fixture, editor } = await mount(
       { locale: 'en', config: { theme: 'night', placeholder: 'Local' } },
@@ -250,6 +375,19 @@ describe('AsterEditorComponent', () => {
     expect(out).toContain('MsoNormal');
   });
 
+  it('wordPaste passé de faux à vrai après le montage active le transformateur', async () => {
+    const { fixture, editor } = await mount({ wordPaste: false });
+    const transform = (): string | undefined =>
+      editor.tiptap.view.someProp('transformPastedHTML', (fn) => fn(WORD_HTML, editor.tiptap.view));
+    expect(transform()).toContain('MsoNormal');
+    fixture.componentRef.setInput('wordPaste', true);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      expect(transform()).not.toContain('MsoNormal');
+      expect(transform()).toContain('Bonjour');
+    });
+  });
+
   it('importDocx charge le module Word, remplace le contenu et émet change', async () => {
     const { component, editor } = await mount();
     const onChange = vi.fn();
@@ -263,6 +401,22 @@ describe('AsterEditorComponent', () => {
     expect(editor.getHTML()).toContain('<h1>Titre principal</h1>');
     expect(editor.getHTML()).toContain('<ol>');
     expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('importDocx détruit pendant l’import se résout sans écrire ni appeler onChange', async () => {
+    const { fixture, component } = await mount();
+    const onChange = vi.fn();
+    component.registerOnChange(onChange);
+    const bytes = await readFixture('fixtures/docx/01-headings-lists.docx');
+    const file = new File([bytes], '01.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    });
+    const pending = component.importDocx(file);
+    fixture.destroy();
+    const result = await pending;
+    expect(result.html).toContain('<h1>Titre principal</h1>');
+    expect(component.editor()).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('importDocx rejette tant que l’éditeur n’est pas monté', async () => {
@@ -333,5 +487,36 @@ describe('AsterEditorComponent dans un reactive form', () => {
     fixture.detectChanges();
     expect(editor.isReadOnly()).toBe(true);
     expect(editor.commands.canRun('bold')).toBe(false);
+  });
+});
+
+@Component({
+  imports: [AsterEditorComponent, FormsModule],
+  template: '<aster-editor [(ngModel)]="value" toolbar="minimal" />',
+})
+class ModelHostComponent {
+  value = '<p>Modèle</p>';
+}
+
+describe('AsterEditorComponent avec ngModel', () => {
+  it('reflète la valeur dans les deux sens malgré l’écriture asynchrone de ngModel', async () => {
+    TestBed.configureTestingModule({ imports: [ModelHostComponent] });
+    const fixture = TestBed.createComponent(ModelHostComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const component = fixture.debugElement.children[0]?.componentInstance as AsterEditorComponent;
+    const editor = component.editor();
+    if (!editor) {
+      throw new Error('editor not mounted');
+    }
+    await vi.waitFor(() => expect(editor.getHTML()).toBe('<p>Modèle</p>'));
+
+    editor.tiptap.commands.insertContentAt(editor.tiptap.state.doc.content.size - 1, ' x');
+    expect(fixture.componentInstance.value).toBe('<p>Modèle x</p>');
+
+    fixture.componentInstance.value = '<p>Autre</p>';
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(editor.getHTML()).toBe('<p>Autre</p>'));
   });
 });

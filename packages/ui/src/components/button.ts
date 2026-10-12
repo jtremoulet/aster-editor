@@ -23,12 +23,24 @@ export interface PlainButtonOptions {
 }
 
 /**
+ * Empêche le `mousedown` d'un bouton de voler le focus au contenteditable : sans cela,
+ * chaque clic de toolbar provoque un `blur` de l'éditeur (le wrapper Angular marquerait le
+ * contrôle `touched`) suivi d'un `focus` artificiel. Le `click` est émis normalement, et la
+ * navigation clavier ne passe pas par là. Partagé par tous les boutons pour rester stable.
+ */
+function keepEditorFocus(event: MouseEvent): void {
+  event.preventDefault();
+}
+
+/**
  * Crée un `<button type="button">` stylé toolbar avec icône optionnelle. Brique de base
- * des boutons de commande, des déclencheurs de dropdown et des entrées de menu.
+ * des boutons de commande, des déclencheurs de dropdown et des entrées de menu. Le
+ * `mousedown` est neutralisé pour ne pas déplacer le focus hors de l'éditeur.
  */
 export function createPlainButton(options: PlainButtonOptions = {}): HTMLButtonElement {
   const className = [BUTTON_CLASS, options.className].filter(Boolean).join(' ');
   const button = el('button', { className, attrs: { type: 'button' } });
+  button.addEventListener('mousedown', keepEditorFocus);
   if (options.toolbarItem) {
     button.setAttribute(TOOLBAR_ITEM_ATTR, '');
     button.tabIndex = -1;

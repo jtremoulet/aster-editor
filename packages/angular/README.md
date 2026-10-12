@@ -51,8 +51,10 @@ composant.
 ## 📝 Reactive form
 
 Le composant implémente `ControlValueAccessor` : la valeur du contrôle est le HTML sémantique de
-`getHTML()`. `dirty` passe à vrai à la frappe, `touched` au blur, `disabled` met l'éditeur en
-lecture seule. `writeValue` n'émet rien.
+`getHTML()`. `dirty` passe à vrai à la frappe, `touched` au blur vers l'extérieur de l'éditeur
+(cliquer la toolbar ne compte pas), `disabled` met l'éditeur en lecture seule. `writeValue`
+n'émet rien, n'entre pas dans l'historique d'annulation, et ignore une valeur identique au
+contenu courant (la sélection ne bouge pas).
 
 ```ts
 import { Component } from '@angular/core';
@@ -87,22 +89,27 @@ export class ArticleFormComponent {
 
 ## 🎛️ Inputs et outputs
 
-| Input         | Type                      | Défaut effectif | À chaud                                                     |
-| ------------- | ------------------------- | --------------- | ----------------------------------------------------------- |
-| `toolbar`     | `ToolbarConfig`           | `'standard'`    | Remonte l'éditeur : contenu conservé, historique perdu      |
-| `theme`       | `AsterTheme`              | `'light'`       | Oui                                                         |
-| `locale`      | `AsterLocale`             | `'fr'`          | Oui, toolbar comprise                                       |
-| `placeholder` | `string \| undefined`     | chaîne i18n     | Oui                                                         |
-| `readonly`    | `boolean`                 | `false`         | Oui, cumulé avec le `disabled` du formulaire                |
-| `config`      | `Partial<AsterUiOptions>` | `{}`            | Seules les clés ci-dessus sont relues ; le reste au montage |
-| `wordPaste`   | `boolean`                 | `true`          | Oui                                                         |
+| Input            | Type                      | Défaut effectif | À chaud                                                     |
+| ---------------- | ------------------------- | --------------- | ----------------------------------------------------------- |
+| `toolbar`        | `ToolbarConfig`           | `'standard'`    | Remonte l'éditeur : contenu conservé, historique perdu      |
+| `theme`          | `AsterTheme`              | `'light'`       | Oui                                                         |
+| `locale`         | `AsterLocale`             | `'fr'`          | Oui, toolbar comprise                                       |
+| `placeholder`    | `string \| undefined`     | chaîne i18n     | Oui                                                         |
+| `readonly`       | `boolean`                 | `false`         | Oui, cumulé avec le `disabled` du formulaire                |
+| `config`         | `Partial<AsterUiOptions>` | `{}`            | Seules les clés ci-dessus sont relues ; le reste au montage |
+| `wordPaste`      | `boolean`                 | `true`          | Oui                                                         |
+| `ariaLabel`      | `string \| undefined`     | aucun           | Oui : `aria-label` sur le contenteditable                   |
+| `ariaLabelledBy` | `string \| undefined`     | aucun           | Oui : `aria-labelledby` sur le contenteditable              |
 
-| Output    | Payload       | Quand                                                       |
-| --------- | ------------- | ----------------------------------------------------------- |
-| `ready`   | `AsterEditor` | Éditeur monté. Réémis après un remontage (`toolbar`)        |
-| `changed` | `string`      | Document modifié, HTML de `getHTML()`. Pas sur `writeValue` |
-| `focused` | `void`        | Focus du contenu                                            |
-| `blurred` | `void`        | Blur du contenu (marque aussi le contrôle `touched`)        |
+Un contenteditable ne s'associe pas à un `<label for>` : nomme la zone de saisie avec
+`ariaLabel`, ou `ariaLabelledBy` pointant sur l'`id` de ton libellé visible.
+
+| Output    | Payload       | Quand                                                                                          |
+| --------- | ------------- | ---------------------------------------------------------------------------------------------- |
+| `ready`   | `AsterEditor` | Éditeur monté. Réémis après un remontage (`toolbar`)                                           |
+| `changed` | `string`      | Document modifié, HTML de `getHTML()`. Pas sur `writeValue`                                    |
+| `focused` | `void`        | Focus du contenu                                                                               |
+| `blurred` | `void`        | Focus perdu vers l'extérieur de l'éditeur (pas vers la toolbar) ; marque le contrôle `touched` |
 
 API publique du composant :
 

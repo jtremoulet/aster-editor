@@ -49,6 +49,15 @@ type ExtensionPluginFactory = (this: {
   parent: undefined;
 }) => ProseMirrorPlugin[];
 
+/** Pose l'attribut quand une valeur est fournie, le retire sinon. */
+function setOrRemoveAttribute(element: HTMLElement, name: string, value: string | undefined): void {
+  if (value === undefined || value === '') {
+    element.removeAttribute(name);
+  } else {
+    element.setAttribute(name, value);
+  }
+}
+
 /**
  * Composant Angular standalone autour de `createAster` (`@aster-editor/ui`).
  *
@@ -56,16 +65,18 @@ type ExtensionPluginFactory = (this: {
  *   La valeur du formulaire est le HTML sémantique de `getHTML()`.
  * - Zoneless et `OnPush` : rien dans le template ne dépend de l'état, les sorties sont
  *   des `output()` et l'éditeur est exposé en signal.
- * - SSR-safe : l'éditeur est monté dans `afterNextRender`, jamais dans le constructeur.
+ * - SSR-safe : l'éditeur est monté dans `afterNextRender`, jamais dans le constructeur, et
+ *   le module Word n'est chargé qu'à partir du montage (donc jamais côté serveur).
  *
  * Configuration, par priorité croissante : `provideAster(config)` < input `config` <
  * inputs dédiés (`toolbar`, `theme`, `locale`, `placeholder`, `readonly`). Un input dédié
  * laissé à `undefined` n'écrase donc pas la valeur venue de la configuration.
  *
- * Changements à chaud : `theme`, `locale`, `readonly` et `placeholder` sont appliqués sur
- * l'instance vivante. `toolbar` remonte l'éditeur (le contenu est conservé, l'historique
- * d'annulation est perdu, `ready` est réémis avec la nouvelle instance). Les autres clés
- * de `config` (`extensions`, `commands`, `upload`…) ne sont lues qu'au montage.
+ * Changements à chaud : `theme`, `locale`, `readonly`, `placeholder`, `ariaLabel` et
+ * `ariaLabelledBy` sont appliqués sur l'instance vivante. `toolbar` remonte l'éditeur (le
+ * contenu est conservé, l'historique d'annulation est perdu, `ready` est réémis avec la
+ * nouvelle instance). Les autres clés de `config` (`extensions`, `commands`, `upload`…) ne
+ * sont lues qu'au montage.
  */
 @Component({
   selector: 'aster-editor',
@@ -98,12 +109,25 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * `wordPasteTransformer()` de `@aster-editor/word`, chargé dynamiquement au montage.
    */
   readonly wordPaste = input<boolean>(true);
+  /**
+   * Nom accessible de la zone de saisie (`aria-label` sur le contenteditable). Un
+   * contenteditable n'est pas associable à un `<label for>`, c'est le seul moyen de le nommer.
+   */
+  readonly ariaLabel = input<string | undefined>(undefined);
+  /** `id` (ou liste d'ids) de l'élément qui sert de libellé (`aria-labelledby` sur le contenteditable). */
+  readonly ariaLabelledBy = input<string | undefined>(undefined);
 
   /** L'éditeur est monté et prêt. Réémis après un remontage (changement de `toolbar`). */
   readonly ready = output<AsterEditor>();
   /** Le document a changé : HTML de `getHTML()`. Pas émis sur `writeValue`. */
   readonly changed = output<string>();
+  /** Le contenteditable a pris le focus. */
   readonly focused = output<void>();
+  /**
+   * Le contenteditable a perdu le focus au profit d'un élément extérieur à l'éditeur. Un
+   * blur vers la toolbar ou un de ses menus n'est pas remonté : l'utilisateur est toujours
+   * « dans » l'éditeur. C'est aussi ce qui marque le contrôle de formulaire `touched`.
+   */
   readonly blurred = output<void>();
 
   private readonly editorState = signal<AsterEditor | null>(null);
@@ -186,6 +210,15 @@ export class AsterEditorComponent implements ControlValueAccessor {
       });
     });
     effect(() => {
+      const label = this.ariaLabel();
+      const labelledBy = this.ariaLabelledBy();
+      untracked(() => {
+        if (this.instance) {
+          this.applyAriaAttributes(this.instance.editor, label, labelledBy);
+        }
+      });
+    });
+    effect(() => {
       const toolbar = this.resolvedToolbar();
       untracked(() => {
         if (this.instance && this.mountedToolbar !== toolbar) {
@@ -193,9 +226,15 @@ export class AsterEditorComponent implements ControlValueAccessor {
         }
       });
     });
+    // Le chargement initial du module Word part de `mount()` (jamais côté serveur) ; cet
+    // effet ne couvre que le passage `false → true` d'un éditeur déjà monté.
     effect(() => {
       if (this.wordPaste()) {
-        untracked(() => this.loadWordPaste());
+        untracked(() => {
+          if (this.instance) {
+            this.loadWordPaste();
+          }
+        });
       }
     });
   }
@@ -206,17 +245,19 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * Importe un `.docx` via `@aster-editor/word` (chargé à la demande, mammoth reste dans
    * un chunk séparé), remplace le contenu de l'éditeur en émettant `change` pour que le
    * formulaire voie la nouvelle valeur, et rend le résultat avec ses avertissements.
-   * Le hook d'upload de l'éditeur est réutilisé pour les images embarquées.
+   * Le hook d'upload de l'éditeur est réutilisé pour les images embarquées. Si le
+   * composant est détruit ou remonté pendant l'import, le résultat est rendu mais aucun
+   * contenu n'est écrit : l'instance vivante est relue après chaque `await`.
    */
   async importDocx(file: File): Promise<DocxImportResult> {
-    const editor = this.instance?.editor;
-    if (!editor) {
+    if (!this.instance) {
       throw new Error('[aster-editor/angular] importDocx: editor is not mounted yet');
     }
+    const upload = untracked(() => this.resolvedOptions().upload);
     const { importDocx } = await import('@aster-editor/word');
-    const upload = this.resolvedOptions().upload;
     const result = await importDocx(file, upload ? { upload } : {});
-    if (!editor.isDestroyed()) {
+    const editor = this.instance?.editor;
+    if (editor && !editor.isDestroyed()) {
       editor.setHTML(result.html, true);
     }
     return result;
@@ -224,21 +265,31 @@ export class AsterEditorComponent implements ControlValueAccessor {
 
   // --- ControlValueAccessor ------------------------------------------------
 
-  /** Applique la valeur du formulaire sans émettre `change` ; mémorisée si l'éditeur n'est pas monté. */
+  /**
+   * Applique la valeur du formulaire sans émettre `change` ni entrer dans l'historique ;
+   * mémorisée si l'éditeur n'est pas monté. Une valeur identique au HTML courant est
+   * ignorée pour ne pas déplacer la sélection (les reactive forms réécrivent la valeur à
+   * chaque `setValue`, y compris quand elle n'a pas changé).
+   */
   writeValue(value: string | null | undefined): void {
     const html = value ?? '';
     const editor = this.instance?.editor;
-    if (editor) {
-      editor.setHTML(html, false);
-    } else {
+    if (!editor) {
       this.pendingValue = html;
+      return;
     }
+    if (editor.getHTML() === html) {
+      return;
+    }
+    editor.setHTML(html, false);
   }
 
+  /** Enregistre le rappel appelé avec le HTML à chaque modification du document par l'utilisateur. */
   registerOnChange(fn: (html: string) => void): void {
     this.onChange = fn;
   }
 
+  /** Enregistre le rappel appelé quand l'éditeur perd le focus vers l'extérieur (`touched`). */
   registerOnTouched(fn: () => void): void {
     this.onTouched = fn;
   }
@@ -251,15 +302,19 @@ export class AsterEditorComponent implements ControlValueAccessor {
 
   // --- Cycle de vie --------------------------------------------------------
 
+  /**
+   * Monte l'éditeur. `content` force le contenu initial (remontage) et, dans ce cas,
+   * `autofocus` est neutralisé : le focus est restauré explicitement par `remount()`.
+   */
   private mount(content?: string): void {
     if (this.instance) {
       return;
     }
-    const options = this.resolvedOptions(content);
+    const options = untracked(() => this.resolvedOptions(content));
     const instance = createAster(this.host().nativeElement, options);
     const editor = instance.editor;
     this.instance = instance;
-    this.mountedToolbar = this.resolvedToolbar();
+    this.mountedToolbar = options.toolbar ?? 'standard';
     this.pendingValue = null;
     this.subscriptions = [
       editor.on('ready', ({ editor: ready }) => this.ready.emit(ready)),
@@ -269,11 +324,20 @@ export class AsterEditorComponent implements ControlValueAccessor {
         this.changed.emit(html);
       }),
       editor.on('focus', () => this.focused.emit()),
-      editor.on('blur', () => {
+      editor.on('blur', ({ event }) => {
+        // Un blur vers la toolbar, un menu ou un dialogue de l'éditeur n'est pas une sortie.
+        const related = event.relatedTarget;
+        if (related instanceof Node && instance.element.contains(related)) {
+          return;
+        }
         this.onTouched?.();
         this.blurred.emit();
       }),
     ];
+    untracked(() => this.applyAriaAttributes(editor, this.ariaLabel(), this.ariaLabelledBy()));
+    if (untracked(() => this.wordPaste())) {
+      this.loadWordPaste();
+    }
     this.editorState.set(editor);
   }
 
@@ -306,6 +370,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
   /**
    * Fusionne `ASTER_CONFIG` < `config` < inputs dédiés. Le transformateur Word est placé
    * en tête pour que les transformateurs de l'intégrateur reçoivent du HTML déjà nettoyé.
+   * Avec `content` (remontage), `autofocus` est désactivé pour ne pas reprendre le focus.
    */
   private resolvedOptions(content?: string): AsterUiOptions {
     const merged = this.mergedConfig();
@@ -314,6 +379,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
     return {
       ...merged,
       content: initial,
+      autofocus: content === undefined ? merged.autofocus : false,
       toolbar: this.resolvedToolbar(),
       theme: this.resolvedTheme(),
       locale: this.resolvedLocale(),
@@ -339,6 +405,16 @@ export class AsterEditorComponent implements ControlValueAccessor {
           error,
         );
       });
+  }
+
+  /** Nom accessible du contenteditable : `aria-label` et/ou `aria-labelledby`, retirés si vides. */
+  private applyAriaAttributes(
+    editor: AsterEditor,
+    label: string | undefined,
+    labelledBy: string | undefined,
+  ): void {
+    setOrRemoveAttribute(editor.contentElement, 'aria-label', label);
+    setOrRemoveAttribute(editor.contentElement, 'aria-labelledby', labelledBy);
   }
 
   /**

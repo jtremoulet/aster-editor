@@ -46,6 +46,9 @@ export function createDropdown(options: DropdownOptions): Dropdown {
   const { editor } = options;
   const panelRole = options.panelRole ?? 'menu';
   const root = el('div', { className: 'aster-dropdown' });
+  // Le déclencheur hérite du `mousedown` neutralisé de `createPlainButton` : cliquer dessus
+  // ne retire pas le focus à l'éditeur, `open()` le déplace ensuite explicitement sur la
+  // première entrée du panneau.
   const trigger = createPlainButton({
     className: 'aster-dropdown__trigger',
     icon: options.icon,
