@@ -160,3 +160,9 @@
 - `print.css` ajouté à `aster.css` (6 imports). Preset `full` : dernier groupe à 5 widgets.
 - **Flake `image-upload.spec.ts` corrigé par l'orchestrateur** : 3 `flush()` à base de `setTimeout` remplacés par `vi.waitFor` sur le HTML attendu. 3 runs complets verts d'affilée. Cause : `FileReader` sous jsdom résout à un moment non déterministe.
 - 3 propositions de contrat différées (`getMarkdown` sur `AsterEditor`, `autosave` dans `AsterOptions`, JSDoc des widgets).
+
+### 00:22 — Revue R-word rendue (agent 25 min, preuves exécutables)
+- 3 bloquants : **2 regex quadratiques** (`isWordHtml` sur chaque collage, `parseListFormats`) exploitables par un site hostile au `copy` (2,3 Mo → 137 s), et `mso-yfti-firstrow:yes` pris pour un marqueur d'en-tête alors que Word le pose sur la première ligne de toute table → toutes les tables Word collées perdaient leur première ligne de données en `<th>`. 12 mineurs (sécurité par liste blanche confirmée mais `template`/`iframe`/`form` laissés, `importDocx(null)`, `Uint8Array` refusé, marqueurs `c.`/`1.1.`, overrides `lfo`, Google `list-style-type`).
+- Méthode du relecteur à retenir : un fichier de preuves `proofs.scratch.spec.ts` avec un test par finding assertant le comportement **obtenu**, qui passera au rouge une fois corrigé. Zéro finding sans entrée concrète.
+- Passes DOM mesurées linéaires jusqu'à 3 Mo. Lot L9b lancé (`a?`) pour les 15 findings.
+- Note : `export/` (L10) non relu par R-word, livré pendant la revue → revue dédiée à prévoir.
