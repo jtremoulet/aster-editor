@@ -6,7 +6,11 @@ import type { AsterLocale } from './i18n';
  * pour éviter les fermetures sur une instance détruite.
  */
 export interface AsterEvents {
-  /** L'éditeur est monté et prêt à recevoir des commandes. Émis une seule fois. */
+  /**
+   * L'éditeur est monté et prêt à recevoir des commandes. Émis une seule fois, dans une
+   * microtâche après `createEditor`, pour qu'un `on('ready')` posé juste après la création
+   * soit bien appelé.
+   */
   ready: (payload: { editor: AsterEditor }) => void;
   /** Le document a changé. Non émis pour un simple déplacement de sélection. */
   change: (payload: { editor: AsterEditor }) => void;

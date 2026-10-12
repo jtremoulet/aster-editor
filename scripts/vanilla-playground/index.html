@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aster — playground vanilla</title>
+    <link rel="stylesheet" href="dist/main.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: system-ui, sans-serif;
+        background: #f3f4f6;
+      }
+      .bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      #host {
+        max-width: 960px;
+      }
+      #out {
+        max-width: 960px;
+        margin-top: 16px;
+        padding: 12px;
+        background: #111827;
+        color: #e5e7eb;
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+        white-space: pre-wrap;
+        word-break: break-all;
+        border-radius: 8px;
+        max-height: 240px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <strong>Aster playground</strong>
+      <label
+        >Thème
+        <select id="theme">
+          <option value="light">light</option>
+          <option value="night">night</option>
+        </select></label
+      >
+      <label
+        >Langue
+        <select id="locale">
+          <option value="fr">fr</option>
+          <option value="en">en</option>
+        </select></label
+      >
+      <label
+        >Toolbar
+        <select id="toolbar">
+          <option value="full">full</option>
+          <option value="standard">standard</option>
+          <option value="minimal">minimal</option>
+        </select></label
+      >
+      <label>Lecture seule <input type="checkbox" id="readonly" /></label>
+      <label>Importer .docx <input type="file" id="docx" accept=".docx" /></label>
+      <button id="dump" type="button">getHTML()</button>
+      <span id="counts"></span>
+    </div>
+    <div id="host"></div>
+    <pre id="out"></pre>
+    <script type="module" src="dist/main.js"></script>
+  </body>
+</html>

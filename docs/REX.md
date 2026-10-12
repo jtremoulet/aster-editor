@@ -74,6 +74,8 @@ Notés au fil de l'eau, avec l'heure.
 - 22:15 — Vérifier la disponibilité des noms npm en 30 secondes a tranché le débat sur le nom avec des faits.
 - 22:40 — Lancer la génération Angular CLI en tâche de fond pendant l'écriture des configs racine a fait gagner 5 minutes. Les smoke tests Tiptap et mammoth en phase 0 ont validé les deux hypothèses techniques les plus risquées avant tout parallélisme.
 - 22:46 — Phase 0 bouclée en 12 minutes au lieu des 90 prévues, grâce aux docs de cadrage très précises : chaque fichier était déjà spécifié.
+- 23:15 — Les trois premiers lots sont rentrés en 11 à 20 minutes, tous verts au premier check, zéro fichier hors périmètre, zéro proposition de changement de contrat. Le contrat figé + le brief très précis (fichiers nommés, définition de fini en cases, ordre de sacrifice) fonctionnent.
+- 23:15 — Les rapports au format imposé se lisent en 1 minute et donnent directement les points à vérifier. Les « Décisions prises » sont la matière du REX.
 
 ## 🧱 Blocages et frictions
 
@@ -86,6 +88,9 @@ Notés au fil de l'eau, avec l'heure, la cause et le contournement.
 - 22:45 — Vitest échoue sur un paquet sans test. Contournement : `passWithNoTests`. Trivial mais ça aurait bloqué 4 agents au premier `npm run check`.
 - 22:46 — Les worktrees git n'embarquent pas `node_modules`. Décision : agents dans l'arbre principal sur dossiers disjoints. À réévaluer si un agent déborde de son périmètre.
 - 22:47 — Un `node -e` inline avec des backticks dans un script bash a été mangé par le shell et a vidé des mots du REX. Contournement : script dans un fichier `.cjs`. Leçon : jamais de code multi-lignes avec backticks en argument inline.
+- 23:13 — Deux agents ont signalé que `Write`/`Edit` décodent ` ` en caractère littéral, ce qui déclenche ESLint `no-irregular-whitespace`. À mettre dans les briefs : utiliser `String.fromCharCode(160)`.
+- 23:13 — Un agent a perdu du temps sur des heredocs bash avec des apostrophes françaises. À mettre dans les briefs : écrire les fichiers avec l'outil Write.
+- 23:10 — Mon propre `sed` a mangé un `s` dans une regex en passant par le shell : commit de correction derrière. Leçon : pour patcher du code, passer par un script Node dans un fichier, jamais par sed avec des backslashes.
 
 ## 🧭 Décisions de process prises en route
 

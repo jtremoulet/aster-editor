@@ -9,3 +9,4 @@ Thumbs.db
 .vscode/
 .idea/
 *.tsbuildinfo
+scripts/vanilla-playground/dist/

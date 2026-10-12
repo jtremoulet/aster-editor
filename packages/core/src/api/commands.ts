@@ -116,9 +116,17 @@ export interface AsterCommand<Args = unknown> {
   readonly id: CommandId;
   /** Clé i18n du libellé, par convention `command.<id>`. */
   readonly labelKey: string;
-  /** Identifiant d'icône, résolu par le paquet `ui`. Par convention égal à `id` sans le domaine. */
+  /**
+   * Identifiant d'icône, résolu par le paquet `ui`. Convention : `id` avec les points
+   * remplacés par des tirets (`table.insert` → `table-insert`), `ui` sait aussi
+   * convertir le camelCase (`bulletList` → `bullet-list`).
+   */
   readonly icon?: string;
-  /** Raccourci au format Tiptap/ProseMirror : `Mod-b`, `Mod-Shift-7`. Affiché dans le tooltip. */
+  /**
+   * Raccourci principal au format Tiptap/ProseMirror : `Mod-b`, `Mod-Shift-7`. Affiché dans
+   * le tooltip. Les commandes à liaisons multiples (`heading` avec `Mod-Alt-1..6`, `redo`
+   * avec `Mod-y`) exposent leurs liaisons supplémentaires via `EXTRA_SHORTCUT_BINDINGS` du core.
+   */
   readonly shortcut?: string;
   /** Exécute la commande. Retourne `false` si elle n'a rien fait. */
   run(editor: AsterEditor, args: Args): boolean;

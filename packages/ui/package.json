@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/ui",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Toolbar vanilla et thèmes CSS pour Aster Editor",
   "license": "MIT",
   "author": "Joris Tremoulet",

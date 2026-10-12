@@ -1,6 +1,6 @@
 {
   "name": "aster-editor",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Éditeur de texte riche MIT, framework-agnostic, avec wrapper Angular et import Word",
   "license": "MIT",
@@ -26,7 +26,8 @@
     "check": "npm run lint && npm run typecheck && npm run test",
     "demo": "ng serve demo",
     "demo:build": "ng build demo",
-    "fixtures": "node scripts/generate-fixtures.ts"
+    "fixtures": "node scripts/generate-fixtures.ts",
+    "playground": "node scripts/vanilla-playground.mjs"
   },
   "dependencies": {
     "@angular/common": "^22.2.0",

@@ -38,7 +38,7 @@ export interface AsterOptions {
   /** Extensions Tiptap additionnelles, ajoutées après le jeu standard. */
   extensions?: readonly AnyExtension[];
   /** Commandes custom enregistrées au montage. */
-  commands?: readonly AsterCommand<never>[];
+  commands?: readonly AsterCommand[];
   /** Transformateurs de collage, dans l'ordre d'application. */
   pasteTransformers?: readonly PasteTransformer[];
   upload?: UploadHandler;

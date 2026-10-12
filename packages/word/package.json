@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/word",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Import .docx et nettoyage du collage depuis Word et Google Docs pour Aster Editor",
   "license": "MIT",
   "author": "Joris Tremoulet",
