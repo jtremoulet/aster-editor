@@ -1,6 +1,6 @@
 # 🌙 Roadmap de la nuit — 12 → 13 octobre 2026
 
-> ✅ **Réalisé** : 0.3.0 livrée à 01:05, soit 7h en avance sur ce plan. Chronologie réelle et écarts dans [](./REX.md), détail dans [](./JOURNAL.md), bilan dans [](../BILAN.md). Ce document est conservé tel quel comme plan initial.
+> ✅ **Réalisé** : 0.3.0 livrée à 01:05, soit 7h en avance sur ce plan. Chronologie réelle et écarts dans [`REX.md`](./REX.md), détail dans [`JOURNAL.md`](./JOURNAL.md), bilan dans [`BILAN.md`](../BILAN.md). Ce document est conservé tel quel comme plan initial.
 >
 > Plan d'exécution de l'orchestrateur. Heure limite absolue : **08:30**. Gel des features à **07:30**.
 > Toute dérive se gère en coupant par le bas de la liste, jamais en sacrifiant les tests ou la revue.
