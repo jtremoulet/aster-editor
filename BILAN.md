@@ -35,7 +35,7 @@ Tous les « should » du cahier des charges sont livrés (recherche, vue source,
 
 | Mesure                     | Valeur                                                        |
 | -------------------------- | ------------------------------------------------------------- |
-| Tests unitaires            | **882** (core 363, word 281, ui 188, angular 30, démo 20)     |
+| Tests unitaires            | **883** (core 364, word 281, ui 188, angular 30, démo 20)     |
 | Tests e2e Playwright       | **21** (16 playground vanilla, 5 démo Angular), 6 s           |
 | Code TypeScript hors tests | 13 200 lignes, 222 fichiers `.ts`                             |
 | Tests                      | 10 500 lignes                                                 |
