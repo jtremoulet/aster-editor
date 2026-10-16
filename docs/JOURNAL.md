@@ -315,3 +315,4 @@
 - Page `/template` : exemple, formulaire généré depuis `variableNames()`, onglet résolu, 3 exports. Vérifiée par l'agent dans le navigateur (9 champs, « Fait à Montpellier »).
 - Friction : l'agent a lancé son propre `ng serve` et l'a arrêté, ce qui a tué celui de l'orchestrateur sur 4200 (même port). À mettre dans les briefs : ne pas arrêter un serveur qu'on n'a pas lancé, ou utiliser un autre port.
 - Point à surveiller : `aster-editor.component.ts` passe à 636 lignes → extraction `lib/variables.ts` en fin de session si le temps le permet.
+- 12:40 — `/template` vérifiée par l'orchestrateur en navigateur : exemple chargé (11 puces), 9 champs générés dans l'ordre du document, « 9 variables sans valeur », onglets Puces/Résolu, 3 boutons d'export. Détail cosmétique : un « ou » apparaît deux fois dans la dropzone (texte probablement visuellement masqué dupliqué dans l'accessibilité) → à corriger dans le lot docs/e2e.
