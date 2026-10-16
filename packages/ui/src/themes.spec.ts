@@ -91,7 +91,17 @@ describe('thèmes CSS', () => {
 
   it('chaque var(--aster-*) utilisée dans les CSS est définie dans les deux thèmes', () => {
     const used = new Set<string>();
-    for (const file of readdirSync(THEMES_DIR)) {
+    const files = readdirSync(THEMES_DIR);
+    // Feuilles de composants attendues : la vérification porte sur chacune d'elles.
+    for (const expected of [
+      'base.css',
+      'images-tables.css',
+      'search-source.css',
+      'variables.css',
+    ]) {
+      expect(files, `${expected} manquant dans themes/`).toContain(expected);
+    }
+    for (const file of files) {
       if (!file.endsWith('.css') || file === 'light.css' || file === 'night.css') continue;
       const css = readFileSync(join(THEMES_DIR, file), 'utf8');
       for (const match of css.matchAll(/var\((--aster-[\w-]+)/g)) used.add(match[1] ?? '');

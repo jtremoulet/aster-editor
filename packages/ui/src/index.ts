@@ -63,6 +63,32 @@ export {
   SPECIAL_CHARS_COLUMNS,
   createSpecialChars,
 } from './components/special-chars';
+export {
+  VARIABLE_NAME_PATTERN,
+  allowsUnknownVariables,
+  createVariableMenu,
+  isAcceptableVariableName,
+  placeholderText,
+  renderVariableEntry,
+} from './components/variable-menu';
+export type {
+  VariableSuggestion,
+  VariableSuggestionItem,
+  VariableSuggestionPanel,
+  VariableSuggestionPanelOptions,
+  VariableSuggestionPanelProps,
+} from './components/variable-suggestion';
+export {
+  VARIABLE_SUGGESTION_CHAR,
+  VARIABLE_SUGGESTION_PLUGIN_KEY,
+  buildSuggestionItems,
+  createVariableSuggestion,
+  createVariableSuggestionPanel,
+  filterVariables,
+  insertSuggestedVariable,
+} from './components/variable-suggestion';
+export type { VariableDialog, VariableEditEventDetail } from './components/variable-dialog';
+export { VARIABLE_EDIT_EVENT, createVariableDialog } from './components/variable-dialog';
 export type { PrintDocumentOptions, WindowOpener } from './components/print';
 export {
   PRINT_CONTENT_CLASS,

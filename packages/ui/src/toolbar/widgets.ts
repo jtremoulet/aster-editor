@@ -10,6 +10,7 @@ import { createSearchPanel } from '../components/search-panel';
 import { createSourceButton } from '../components/source-view';
 import { createSpecialChars } from '../components/special-chars';
 import { createTableGridPicker } from '../components/table-grid-picker';
+import { createVariableMenu } from '../components/variable-menu';
 import type { ToolbarWidget, WidgetFactory } from '../types';
 
 /** Un widget connu : sa fabrique et les commandes dont il a besoin pour exister. */
@@ -39,6 +40,7 @@ export const WIDGETS: Readonly<Record<string, WidgetDefinition>> = {
   fontFamily: { factory: createFontFamilyMenu, requires: ['fontFamily'] },
   fontSize: { factory: createFontSizeMenu, requires: ['fontSize'] },
   search: { factory: createSearchPanel, requires: ['search.open'] },
+  variable: { factory: createVariableMenu, requires: ['variable.insert'] },
   // Vue source, plein écran, caractères spéciaux et impression ne dépendent d'aucune
   // commande du core.
   source: { factory: createSourceButton, requires: [] },

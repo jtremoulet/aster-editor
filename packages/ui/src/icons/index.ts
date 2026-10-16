@@ -43,6 +43,10 @@ function lines(
 const TABLE_FRAME = '<rect x="3" y="4" width="14" height="12" rx="1.5"/>';
 const TABLE_GRID = '<path d="M3 8.5h14M3 12.5h14M8 8.5V16M12.5 8.5V16"/>';
 const LIST_LINES = '<path d="M8 4.7h9v1.6H8zM8 9.2h9v1.6H8zM8 13.7h9v1.6H8z"/>';
+/** Paire d'accolades ouvrante / fermante, base des icônes de variables. */
+const BRACES =
+  '<path d="M7 3H6.5A2 2 0 0 0 4.5 5v3a2 2 0 0 1-2 2 2 2 0 0 1 2 2v3a2 2 0 0 0 2 2H7"/>' +
+  '<path d="M13 3h.5a2 2 0 0 1 2 2v3a2 2 0 0 0 2 2 2 2 0 0 0-2 2v3a2 2 0 0 1-2 2H13"/>';
 
 const ICONS: Readonly<Record<string, string>> = {
   bold: fill(glyph('B', 10, 15, 15, 'font-weight="bold"')),
@@ -163,6 +167,10 @@ const ICONS: Readonly<Record<string, string>> = {
     '<path d="M6 7V3h8v4M6 14H4.5A1.5 1.5 0 0 1 3 12.5v-4A1.5 1.5 0 0 1 4.5 7h11A1.5 1.5 0 0 1 17 8.5v4a1.5 1.5 0 0 1-1.5 1.5H14"/>' +
       '<rect x="6" y="11" width="8" height="6" rx="1"/>',
   ),
+  // Variables (champs de fusion) : accolades `{{ }}`, variantes insérer / supprimer.
+  variable: stroke(BRACES),
+  'variable-insert': stroke(BRACES + '<path d="M10 7.5v5M7.5 10h5"/>'),
+  'variable-remove': stroke(BRACES + '<path d="M8 8l4 4M12 8l-4 4"/>'),
 };
 
 /** Icône de repli visible (point d'interrogation) pour un nom inconnu. */

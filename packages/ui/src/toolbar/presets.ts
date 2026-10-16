@@ -16,7 +16,7 @@ export const FULL_PRESET: readonly ToolbarGroup[] = [
   [widget('textColor'), widget('backgroundColor')],
   ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify'],
   ['bulletList', 'orderedList', 'taskList', 'outdent', 'indent'],
-  [widget('link'), widget('image'), widget('table')],
+  [widget('link'), widget('image'), widget('table'), widget('variable')],
   ['blockquote', 'codeBlock', 'horizontalRule'],
   ['clearFormatting'],
   [
@@ -35,7 +35,7 @@ export const STANDARD_PRESET: readonly ToolbarGroup[] = [
   ['bold', 'italic', 'underline', 'strike', 'code', 'highlight'],
   ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify'],
   ['bulletList', 'orderedList', 'taskList', 'outdent', 'indent'],
-  [widget('link'), widget('image'), widget('table')],
+  [widget('link'), widget('image'), widget('table'), widget('variable')],
   ['blockquote', 'codeBlock', 'horizontalRule'],
   ['clearFormatting'],
 ];

@@ -1,4 +1,5 @@
-import type { Editor } from '@tiptap/core';
+import type { Editor, Range } from '@tiptap/core';
+import type { Plugin } from '@tiptap/pm/state';
 import type {
   AsterCommand,
   AsterDictionary,
@@ -6,11 +7,14 @@ import type {
   AsterEventName,
   AsterEvents,
   AsterLocale,
+  AsterVariable,
   CommandId,
   CommandRegistry,
   I18n,
   TranslateParams,
   Unsubscribe,
+  VariableStore,
+  VariableValues,
 } from '@aster-editor/core';
 import { STANDARD_COMMAND_IDS, en, fr } from '@aster-editor/core';
 
@@ -33,6 +37,23 @@ export interface MockEditorOptions {
    * les boutons sans `aria-pressed`. Les autres déclarent `isActive` et lisent `active`.
    */
   stateless?: readonly string[];
+  /** Variables déclarées initialement (voir `VariableSource.variables`). */
+  variables?: readonly AsterVariable[];
+  /** Valeurs initiales des variables. */
+  variableValues?: VariableValues;
+  /** Insertion d'une variable non déclarée autorisée ? Vrai par défaut, comme le core. */
+  allowUnknownVariables?: boolean;
+}
+
+/** Nom de variable valide : même règle que le core (`isValidVariableName`). */
+const VARIABLE_NAME_PATTERN = /^[\p{L}\p{N}_][\p{L}\p{N}_.-]*$/u;
+
+/** Vrai si `args` ressemble aux arguments de `variable.insert`. */
+function readVariableInsertArgs(args: unknown): { name: string; label?: string } | null {
+  if (typeof args !== 'object' || args === null) return null;
+  const { name, label } = args as { name?: unknown; label?: unknown };
+  if (typeof name !== 'string') return null;
+  return typeof label === 'string' ? { name, label } : { name };
 }
 
 /**
@@ -51,6 +72,15 @@ export interface MockEditor extends AsterEditor {
   /** Noms renvoyés vrais par `tiptap.isActive(name)`. */
   readonly activeNodes: Set<string>;
   readonly focusCalls: number;
+  /**
+   * Noms des variables « présentes dans le document » (`variables.getNames`). Alimenté
+   * par `variable.insert`, modifiable par les tests.
+   */
+  readonly presentVariables: Set<string>;
+  /** Plugins ProseMirror enregistrés via `tiptap.registerPlugin`, dans l'ordre. */
+  readonly plugins: Plugin[];
+  /** Plages supprimées via `tiptap.commands.deleteRange`, dans l'ordre. */
+  readonly deletedRanges: Range[];
   /** Nombre d'écouteurs encore abonnés, tous événements confondus. */
   listenerCount(): number;
 }
@@ -140,15 +170,78 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     },
   };
 
+  const presentVariables = new Set<string>();
+  const plugins: Plugin[] = [];
+  const deletedRanges: Range[] = [];
+
   const tiptap = {
     getAttributes: (name: string): Record<string, unknown> => attributes.get(name) ?? {},
     isActive: (name: string): boolean => activeNodes.has(name),
+    registerPlugin: (plugin: Plugin): void => {
+      plugins.push(plugin);
+    },
+    unregisterPlugin: (key: unknown): void => {
+      const index = plugins.findIndex((plugin) => plugin.spec.key === key || plugin === key);
+      if (index >= 0) plugins.splice(index, 1);
+    },
+    commands: {
+      deleteRange: (range: Range): boolean => {
+        deletedRanges.push(range);
+        return true;
+      },
+    },
   } as unknown as Editor;
+
+  // --- Variables : magasin en mémoire fidèle au contrat `VariableStore` ---------------
+  const declared = new Map<string, AsterVariable>();
+  for (const variable of options.variables ?? []) declared.set(variable.name, variable);
+  let values: Record<string, string> = { ...(options.variableValues ?? {}) };
+  const allowUnknown = options.allowUnknownVariables ?? true;
+
+  /** Variable enrichie de sa valeur courante, comme `list()` du core. */
+  const withValue = (variable: AsterVariable): AsterVariable => {
+    const value = values[variable.name];
+    return value === undefined ? variable : { ...variable, value };
+  };
+
+  const variables: VariableStore = {
+    list: () => {
+      const result: AsterVariable[] = Array.from(declared.values(), withValue);
+      for (const name of presentVariables) {
+        if (!declared.has(name)) result.push(withValue({ name }));
+      }
+      return result;
+    },
+    getNames: () => Array.from(presentVariables),
+    getValues: () => ({ ...values }),
+    setValues: (next) => {
+      const merged: Record<string, string> = { ...values };
+      for (const [name, value] of Object.entries(next)) {
+        if (value === undefined) delete merged[name];
+        else merged[name] = value;
+      }
+      values = merged;
+      editor.emit('variablesChange', { editor, values: { ...values } });
+    },
+    define: (list) => {
+      for (const variable of list) {
+        const { value, ...rest } = variable;
+        declared.set(variable.name, { ...(declared.get(variable.name) ?? {}), ...rest });
+        if (value !== undefined) values = { ...values, [variable.name]: value };
+      }
+      editor.emit('variablesChange', { editor, values: { ...values } });
+    },
+    insert: (name, label) =>
+      commands.run('variable.insert', label === undefined ? { name } : { name, label }),
+    resolve: () => Promise.resolve({ ...values }),
+    hasUnresolved: () => Array.from(presentVariables).some((name) => values[name] === undefined),
+  };
 
   const editor: MockEditor = {
     tiptap,
     commands,
     i18n,
+    variables,
     element,
     contentElement,
     calls,
@@ -156,6 +249,9 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     disabled,
     attributes,
     activeNodes,
+    presentVariables,
+    plugins,
+    deletedRanges,
     get focusCalls() {
       return focusCalls;
     },
@@ -236,6 +332,31 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
           }),
     };
     commands.register(command);
+  }
+
+  // `variable.insert` suit le contrat du core : refusée en lecture seule, pour un nom
+  // invalide, et pour un nom non déclaré quand `allowUnknown` est faux. L'insertion marque
+  // la variable comme présente dans le document.
+  if (ids.includes('variable.insert')) {
+    const generic = registry.get('variable.insert');
+    commands.register<unknown>({
+      id: 'variable.insert',
+      labelKey: 'command.variable.insert',
+      run: (_editor, args) => {
+        const parsed = readVariableInsertArgs(args);
+        if (!parsed) return false;
+        calls.push({ id: 'variable.insert', args });
+        presentVariables.add(parsed.name);
+        return true;
+      },
+      canRun: (_editor, args) => {
+        const parsed = readVariableInsertArgs(args);
+        if (!parsed || readOnly || disabled.has('variable.insert')) return false;
+        if (!VARIABLE_NAME_PATTERN.test(parsed.name)) return false;
+        return allowUnknown || declared.has(parsed.name);
+      },
+      ...(generic?.isActive ? { isActive: generic.isActive } : {}),
+    });
   }
 
   return editor;

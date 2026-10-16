@@ -30,5 +30,10 @@
   },
   "peerDependencies": {
     "@aster-editor/core": ">=0.0.1"
+  },
+  "dependencies": {
+    "@tiptap/suggestion": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@floating-ui/dom": "^1.8.0"
   }
 }

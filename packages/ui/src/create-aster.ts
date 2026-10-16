@@ -3,6 +3,8 @@ import type { AsterTheme, Unsubscribe } from '@aster-editor/core';
 import { getFullscreen } from './components/fullscreen';
 import { releaseSourceView, retainSourceView } from './components/source-view';
 import { createTableContextMenu } from './components/table-context-menu';
+import { createVariableDialog } from './components/variable-dialog';
+import { createVariableSuggestion } from './components/variable-suggestion';
 import { createToolbar, registerUiTranslations } from './toolbar/create-toolbar';
 import type { AsterInstance, AsterUiOptions, Toolbar } from './types';
 import { el } from './utils/dom';
@@ -21,7 +23,12 @@ import { el } from './utils/dom';
  * Angular utilise. `toolbar` vaut `'standard'` par défaut, `theme` vaut `'light'`.
  */
 export function createAster(host: HTMLElement, options: AsterUiOptions = {}): AsterInstance {
-  const { toolbar: toolbarConfig = 'standard', theme = 'light', ...editorOptions } = options;
+  const {
+    toolbar: toolbarConfig = 'standard',
+    theme = 'light',
+    variableSuggestion = true,
+    ...editorOptions
+  } = options;
 
   const root = el('div', { className: 'aster', attrs: { 'data-theme': theme } });
   const toolbarContainer = el('div', { className: 'aster__toolbar' });
@@ -52,6 +59,13 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
   // `fullscreen` de la toolbar (même instance via `retainSourceView` / `getFullscreen`).
   const sourceView = retainSourceView(editor);
   const fullscreen = getFullscreen(editor);
+  // Variables (champs de fusion), dès que le core expose `variable.insert` : édition de
+  // puce au double-clic (`aster:variable-edit`) et suggestion `{{` (désactivable).
+  const hasVariables = editor.commands.has('variable.insert');
+  const variableDialog = hasVariables ? createVariableDialog(editor) : null;
+  const suggestion = hasVariables && variableSuggestion ? createVariableSuggestion(editor) : null;
+  if (variableDialog)
+    subscriptions.push(editor.on('readOnlyChange', () => variableDialog.update()));
 
   let destroyed = false;
 
@@ -73,6 +87,8 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
       releaseSourceView(sourceView);
       for (const unsubscribe of subscriptions) unsubscribe();
       subscriptions.length = 0;
+      suggestion?.destroy();
+      variableDialog?.destroy();
       tableMenu?.destroy();
       toolbar?.destroy();
       if (!editor.isDestroyed()) editor.destroy();

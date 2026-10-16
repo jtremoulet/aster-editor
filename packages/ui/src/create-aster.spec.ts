@@ -108,11 +108,46 @@ describe('createAster', () => {
     expect(editor.listenerCount()).toBe(0);
   });
 
+  it('monte la suggestion {{ et le dialogue de puce, retirés au destroy', () => {
+    const instance = createAster(host, { toolbar: false });
+    expect(editor.plugins.length).toBe(1);
+    expect(vi.mocked(createEditor).mock.calls[0]?.[0]).not.toHaveProperty('variableSuggestion');
+    editor.contentElement.dispatchEvent(
+      new CustomEvent('aster:variable-edit', { bubbles: true, detail: { pos: 1, name: 'x' } }),
+    );
+    const dialog = editor.element.querySelector('.aster-variable-dialog');
+    expect(dialog?.hasAttribute('hidden')).toBe(false);
+    editor.setReadOnly(true);
+    expect(dialog?.hasAttribute('hidden')).toBe(true);
+    instance.destroy();
+    expect(editor.plugins.length).toBe(0);
+    expect(editor.element.querySelector('.aster-variable-dialog')).toBeNull();
+  });
+
+  it('variableSuggestion: false n’enregistre pas le plugin ; rien sans variable.insert', () => {
+    const instance = createAster(host, { toolbar: false, variableSuggestion: false });
+    expect(editor.plugins.length).toBe(0);
+    expect(vi.mocked(createEditor).mock.calls[0]?.[0]).not.toHaveProperty('variableSuggestion');
+    expect(editor.element.querySelector('.aster-variable-dialog')).toBeNull();
+    editor.contentElement.dispatchEvent(
+      new CustomEvent('aster:variable-edit', { bubbles: true, detail: { pos: 1, name: 'x' } }),
+    );
+    expect(editor.element.querySelector('.aster-variable-dialog')).not.toBeNull();
+    instance.destroy();
+
+    editor = createMockEditor({ commands: ['bold'] });
+    const bare = createAster(host, { toolbar: false });
+    expect(editor.plugins.length).toBe(0);
+    expect(editor.listenerCount()).toBe(0);
+    bare.destroy();
+  });
+
   it('destroy détruit toolbar et éditeur, retire l’élément, idempotent', () => {
     const instance = createAster(host);
     // 3 abonnements de la toolbar (selectionChange, readOnlyChange, localeChange)
-    // + 2 du menu contextuel de table (readOnlyChange, selectionChange).
-    expect(editor.listenerCount()).toBe(5);
+    // + 2 du menu contextuel de table (readOnlyChange, selectionChange)
+    // + 1 du widget `variable` (variablesChange) + 1 du dialogue de puce (readOnlyChange).
+    expect(editor.listenerCount()).toBe(7);
     instance.destroy();
     expect(editor.isDestroyed()).toBe(true);
     expect(editor.listenerCount()).toBe(0);

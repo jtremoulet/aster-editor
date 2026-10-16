@@ -32,11 +32,15 @@ describe('icons', () => {
       'fullscreen-exit',
       'special-chars',
       'print',
+      'variable',
+      'variable-insert',
+      'variable-remove',
     ]) {
       expect(hasIcon(name), `icône manquante : ${name}`).toBe(true);
     }
     expect(getIcon('fullscreen')).not.toBe(getIcon('fullscreen-exit'));
     expect(getIcon('search-previous')).not.toBe(getIcon('search-next'));
+    expect(getIcon('variable-insert')).not.toBe(getIcon('variable-remove'));
   });
 
   it('retourne un repli visible pour un nom inconnu', () => {

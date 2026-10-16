@@ -12,6 +12,11 @@ export interface Toolbar {
 export interface AsterUiOptions extends Omit<AsterOptions, 'element'> {
   toolbar?: ToolbarConfig;
   theme?: AsterTheme;
+  /**
+   * Menu de suggestion déclenché par `{{` dans le contenu (variables du magasin, création
+   * si autorisée). Vrai par défaut, dès que le core expose `variable.insert`.
+   */
+  variableSuggestion?: boolean;
 }
 
 /** Résultat de `createAster` : éditeur + toolbar montés dans un hôte avec le thème appliqué. */
