@@ -342,3 +342,16 @@
 - 21 → **35 tests e2e**, 3 runs verts, ~10,5 s. L'agent a trouvé par Entrée réelle le même bug dans le menu `/` que R14 dans le menu `{{` (plugin enregistré derrière les keymaps) : corrigé par l'orchestrateur d'une ligne, test durci sur `Enter`, 35/35 revérifiés.
 - Playground : `#vars-names` n'était pas rafraîchi après un import ; corrigé.
 - `data-testid` proposés (playground, page Modèle, panneaux ui) : différés en V1.1, comme en session 1.
+
+### 16/10 11:48 — L19b docs rendu et intégré, gel 0.4.0 (agent 22 min, 403k tokens, 116 outils)
+
+- 11 fichiers de documentation réécrits ou relus, compteurs recalculés par script depuis les sources (50 commandes standard, 16 widgets, 77 icônes, 8 feuilles CSS, 63/110 clés i18n), exemples TypeScript des docs typecheckés. 8 écarts code-docs corrigés, dont une convention de clés `word.*` documentée mais inexistante dans le code.
+- Deux JSDoc de code signalées par l'agent, corrigées par l'orchestrateur : « huit passes » de collage (neuf), liste des widgets de `ToolbarWidgetItem` (+ `outline`, `formatPainter`).
+- **Gel final** : `npm run check` vert (1 254 tests : core 449, word 454, ui 289, angular 39, démo 23), `npm run build` vert, `npm run e2e` 35/35 en 11,5 s. Arbre propre, `develop` poussé.
+- Fin de session 2 à 11:48, soit 1h50 de GO à 0.4.0 plus 25 min de documentation et de gel.
+
+#### Reprendre le travail
+
+1. Lire `BILAN_SESSION2.md` (5 min), puis `docs/ROADMAP_SESSION2.md` pour ce qui a été différé.
+2. Tester dans Word réel avec `samples/README.md` et déposer un `.docx` client dans `fixtures/docx/`.
+3. Prochain contrat à dégeler (additif) : `VariableStore.allowUnknown` / `canInsert`, événements `formatPainterChange` / `sourceViewChange`, option `headingIds`.

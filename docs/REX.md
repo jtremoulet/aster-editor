@@ -175,7 +175,7 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 | L21 fix import            | 21 min           | 224k               | 65           | +45                 | 15/15 corrigés                                 |
 | L22 fix export            | 13 min           | 207k               | 88           | +19                 | 13/13 corrigés                                 |
 | L19a e2e                  | 9 min            | 168k               | 51           | +14 e2e             | 1 bug trouvé (Entrée menu /)                   |
-| L19b docs                 | —                | —                  | —            | —                   | —                                              |
+| L19b docs                 | 22 min           | 403k               | 116          | —                   | 11 fichiers, 8 écarts code-docs corrigés       |
 
 ## ✅ Ce qui a mieux marché qu'en session 1
 

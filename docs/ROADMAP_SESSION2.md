@@ -1,4 +1,4 @@
-# 🌙 Roadmap session 2 — 16 → 19 octobre 2026
+# 🌙 Roadmap session 2 — 16 → 19 octobre 2026 ✅ réalisée le 16/10 (0.4.0)
 
 > Objectif de Joris : d'ici **lundi 19 octobre 09:00**, un éditeur le plus proche possible de CKEditor, en priorité sur l'import et l'export Word **avec variables** (champs de fusion). Défauts validés : trois formes détectées (`{{nom}}`, `MERGEFIELD`, contrôles de contenu), `{{nom}}` canonique, valeurs statiques + résolveur asynchrone optionnel, export `resolve` ou `fields` au choix.
 > Point de départ : 0.3.0 sur `develop`, 893 tests unitaires + 21 e2e verts. Même rituel que la session 1, avec les leçons du REX : revues au fil de l'eau, pièges d'outillage dans les briefs, pas deux agents qui lancent des e2e en même temps.
