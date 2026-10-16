@@ -51,6 +51,7 @@ export {
   retainSourceView,
 } from './components/source-view';
 export type { Fullscreen } from './components/fullscreen';
+export { OPEN_PANEL_SELECTORS, registerOpenPanelSelector } from './components/fullscreen';
 export {
   FULLSCREEN_CLASS,
   createFullscreen,

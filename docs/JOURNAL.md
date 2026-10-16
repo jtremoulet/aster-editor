@@ -322,3 +322,10 @@
 - 3 sous-lots livrés : bulles de lien/image (floating-ui), menu `/` (suggestion), sommaire + format painter. ui 270 tests, core +17. Décisions à retenir : ids de titres posés **à la demande** (ouverture du sommaire) pour ne pas casser 71 assertions sur des `<hN>` nus ; saut de page seulement si un nœud `pageBreak` existe (schéma standard sans).
 - Commité par chemins explicites (L20 toujours en cours sur les fichiers variables).
 - **Vérifié en navigateur** : bulle de lien (URL + Modifier + Supprimer), bulle d'image (3 alignements, 3 largeurs, modifier, supprimer), `/tab` → « Tableau 3 × 3 », ids `aster-h-1/2` sérialisés, 39 items de toolbar. **Bug trouvé** : le sommaire affiche chaque titre deux fois à l'ouverture (4 puis 2 après `update()`) : `ensureHeadingIds` dispatche une transaction pendant `renderPanel` → `selectionChange` → re-rendu imbriqué qui s'ajoute au rendu en cours. Correctif orchestrateur à suivre.
+
+### 16/10 11:15 — L20 correctifs variables rendu et intégré (agent 17 min, 261k tokens, 101 outils)
+
+- 14 findings corrigés, core 425 → 449, ui 230 → 289, avec des **tests d'intégration réels** (vrai core, vrai `keydown`) imposés par le brief ; les 3 bloquants revérifiés en navigateur par l'agent.
+- Décision retenue : nom de variable invalide → nœud inerte (`variableName()` rend `''`), plutôt qu'un rejet de `setJSON`. Changement de sémantique à noter au changelog.
+- `OPEN_PANEL_SELECTORS` / `registerOpenPanelSelector` exportés par l'orchestrateur depuis `ui/src/index.ts`.
+- Horodatage : les heures notées plus haut dans la session 2 (11:50, 12:05…) étaient estimées ; l'horloge réelle est 11:15 à ce point. Les heures suivantes viennent de `date`.
