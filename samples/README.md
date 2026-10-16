@@ -22,8 +22,7 @@ Généré par le lot L16 avec **toutes** les options activées : mode `fields` a
 ### Ajouts après la revue de l'export (L22)
 
 13. [ ] Publipostage → Insérer un champ de fusion reconnaît un champ au nom cité `MERGEFIELD "Nom du client"` (exporter depuis le playground une puce nommée avec un espace via le panneau Variables).
-14. [ ] Une valeur multi-ligne en mode résolu (`"12 rue Haute
-34000 Montpellier"`) rend deux lignes.
+14. [ ] Une valeur multi-ligne en mode résolu (deux lignes séparées par un saut de ligne dans la valeur) rend deux lignes.
 15. [ ] Un document dont l'en-tête contient un appel de note s'ouvre sans réparation (l'appel est rendu en exposant, note dans le corps seulement).
 16. [ ] Une table avec `colspan` démesuré s'ouvre sans réparation, bornée à 63 colonnes.
 17. [ ] Marges 150/150 mm → page avec 1 cm utile, pas de boîte bloquante « marges hors zone imprimable ».
