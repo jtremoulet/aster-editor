@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AsterEditor } from '@aster-editor/core';
+import { VARIABLE_EDIT_EVENT as CORE_EVENT, createEditor } from '@aster-editor/core';
 import { createMockEditor, type MockEditor } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
 import { VARIABLE_EDIT_EVENT, createVariableDialog, type VariableDialog } from './variable-dialog';
@@ -86,6 +88,43 @@ describe('createVariableDialog', () => {
     expect(editor.calls).toEqual([]);
   });
 
+  it('un libellé modifié ne passe que { name, label } à define : pas de valeur ressuscitée (V-4)', () => {
+    editor.variables.setValues({ 'client.name': 'ACME' });
+    const define = vi.spyOn(editor.variables, 'define');
+    editor.contentElement.dispatchEvent(edit('client.name'));
+    expect(input('value').value).toBe('ACME');
+    input('label').value = 'Customer';
+    input('value').value = '';
+    button('Apply').click();
+    expect(define).toHaveBeenCalledTimes(1);
+    expect(define).toHaveBeenCalledWith([{ name: 'client.name', label: 'Customer' }]);
+    expect(editor.variables.getValues()).toEqual({ date: '2026-10-16' });
+  });
+
+  it('VARIABLE_EDIT_EVENT est celui du core (V-11)', () => {
+    expect(VARIABLE_EDIT_EVENT).toBe(CORE_EVENT);
+  });
+
+  it('se retraduit sur localeChange tant qu’il est ouvert, saisie et focus conservés (V-9)', () => {
+    const baseline = editor.listenerCount();
+    editor.contentElement.dispatchEvent(edit('client.name'));
+    expect(editor.listenerCount()).toBe(baseline + 1);
+    input('value').value = 'brouillon';
+    input('value').focus();
+    editor.i18n.setLocale('fr');
+    expect(dialog.isOpen()).toBe(true);
+    expect(dialog.element.getAttribute('aria-label')).toBe('Modifier la variable');
+    expect(button('Appliquer')).toBeDefined();
+    expect(input('label').value).toBe('Client name');
+    expect(input('value').value).toBe('brouillon');
+    expect(document.activeElement).toBe(input('value'));
+    // Fermé : plus abonné, la locale ne reconstruit plus rien.
+    button('Annuler').click();
+    expect(editor.listenerCount()).toBe(baseline);
+    editor.i18n.setLocale('en');
+    expect(dialog.isOpen()).toBe(false);
+  });
+
   it('rien ne change si rien n’est modifié', () => {
     let changes = 0;
     editor.on('variablesChange', () => {
@@ -162,5 +201,82 @@ describe('createVariableDialog', () => {
     expect(dialog.element.isConnected).toBe(false);
     editor.contentElement.dispatchEvent(edit('client.name'));
     expect(dialog.isOpen()).toBe(false);
+  });
+});
+
+describe('createVariableDialog avec le vrai core', () => {
+  let host: HTMLElement;
+  let editor: AsterEditor;
+  let dialog: VariableDialog;
+
+  const input = (kind: 'label' | 'value'): HTMLInputElement =>
+    dialog.element.querySelector<HTMLInputElement>(`.aster-variable-dialog__${kind}`)!;
+  const button = (text: string): HTMLButtonElement =>
+    Array.from(dialog.element.querySelectorAll<HTMLButtonElement>('.aster-dialog__button')).find(
+      (b) => b.textContent === text,
+    )!;
+  const posOf = (name: string): number => {
+    let found = -1;
+    editor.tiptap.state.doc.descendants((node, pos) => {
+      if (found < 0 && node.type.name === 'variable' && node.attrs['name'] === name) found = pos;
+      return found < 0;
+    });
+    return found;
+  };
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.append(host);
+    editor = createEditor({
+      element: host,
+      content: '<p></p>',
+      locale: 'en',
+      variables: { variables: [{ name: 'client', label: 'Client' }] },
+    });
+    registerUiTranslations(editor);
+    dialog = createVariableDialog(editor);
+  });
+
+  afterEach(() => {
+    dialog.destroy();
+    editor.destroy();
+    host.remove();
+  });
+
+  it('préremplit le libellé depuis la puce, même non déclarée, et le met à jour (V-5)', () => {
+    expect(editor.variables.insert('ville', 'Ville')).toBe(true);
+    dialog.open({ pos: posOf('ville'), name: 'ville' });
+    expect(input('label').value).toBe('Ville');
+    input('label').value = 'Cité';
+    button('Apply').click();
+    expect(editor.getHTML()).toBe(
+      '<p><span data-aster-variable="ville" data-label="Cité">{{ville}}</span></p>',
+    );
+    expect(editor.variables.list()).toEqual([
+      { name: 'client', label: 'Client' },
+      { name: 'ville', label: 'Cité' },
+    ]);
+  });
+
+  it('retombe sur le libellé du magasin quand la puce n’en porte pas', () => {
+    expect(editor.variables.insert('client')).toBe(true);
+    dialog.open({ pos: posOf('client'), name: 'client' });
+    expect(input('label').value).toBe('Client');
+    // Le libellé du nœud prime sur celui du magasin.
+    editor.tiptap.commands.setNodeSelection(posOf('client'));
+    editor.tiptap.commands.updateAttributes('variable', { label: 'Cliente' });
+    dialog.open({ pos: posOf('client'), name: 'client' });
+    expect(input('label').value).toBe('Cliente');
+  });
+
+  it('s’ouvre au double-clic sur la puce (événement du core)', () => {
+    editor.variables.insert('client');
+    editor.contentElement
+      .querySelector('.aster-variable')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+    expect(dialog.isOpen()).toBe(true);
+    expect(dialog.element.querySelector('.aster-variable-dialog__title')?.textContent).toBe(
+      '{{client}}',
+    );
   });
 });

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AsterVariable } from '@aster-editor/core';
+import type { AsterEditor, AsterVariable } from '@aster-editor/core';
+import { createEditor } from '@aster-editor/core';
 import { createMockEditor, type MockEditor } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
+import { getFullscreen } from './fullscreen';
 import {
   VARIABLE_SUGGESTION_PLUGIN_KEY,
   buildSuggestionItems,
@@ -9,6 +11,7 @@ import {
   createVariableSuggestionPanel,
   filterVariables,
   insertSuggestedVariable,
+  type VariableSuggestion,
   type VariableSuggestionItem,
   type VariableSuggestionPanel,
 } from './variable-suggestion';
@@ -191,6 +194,54 @@ describe('createVariableSuggestionPanel', () => {
     }
   });
 
+  it('pose aria-controls / aria-expanded / aria-activedescendant sur le contenu, retirés à hide (V-6)', () => {
+    const content = editor.contentElement;
+    expect(content.hasAttribute('aria-controls')).toBe(false);
+    panel.update({ items: items(''), command });
+    expect(panel.element.id).toMatch(/^aster-variable-suggestion-/);
+    expect(content.getAttribute('aria-controls')).toBe(panel.element.id);
+    expect(content.getAttribute('aria-expanded')).toBe('true');
+    expect(options().map((option) => option.id)).toEqual([
+      'aster-variable-option-0',
+      'aster-variable-option-1',
+      'aster-variable-option-2',
+      'aster-variable-option-3',
+    ]);
+    expect(content.getAttribute('aria-activedescendant')).toBe('aster-variable-option-0');
+    panel.onKeyDown(key('ArrowDown'));
+    expect(content.getAttribute('aria-activedescendant')).toBe('aster-variable-option-1');
+    options()[3]?.dispatchEvent(new Event('pointerenter'));
+    expect(content.getAttribute('aria-activedescendant')).toBe('aster-variable-option-3');
+    // Sans entrée : pas de descendant actif, le panneau reste contrôlé.
+    panel.update({ items: [], command });
+    expect(content.hasAttribute('aria-activedescendant')).toBe(false);
+    expect(content.getAttribute('aria-expanded')).toBe('true');
+    panel.hide();
+    expect(content.hasAttribute('aria-controls')).toBe(false);
+    expect(content.hasAttribute('aria-expanded')).toBe(false);
+    expect(content.hasAttribute('aria-activedescendant')).toBe(false);
+  });
+
+  it('bascule au-dessus du curseur quand le panneau ne tient pas en dessous (V-14)', () => {
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { value: 200, configurable: true });
+    panel.element.getBoundingClientRect = (): DOMRect =>
+      ({ width: 100, height: 100, left: 0, top: 0, right: 100, bottom: 100 }) as DOMRect;
+    try {
+      // Tient en dessous : 54 + 100 ≤ 200.
+      panel.update({ items: items(''), command, clientRect: rect(10, 50) });
+      expect(panel.element.style.top).toBe('54px');
+      // Ne tient plus : 174 + 100 > 200 → au-dessus du texte (top 150) : 150 - 100 - 4.
+      panel.update({ items: items(''), command, clientRect: rect(10, 170) });
+      expect(panel.element.style.top).toBe('46px');
+      // Ne tient ni dessous ni dessus : ramené dans le viewport.
+      panel.update({ items: items(''), command, clientRect: rect(10, 110) });
+      expect(panel.element.style.top).toBe('0px');
+    } finally {
+      Object.defineProperty(window, 'innerHeight', { value: originalHeight, configurable: true });
+    }
+  });
+
   it('hide vide et cache, destroy retire l’élément', () => {
     panel.update({ items: items(''), command });
     panel.hide();
@@ -246,5 +297,109 @@ describe('createVariableSuggestion', () => {
     editor.destroy();
     suggestion.destroy();
     expect(editor.plugins.length).toBe(1);
+  });
+});
+
+/**
+ * Intégration avec le vrai core (Tiptap + ProseMirror sous jsdom) : l'ordre des plugins
+ * et la frappe réelle ne se simulent pas avec le mock.
+ */
+describe('createVariableSuggestion avec le vrai core', () => {
+  let host: HTMLElement;
+  let editor: AsterEditor;
+  let suggestion: VariableSuggestion;
+
+  /** Laisse le plugin Suggestion récupérer ses entrées (`items` est attendu en asynchrone). */
+  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const press = (key: string): KeyboardEvent => {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    editor.contentElement.dispatchEvent(event);
+    return event;
+  };
+  /** Place le curseur juste après le texte `text` (première occurrence). */
+  const cursorAfter = (text: string): void => {
+    let at = -1;
+    editor.tiptap.state.doc.descendants((node, pos) => {
+      if (at < 0 && node.isText && node.text?.includes(text)) {
+        at = pos + (node.text?.indexOf(text) ?? 0) + text.length;
+      }
+      return at < 0;
+    });
+    editor.tiptap.commands.setTextSelection(at);
+  };
+  const type = async (text: string): Promise<void> => {
+    editor.tiptap.view.dispatch(editor.tiptap.state.tr.insertText(text));
+    await flush();
+  };
+  const html = (): string => editor.getHTML().replace(/<p><\/p>$/, '');
+  const CHIP =
+    '<span data-aster-variable="client.name" data-label="Client name">{{client.name}}</span>';
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.append(host);
+    editor = createEditor({
+      element: host,
+      content: '<p>Bonjour</p>',
+      variables: { variables: [{ name: 'client.name', label: 'Client name' }] },
+    });
+    registerUiTranslations(editor);
+    suggestion = createVariableSuggestion(editor);
+  });
+
+  afterEach(() => {
+    suggestion.destroy();
+    if (!editor.isDestroyed()) editor.destroy();
+    host.remove();
+  });
+
+  it('enregistre le plugin en tête, avant les keymaps de Tiptap', () => {
+    expect(editor.tiptap.state.plugins[0]?.spec.key).toBe(VARIABLE_SUGGESTION_PLUGIN_KEY);
+  });
+
+  it('Entrée dans le panneau insère la puce sans couper le paragraphe (V-1)', async () => {
+    cursorAfter('Bonjour');
+    await type(' {{cl');
+    expect(suggestion.panel.isOpen()).toBe(true);
+    expect(suggestion.panel.element.hasAttribute('hidden')).toBe(false);
+    expect(suggestion.panel.selectedIndex()).toBe(0);
+    expect(press('Enter').defaultPrevented).toBe(true);
+    expect(html()).toBe(`<p>Bonjour ${CHIP}</p>`);
+    expect(editor.tiptap.state.doc.childCount).toBe(1);
+    expect(suggestion.panel.isOpen()).toBe(false);
+    expect(editor.variables.getNames()).toEqual(['client.name']);
+  });
+
+  it('Tab dans une liste valide l’entrée au lieu d’indenter l’élément (V-1)', async () => {
+    editor.setHTML('<ul><li><p>Un</p></li><li><p>Deux</p></li></ul>');
+    cursorAfter('Deux');
+    await type(' {{cl');
+    expect(suggestion.panel.isOpen()).toBe(true);
+    expect(press('Tab').defaultPrevented).toBe(true);
+    expect(html()).toBe(`<ul><li><p>Un</p></li><li><p>Deux ${CHIP}</p></li></ul>`);
+  });
+
+  it('ne s’ouvre pas dans un bloc de code (V-8)', async () => {
+    editor.setHTML('<pre><code>x</code></pre>');
+    cursorAfter('x');
+    await type(' {{cl');
+    expect(suggestion.panel.isOpen()).toBe(false);
+    expect(press('Enter').defaultPrevented).toBe(true);
+    expect(html()).toBe('<pre><code>x {{cl\n</code></pre>');
+  });
+
+  it('en plein écran, Échap ferme le panneau et garde le plein écran (V-2)', async () => {
+    const fullscreen = getFullscreen(editor);
+    fullscreen.set(true);
+    cursorAfter('Bonjour');
+    await type(' {{cl');
+    expect(suggestion.panel.isOpen()).toBe(true);
+    press('Escape');
+    expect(suggestion.panel.isOpen()).toBe(false);
+    expect(fullscreen.isActive()).toBe(true);
+    expect(html()).toBe('<p>Bonjour {{cl</p>');
+    press('Escape');
+    expect(fullscreen.isActive()).toBe(false);
+    fullscreen.destroy();
   });
 });

@@ -21,10 +21,14 @@ export function variablePlaceholder(name: string): string {
   return `{{${name}}}`;
 }
 
-/** Nom porté par un nœud `variable`, chaîne vide s'il est absent ou mal typé. */
+/**
+ * Nom porté par un nœud `variable`, chaîne vide s'il est absent, mal typé ou **invalide**
+ * (`isValidVariableName`). Un nœud au nom invalide, par exemple injecté via `setJSON`,
+ * devient ainsi inerte : absent de `getNames`/`list`, sans `data-aster-variable` à l'export.
+ */
 export function variableName(node: ProseMirrorNode): string {
   const name: unknown = node.attrs['name'];
-  return typeof name === 'string' ? name : '';
+  return typeof name === 'string' && isValidVariableName(name) ? name : '';
 }
 
 /** Libellé d'un nœud `variable`, `null` s'il n'en a pas. */
@@ -67,10 +71,25 @@ export function canInsertVariable(editor: AsterEditor, name: string): boolean {
   return isAsterVariableStore(store) ? store.canInsert(name) : isValidVariableName(name);
 }
 
+/** Déclaration sans sa valeur : les valeurs vivent uniquement dans le magasin de valeurs. */
+function withoutValue(variable: AsterVariable): AsterVariable {
+  const { value: _value, ...definition } = variable;
+  return definition;
+}
+
 /**
  * Magasin des variables d'un éditeur : déclarations, valeurs, résolveur, événement
  * `variablesChange`. Les noms présents dans le document sont lus en parcourant les nœuds
  * `variable` ; tant que l'extension n'est pas enregistrée, le document n'en contient aucun.
+ *
+ * Les valeurs ont une seule source de vérité : `values`. Une déclaration (`variables`,
+ * `define`) qui porte `value` l'y verse puis l'oublie, si bien qu'une valeur effacée par
+ * `setValues({ nom: undefined })` ne réapparaît ni dans `list()` ni après un `define`
+ * sans `value`.
+ *
+ * `resolve()` applique toutes les valeurs obtenues même si le résolveur échoue pour
+ * certaines variables : les succès sont conservés et `variablesChange` émis, puis la
+ * promesse est rejetée avec la première erreur rencontrée.
  *
  * Le rafraîchissement visuel des puces est à la charge de l'extension `Variable`, dont
  * le NodeView s'abonne à `variablesChange`.
@@ -85,7 +104,7 @@ export function createVariableStore(
   const allowUnknown = source.allowUnknown !== false;
 
   for (const variable of source.variables ?? []) {
-    definitions.set(variable.name, variable);
+    definitions.set(variable.name, withoutValue(variable));
     if (variable.value !== undefined) values.set(variable.name, variable.value);
   }
   for (const [name, value] of Object.entries(source.values ?? {})) {
@@ -119,7 +138,7 @@ export function createVariableStore(
     list: () => {
       const seen = new Map<string, AsterVariable>();
       for (const [name, definition] of definitions) {
-        const value = values.get(name) ?? definition.value;
+        const value = values.get(name);
         seen.set(name, value === undefined ? { ...definition } : { ...definition, value });
       }
       for (const name of getNames()) {
@@ -141,7 +160,10 @@ export function createVariableStore(
     },
     define: (variables) => {
       for (const variable of variables) {
-        definitions.set(variable.name, { ...definitions.get(variable.name), ...variable });
+        definitions.set(variable.name, {
+          ...definitions.get(variable.name),
+          ...withoutValue(variable),
+        });
         if (variable.value !== undefined) values.set(variable.name, variable.value);
       }
       emit();
@@ -151,17 +173,24 @@ export function createVariableStore(
     resolve: async () => {
       if (resolver) {
         const missing = getNames().filter((name) => !values.has(name));
-        const resolved = await Promise.all(
+        const settled = await Promise.allSettled(
           missing.map(async (name) => [name, await resolver(name, editor)] as const),
         );
         let changed = false;
-        for (const [name, value] of resolved) {
+        let failure: PromiseRejectedResult | undefined;
+        for (const result of settled) {
+          if (result.status === 'rejected') {
+            failure ??= result;
+            continue;
+          }
+          const [name, value] = result.value;
           if (value !== undefined) {
             values.set(name, value);
             changed = true;
           }
         }
         if (changed) emit();
+        if (failure) throw failure.reason;
       }
       return getValues();
     },

@@ -41,6 +41,36 @@ describe('commandes variable.*', () => {
       );
     });
 
+    it('remplace une sélection sur plusieurs blocs par une seule puce', () => {
+      mounted.editor.setHTML('<p>Un deux</p><p>trois quatre</p>');
+      // De « deux » (après « Un ») à « quatre » exclu : la fin du 1er bloc et le début du 2e.
+      selectRange(mounted.editor, 4, 16);
+      expect(mounted.editor.commands.canRun('variable.insert', { name: 'client' })).toBe(true);
+      expect(mounted.editor.commands.run('variable.insert', { name: 'client' })).toBe(true);
+      expect(mounted.editor.getHTML()).toBe(
+        '<p>Un <span data-aster-variable="client">{{client}}</span>quatre</p>',
+      );
+      expect(mounted.editor.variables.getNames()).toEqual(['client']);
+    });
+
+    it('insère dans une cellule de tableau sans casser la structure', () => {
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td><p>Cellule</p></td><td><p>Autre</p></td></tr></tbody></table>',
+      );
+      // Position du texte « Cellule » : table(1) > row(1) > cell(1) > paragraph(1) + 7 chars.
+      const end = 4 + 'Cellule'.length;
+      selectRange(mounted.editor, end, end);
+      expect(mounted.editor.tiptap.isActive('tableCell')).toBe(true);
+      expect(
+        mounted.editor.commands.run('variable.insert', { name: 'client', label: 'Client' }),
+      ).toBe(true);
+      expect(mounted.editor.getHTML()).toContain(`<p>Cellule${CLIENT}</p>`);
+      expect(mounted.editor.getHTML()).toContain('<td');
+      expect(mounted.editor.getHTML()).toContain('<p>Autre</p>');
+      expect(mounted.editor.tiptap.state.doc.firstChild?.type.name).toBe('table');
+      expect(mounted.editor.commands.isActive('variable.remove')).toBe(true);
+    });
+
     it('refuse un nom invalide ou des arguments absents', () => {
       expect(mounted.editor.commands.canRun('variable.insert', { name: 'a b' })).toBe(false);
       expect(mounted.editor.commands.run('variable.insert', { name: 'a b' })).toBe(false);

@@ -128,6 +128,71 @@ describe('VariableStore', () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it('une valeur effacée ne réapparaît ni dans list() ni après un define sans valeur (V-4)', () => {
+    mounted = mountEditor({
+      content: DOC,
+      variables: { variables: [{ name: 'client', label: 'Client', value: 'Dupont' }] },
+    });
+    expect(mounted.editor.variables.list()[0]).toEqual({
+      name: 'client',
+      label: 'Client',
+      value: 'Dupont',
+    });
+    mounted.editor.variables.setValues({ client: undefined });
+    expect(mounted.editor.variables.list()[0]).toEqual({ name: 'client', label: 'Client' });
+    expect(mounted.editor.variables.hasUnresolved()).toBe(true);
+    // `define` sans `value` conserve l'effacement, avec `value` la pose à nouveau.
+    mounted.editor.variables.define([{ name: 'client', label: 'Cliente' }]);
+    expect(mounted.editor.variables.list()[0]).toEqual({ name: 'client', label: 'Cliente' });
+    expect(mounted.editor.variables.getValues()).toEqual({});
+    mounted.editor.variables.define([{ name: 'client', value: 'Martin' }]);
+    expect(mounted.editor.variables.list()[0]).toEqual({
+      name: 'client',
+      label: 'Cliente',
+      value: 'Martin',
+    });
+  });
+
+  it('resolve applique les succès, émet, puis rejette avec la première erreur (V-7)', async () => {
+    const resolve = vi.fn(async (name: string) => {
+      if (name === 'client') throw new Error(`boom ${name}`);
+      return '2026';
+    });
+    mounted = mountEditor({ content: DOC, variables: { resolve } });
+    const handler = vi.fn();
+    mounted.editor.on('variablesChange', handler);
+    await expect(mounted.editor.variables.resolve()).rejects.toThrow('boom client');
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(mounted.editor.variables.getValues()).toEqual({ date: '2026' });
+    expect(handler).toHaveBeenCalledTimes(1);
+    // Seule la variable en échec reste à résoudre ; un échec sans succès n'émet rien.
+    await expect(mounted.editor.variables.resolve()).rejects.toThrow('boom client');
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(mounted.editor.variables.hasUnresolved()).toBe(true);
+  });
+
+  it('getNames et list ignorent un nœud au nom invalide injecté via setJSON (V-12)', () => {
+    mounted = mountEditor({ content: '<p></p>' });
+    mounted.editor.setJSON({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'variable', attrs: { name: 'a b', label: 'Hostile' } },
+            { type: 'variable', attrs: { name: '"><img src=x>' } },
+            { type: 'variable', attrs: { name: 'ok' } },
+          ],
+        },
+      ],
+    });
+    expect(mounted.editor.variables.getNames()).toEqual(['ok']);
+    expect(mounted.editor.variables.list()).toEqual([{ name: 'ok' }]);
+    expect(mounted.editor.variables.hasUnresolved()).toBe(true);
+    mounted.editor.variables.setValues({ ok: '1' });
+    expect(mounted.editor.variables.hasUnresolved()).toBe(false);
+  });
+
   it('resolve n’émet rien quand le résolveur ne renvoie que undefined', async () => {
     mounted = mountEditor({ content: DOC, variables: { resolve: () => undefined } });
     const handler = vi.fn();

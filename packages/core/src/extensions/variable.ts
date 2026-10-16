@@ -195,10 +195,14 @@ export const Variable = Node.create<VariableOptions>({
       name: {
         default: '',
         parseHTML: (element: HTMLElement) => element.getAttribute(VARIABLE_HTML_ATTRIBUTE) ?? '',
-        renderHTML: (attributes: Record<string, unknown>) => ({
-          [VARIABLE_HTML_ATTRIBUTE]:
-            typeof attributes['name'] === 'string' ? attributes['name'] : '',
-        }),
+        // Un nom invalide (nœud injecté via `setJSON`) n'est pas exporté : le `span` nu
+        // est relu comme du texte, jamais comme une puce.
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const name = attributes['name'];
+          return typeof name === 'string' && isValidVariableName(name)
+            ? { [VARIABLE_HTML_ATTRIBUTE]: name }
+            : {};
+        },
       },
       label: {
         default: null,

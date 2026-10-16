@@ -8,11 +8,15 @@ import { registerUiTranslations } from '../toolbar/create-toolbar';
 import { createWidget } from '../toolbar/widgets';
 import { createDropdown, createMenuItem } from './dropdown';
 import { createTableContextMenu } from './table-context-menu';
+import { createVariableDialog } from './variable-dialog';
+import { createVariableSuggestionPanel } from './variable-suggestion';
 import {
   FULLSCREEN_CLASS,
+  OPEN_PANEL_SELECTORS,
   createFullscreen,
   createFullscreenButton,
   getFullscreen,
+  registerOpenPanelSelector,
 } from './fullscreen';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
@@ -119,6 +123,65 @@ describe('plein écran', () => {
       escape(editor.contentElement);
       expect(fullscreen.isActive()).toBe(false);
       menu.destroy();
+    });
+
+    it('Échap laisse un panneau de suggestion {{ ouvert le consommer, le plein écran reste (V-2)', () => {
+      const fullscreen = getFullscreen(editor);
+      const panel = createVariableSuggestionPanel(editor);
+      panel.update({
+        items: [{ kind: 'create', name: 'cli' }],
+        command: () => undefined,
+      });
+      fullscreen.set(true);
+      // Le plein écran ne consomme pas la touche : ProseMirror la passe au plugin
+      // Suggestion, qui ferme le panneau (vérifié avec le vrai core dans
+      // variable-suggestion.spec.ts).
+      expect(escape(editor.contentElement).defaultPrevented).toBe(false);
+      expect(fullscreen.isActive()).toBe(true);
+      panel.hide();
+      expect(escape(editor.contentElement).defaultPrevented).toBe(true);
+      expect(fullscreen.isActive()).toBe(false);
+      panel.destroy();
+    });
+
+    it('Échap ferme d’abord le dialogue de puce, le plein écran n’est quitté qu’au suivant (V-3)', () => {
+      const fullscreen = getFullscreen(editor);
+      editor.presentVariables.add('x');
+      const dialog = createVariableDialog(editor);
+      fullscreen.set(true);
+      dialog.open({ pos: 1, name: 'x' });
+      expect(dialog.isOpen()).toBe(true);
+      const input = dialog.element.querySelector<HTMLInputElement>('input')!;
+      escape(input);
+      expect(dialog.isOpen()).toBe(false);
+      expect(fullscreen.isActive()).toBe(true);
+      escape(editor.contentElement);
+      expect(fullscreen.isActive()).toBe(false);
+      dialog.destroy();
+    });
+
+    it('registerOpenPanelSelector étend la liste des panneaux prioritaires, sans doublon', () => {
+      const fullscreen = getFullscreen(editor);
+      const before = OPEN_PANEL_SELECTORS.length;
+      const selector = '.custom-panel:not([hidden])';
+      registerOpenPanelSelector(selector);
+      registerOpenPanelSelector(selector);
+      try {
+        expect(OPEN_PANEL_SELECTORS.length).toBe(before + 1);
+        const custom = document.createElement('div');
+        custom.className = 'custom-panel';
+        editor.element.append(custom);
+        fullscreen.set(true);
+        escape(editor.contentElement);
+        expect(fullscreen.isActive()).toBe(true);
+        custom.setAttribute('hidden', '');
+        escape(editor.contentElement);
+        expect(fullscreen.isActive()).toBe(false);
+        custom.remove();
+      } finally {
+        OPEN_PANEL_SELECTORS.splice(OPEN_PANEL_SELECTORS.indexOf(selector), 1);
+      }
+      expect(OPEN_PANEL_SELECTORS.length).toBe(before);
     });
 
     it('retombe sur l’hôte de l’éditeur sans racine .aster', () => {

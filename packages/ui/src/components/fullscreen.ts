@@ -21,8 +21,23 @@ export interface Fullscreen {
 
 const registry = new WeakMap<AsterEditor, Fullscreen>();
 
-/** Sélecteur d'un panneau ouvert dans `.aster` qui doit recevoir Échap avant le plein écran. */
-const OPEN_PANEL_SELECTOR = '.aster-dropdown--open, .aster-context-menu:not([hidden])';
+/**
+ * Sélecteurs des panneaux ouverts dans `.aster` qui doivent recevoir Échap avant le plein
+ * écran : tant que l'un d'eux correspond, Échap ferme le panneau (par son propre écouteur
+ * ou par ProseMirror) et le plein écran n'est quitté qu'au suivant. Extensible via
+ * `registerOpenPanelSelector` pour un composant tiers.
+ */
+export const OPEN_PANEL_SELECTORS: string[] = [
+  '.aster-dropdown--open',
+  '.aster-context-menu:not([hidden])',
+  '.aster-variable-suggestion:not([hidden])',
+  '.aster-variable-dialog:not([hidden])',
+];
+
+/** Ajoute un sélecteur de panneau ouvert (idempotent). */
+export function registerOpenPanelSelector(selector: string): void {
+  if (!OPEN_PANEL_SELECTORS.includes(selector)) OPEN_PANEL_SELECTORS.push(selector);
+}
 
 /**
  * Crée le contrôleur de plein écran. Il ajoute `aster--fullscreen` à la racine `.aster`
@@ -30,8 +45,9 @@ const OPEN_PANEL_SELECTOR = '.aster-dropdown--open, .aster-context-menu:not([hid
  * `position: fixed; inset: 0`. Échap est écouté sur la racine en **phase de capture** :
  * ProseMirror consomme la touche (`preventDefault`) quand le focus est dans le contenu,
  * et un écouteur en bouillonnement qui testerait `defaultPrevented` ne la verrait jamais.
- * Un dropdown ou un menu contextuel ouvert garde la priorité : Échap le ferme d'abord,
- * le plein écran n'est quitté qu'au suivant.
+ * Un panneau ouvert (`OPEN_PANEL_SELECTORS` : dropdown, menu contextuel, suggestion `{{`,
+ * dialogue de puce) garde la priorité : Échap le ferme d'abord, le plein écran n'est
+ * quitté qu'au suivant.
  */
 export function createFullscreen(editor: AsterEditor): Fullscreen {
   const listeners = new Set<() => void>();
@@ -47,7 +63,7 @@ export function createFullscreen(editor: AsterEditor): Fullscreen {
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape') return;
-    if (listening?.querySelector(OPEN_PANEL_SELECTOR)) return;
+    if (listening?.querySelector(OPEN_PANEL_SELECTORS.join(', '))) return;
     event.preventDefault();
     set(false);
   };

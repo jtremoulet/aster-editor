@@ -1,7 +1,7 @@
 import type { AsterEditor, AsterVariable } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
-import { createPlainButton } from './button';
+import { createPlainButton, setDisabled } from './button';
 import { createDropdown, createMenuItem, type Dropdown } from './dropdown';
 
 /** Nom de variable valide : même règle que `isValidVariableName` du core. */
@@ -33,6 +33,34 @@ export function placeholderText(name: string): string {
 interface Draft {
   name: string;
   label: string;
+}
+
+/**
+ * Liste rendue et mise en cache : le dropdown reconstruit son panneau `menu` ouvert à
+ * chaque `update()` (sélection, lecture seule, locale…), ce qui coûte cher avec des
+ * centaines de variables. Tant que `key` n'a pas changé, les mêmes nœuds sont réinsérés
+ * et seul leur état `disabled` est recalculé.
+ */
+interface RenderedList {
+  readonly key: string;
+  readonly nodes: readonly HTMLElement[];
+  readonly items: readonly { readonly element: HTMLButtonElement; readonly name: string }[];
+}
+
+/** Clé de cache d'une liste : locale, création autorisée, puis `name|label|value|description`. */
+function listKey(
+  editor: AsterEditor,
+  list: readonly AsterVariable[],
+  allowCreate: boolean,
+): string {
+  return [
+    editor.i18n.getLocale(),
+    allowCreate ? 'create' : 'no-create',
+    ...list.map(
+      (variable) =>
+        `${variable.name}|${variable.label ?? ''}|${variable.value ?? ''}|${variable.description ?? ''}`,
+    ),
+  ].join('\n');
 }
 
 /**
@@ -74,6 +102,7 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
   let mode: 'list' | 'create' = 'list';
   const draft: Draft = { name: '', label: '' };
   let error: string | null = null;
+  let rendered: RenderedList | null = null;
 
   const reset = (): void => {
     mode = 'list';
@@ -89,11 +118,18 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
     editor.focus();
   };
 
-  const renderList = (panel: HTMLElement, dropdown: Dropdown): void => {
+  /** Construit les nœuds de la liste pour `list`, sans les insérer dans le panneau. */
+  const buildList = (
+    panel: HTMLElement,
+    dropdown: Dropdown,
+    list: readonly AsterVariable[],
+    allowCreate: boolean,
+  ): Omit<RenderedList, 'key'> => {
     const t = (key: string): string => editor.i18n.t(key);
-    const list = editor.variables.list();
+    const nodes: HTMLElement[] = [];
+    const items: { element: HTMLButtonElement; name: string }[] = [];
     if (list.length === 0) {
-      panel.append(
+      nodes.push(
         el('div', {
           className: 'aster-menu__empty aster-variable-menu__empty',
           text: t('ui.variable.empty'),
@@ -103,7 +139,6 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
     for (const variable of list) {
       const item = createMenuItem({
         className: 'aster-variable-menu__item',
-        disabled: !editor.commands.canRun('variable.insert', { name: variable.name }),
         onSelect: () => insert(dropdown, variable.name, variable.label),
         text: '',
       });
@@ -111,10 +146,11 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
       item.querySelector('.aster-toolbar__text')?.remove();
       renderVariableEntry(editor, variable, item);
       item.dataset['name'] = variable.name;
-      panel.append(item);
+      nodes.push(item);
+      items.push({ element: item, name: variable.name });
     }
-    if (allowsUnknownVariables(editor)) {
-      panel.append(
+    if (allowCreate) {
+      nodes.push(
         createMenuItem({
           className: 'aster-variable-menu__new',
           icon: 'variable-insert',
@@ -127,6 +163,21 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
         }),
       );
     }
+    return { nodes, items };
+  };
+
+  const renderList = (panel: HTMLElement, dropdown: Dropdown): void => {
+    const list = editor.variables.list();
+    const allowCreate = allowsUnknownVariables(editor);
+    const key = listKey(editor, list, allowCreate);
+    if (!rendered || rendered.key !== key) {
+      rendered = { key, ...buildList(panel, dropdown, list, allowCreate) };
+    }
+    // Les états (`canRun`) peuvent changer sans que la liste bouge : recalculés à chaque fois.
+    for (const { element, name } of rendered.items) {
+      setDisabled(element, !editor.commands.canRun('variable.insert', { name }));
+    }
+    panel.append(...rendered.nodes);
   };
 
   const renderForm = (panel: HTMLElement, dropdown: Dropdown): void => {
@@ -226,18 +277,21 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
     );
   };
 
+  const isEnabled = (): boolean =>
+    !editor.isReadOnly() &&
+    (allowsUnknownVariables(editor) ||
+      editor.variables
+        .list()
+        .some((variable) => editor.commands.canRun('variable.insert', { name: variable.name })));
+  const isActive = (): boolean => editor.commands.isActive('variable.remove');
+
   const dropdown = createDropdown({
     editor,
     labelKey: 'ui.variable.menu',
     icon: 'variable',
     panelClass: 'aster-menu aster-variable-menu',
-    isEnabled: () =>
-      !editor.isReadOnly() &&
-      (allowsUnknownVariables(editor) ||
-        editor.variables
-          .list()
-          .some((variable) => editor.commands.canRun('variable.insert', { name: variable.name }))),
-    isActive: () => editor.commands.isActive('variable.remove'),
+    isEnabled,
+    isActive,
     renderPanel: (panel, self) => {
       panel.setAttribute('aria-label', editor.i18n.t('ui.variable.menu'));
       // Le rôle suit le contenu : liste = `menu` (navigation flèches), formulaire = `dialog`.
@@ -257,14 +311,36 @@ export function createVariableMenu(editor: AsterEditor): ToolbarWidget {
   dropdown.trigger.addEventListener('click', ensureFresh, true);
   dropdown.trigger.addEventListener('keydown', ensureFresh, true);
 
-  const unsubscribe = editor.on('variablesChange', () => dropdown.update());
+  /**
+   * Liste ouverte et inchangée (même clé que le dernier rendu) : le dropdown
+   * reconstruirait tout le panneau à chaque `selectionChange`, coûteux avec des
+   * centaines d'entrées. On ne rafraîchit alors que les états : `disabled` des entrées et
+   * `aria-pressed` du déclencheur. Faux si une reconstruction complète s'impose (panneau
+   * fermé, formulaire, liste changée, dropdown à désactiver).
+   */
+  const refreshStatesOnly = (): boolean => {
+    if (!dropdown.isOpen() || mode !== 'list' || !rendered || !isEnabled()) return false;
+    const list = editor.variables.list();
+    if (listKey(editor, list, allowsUnknownVariables(editor)) !== rendered.key) return false;
+    for (const { element, name } of rendered.items) {
+      setDisabled(element, !editor.commands.canRun('variable.insert', { name }));
+    }
+    const active = isActive();
+    dropdown.trigger.setAttribute('aria-pressed', active ? 'true' : 'false');
+    dropdown.trigger.classList.toggle('aster-toolbar__button--active', active);
+    return true;
+  };
+
+  const update = (): void => {
+    ensureFresh();
+    if (!refreshStatesOnly()) dropdown.update();
+  };
+
+  const unsubscribe = editor.on('variablesChange', update);
 
   return {
     element: dropdown.element,
-    update: () => {
-      ensureFresh();
-      dropdown.update();
-    },
+    update,
     destroy: () => {
       unsubscribe();
       dropdown.trigger.removeEventListener('click', ensureFresh, true);

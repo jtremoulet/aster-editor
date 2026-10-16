@@ -95,6 +95,7 @@ describe('thèmes CSS', () => {
     // Feuilles de composants attendues : la vérification porte sur chacune d'elles.
     for (const expected of [
       'base.css',
+      'bubbles.css',
       'images-tables.css',
       'search-source.css',
       'variables.css',

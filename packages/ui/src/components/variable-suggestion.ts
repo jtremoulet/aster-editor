@@ -1,6 +1,6 @@
 import type { AsterEditor, AsterVariable } from '@aster-editor/core';
 import type { Range } from '@tiptap/core';
-import { PluginKey } from '@tiptap/pm/state';
+import { PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Suggestion, exitSuggestion } from '@tiptap/suggestion';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import { clear, el } from '../utils/dom';
@@ -26,6 +26,19 @@ export const VARIABLE_SUGGESTION_CHAR = '{{';
 
 /** Espace entre le curseur et le panneau, en pixels. */
 const PANEL_OFFSET = 4;
+
+/** Préfixe des `id` des options, référencées par `aria-activedescendant` sur le contenu. */
+const OPTION_ID_PREFIX = 'aster-variable-option-';
+
+/**
+ * Vrai si la sélection de `state` est dans un bloc de code : la suggestion n'y a pas sa
+ * place (`variable.insert` y est refusé). Lu sur l'état **cible** de la transaction, pas
+ * sur `editor.state` qui est encore l'état précédent pendant `allow`.
+ */
+function isInCodeBlock(state: EditorState): boolean {
+  const parent = state.selection.$from.parent;
+  return parent.type.name === 'codeBlock' || parent.type.spec.code === true;
+}
 
 /** Rang d'une variable pour une requête : préfixe du nom, puis du libellé, puis inclusion. */
 function rank(variable: AsterVariable, query: string): number {
@@ -118,14 +131,19 @@ export interface VariableSuggestionPanelOptions {
  * entrées sont des boutons au `mousedown` neutralisé pour ne pas voler le focus à
  * l'éditeur. Fermetures : Échap (par le plugin, via `onExit`), clic extérieur
  * (`onDismiss`), `hide()`.
+ *
+ * Accessibilité : le contenu éditable (`editor.contentElement`) porte `aria-controls`
+ * (id du panneau), `aria-expanded` et `aria-activedescendant` (id de l'option surlignée)
+ * tant que le panneau est ouvert ; tout est retiré à `hide()`.
  */
 export function createVariableSuggestionPanel(
   editor: AsterEditor,
   options: VariableSuggestionPanelOptions = {},
 ): VariableSuggestionPanel {
+  const panelId = `aster-variable-suggestion-${Math.random().toString(36).slice(2, 8)}`;
   const element = el('div', {
     className: 'aster-variable-suggestion',
-    attrs: { role: 'listbox', hidden: '' },
+    attrs: { role: 'listbox', hidden: '', id: panelId },
   });
   let opened = false;
   let items: readonly VariableSuggestionItem[] = [];
@@ -146,14 +164,25 @@ export function createVariableSuggestionPanel(
         option.scrollIntoView({ block: 'nearest' });
       }
     });
+    if (selected >= 0) {
+      editor.contentElement.setAttribute('aria-activedescendant', `${OPTION_ID_PREFIX}${selected}`);
+    } else {
+      editor.contentElement.removeAttribute('aria-activedescendant');
+    }
   };
 
+  /**
+   * Sous le curseur par défaut ; au-dessus quand le panneau ne tiendrait pas dans la
+   * fenêtre (bas de page), puis ramené dans le viewport dans tous les cas.
+   */
   const position = (): void => {
     const rect = clientRect?.();
     if (!rect) return;
     const size = element.getBoundingClientRect();
+    let top = rect.bottom + PANEL_OFFSET;
+    if (top + size.height > window.innerHeight) top = rect.top - size.height - PANEL_OFFSET;
     element.style.left = `${clampToViewport(rect.left, size.width, window.innerWidth)}px`;
-    element.style.top = `${clampToViewport(rect.bottom + PANEL_OFFSET, size.height, window.innerHeight)}px`;
+    element.style.top = `${clampToViewport(top, size.height, window.innerHeight)}px`;
   };
 
   const choose = (index: number): void => {
@@ -169,6 +198,7 @@ export function createVariableSuggestionPanel(
         className: `aster-variable-suggestion__option aster-variable-suggestion__option--${item.kind}`,
       });
       option.setAttribute('role', 'option');
+      option.id = `${OPTION_ID_PREFIX}${index}`;
       option.tabIndex = -1;
       if (item.kind === 'variable') {
         renderVariableEntry(editor, item.variable, option);
@@ -211,6 +241,9 @@ export function createVariableSuggestionPanel(
     selected = -1;
     element.setAttribute('hidden', '');
     clear(element);
+    for (const name of ['aria-activedescendant', 'aria-controls', 'aria-expanded']) {
+      editor.contentElement.removeAttribute(name);
+    }
     document.removeEventListener('mousedown', onDocumentMouseDown, true);
     window.removeEventListener('scroll', onScroll, true);
   };
@@ -222,6 +255,8 @@ export function createVariableSuggestionPanel(
     if (!opened) {
       opened = true;
       if (!element.isConnected) editor.element.append(element);
+      editor.contentElement.setAttribute('aria-controls', panelId);
+      editor.contentElement.setAttribute('aria-expanded', 'true');
       document.addEventListener('mousedown', onDocumentMouseDown, true);
       window.addEventListener('scroll', onScroll, true);
     }
@@ -296,6 +331,10 @@ export function insertSuggestedVariable(
  * core accepte les noms inconnus. La sélection remplace le texte `{{xxx` saisi
  * (`insertSuggestedVariable`). Utilisable seule ou via `createAster` (option
  * `variableSuggestion`).
+ *
+ * Le plugin est placé **en tête** de la liste des plugins : enregistré en dernier, il
+ * passerait après les keymaps de Tiptap et Entrée couperait le paragraphe (Tab
+ * indenterait la liste) au lieu de valider l'entrée surlignée.
  */
 export function createVariableSuggestion(editor: AsterEditor): VariableSuggestion {
   const panel = createVariableSuggestionPanel(editor, {
@@ -313,7 +352,8 @@ export function createVariableSuggestion(editor: AsterEditor): VariableSuggestio
     // `{{` peut suivre n'importe quel caractère (« Bonjour{{nom »), pas seulement une espace.
     allowedPrefixes: null,
     decorationClass: 'aster-variable-suggestion__decoration',
-    allow: () => !editor.isReadOnly() && editor.commands.has('variable.insert'),
+    allow: ({ state }) =>
+      !editor.isReadOnly() && editor.commands.has('variable.insert') && !isInCodeBlock(state),
     items: ({ query }) => [
       ...buildSuggestionItems(query, editor.variables.list(), allowsUnknownVariables(editor)),
     ],
@@ -329,7 +369,7 @@ export function createVariableSuggestion(editor: AsterEditor): VariableSuggestio
       onKeyDown: ({ event }: SuggestionKeyDownProps) => panel.onKeyDown(event),
     }),
   });
-  editor.tiptap.registerPlugin(plugin);
+  editor.tiptap.registerPlugin(plugin, (added, plugins) => [added, ...plugins]);
 
   return {
     panel,

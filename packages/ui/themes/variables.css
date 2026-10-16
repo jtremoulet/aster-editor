@@ -29,6 +29,12 @@
   font-style: normal;
 }
 
+/* Valeur connue mais vide : la puce resterait invisible, on affiche « ∅ » en muet. */
+.aster-content .ProseMirror .aster-variable--resolved:empty::before {
+  content: '\2205';
+  color: var(--aster-text-muted);
+}
+
 .aster-content .ProseMirror .aster-variable--unresolved {
   border-style: dashed;
   border-color: var(--aster-danger);

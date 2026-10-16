@@ -112,6 +112,51 @@ describe('createVariableMenu', () => {
     expect(items()[2]?.dataset['name']).toBe('city');
   });
 
+  it('réutilise les nœuds du panneau ouvert tant que la liste ne change pas (V-10)', () => {
+    open();
+    const [first] = items();
+    editor.emit('selectionChange', { editor });
+    widget.update();
+    expect(items()[0]).toBe(first);
+    expect(items().length).toBe(2);
+    // Une valeur, un libellé ou une locale qui change reconstruit la liste.
+    editor.variables.setValues({ 'client.name': 'ACME' });
+    expect(items()[0]).not.toBe(first);
+    expect(items()[0]?.querySelector('.aster-variable-entry__value')?.textContent).toBe('ACME');
+    const [rebuilt] = items();
+    editor.i18n.setLocale('fr');
+    widget.update();
+    expect(items()[0]).not.toBe(rebuilt);
+    expect(newEntry()?.textContent).toBe('Nouvelle variable…');
+    // Fermé puis rouvert : les mêmes nœuds servent encore, et le clic fonctionne toujours.
+    const [kept] = items();
+    trigger().click();
+    open();
+    expect(items()[0]).toBe(kept);
+    items()[0]?.click();
+    expect(editor.calls).toEqual([
+      { id: 'variable.insert', args: { name: 'client.name', label: 'Client name' } },
+    ]);
+  });
+
+  it('reste rapide avec 200 variables : 20 update() panneau ouvert sous 100 ms (V-10)', () => {
+    widget.destroy();
+    host.remove();
+    const many: AsterVariable[] = Array.from({ length: 200 }, (_, i) => ({
+      name: `var_${i}`,
+      label: `Variable ${i}`,
+      value: i % 2 === 0 ? `v${i}` : undefined,
+    }));
+    mount({ variables: many });
+    open();
+    expect(items().length).toBe(200);
+    const start = performance.now();
+    for (let i = 0; i < 20; i += 1) widget.update();
+    const elapsed = performance.now() - start;
+    expect(items().length).toBe(200);
+    expect(elapsed, `${elapsed.toFixed(1)} ms`).toBeLessThan(100);
+  });
+
   it('propose « Nouvelle variable… » et valide le nom saisi', () => {
     open();
     expect(newEntry()?.textContent).toBe('New variable…');

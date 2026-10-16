@@ -1,4 +1,10 @@
-import type { AsterEditor, AsterVariable } from '@aster-editor/core';
+import { VARIABLE_EDIT_EVENT, variableLabel } from '@aster-editor/core';
+import type {
+  AsterEditor,
+  AsterVariable,
+  Unsubscribe,
+  VariableEditEventDetail,
+} from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { clear, el } from '../utils/dom';
 import { isRecord } from '../utils/guards';
@@ -6,17 +12,9 @@ import { createPlainButton, setDisabled } from './button';
 import { clampToViewport } from './table-context-menu';
 import { placeholderText } from './variable-menu';
 
-/**
- * Événement émis par le core sur `editor.element` au double-clic sur une puce. Dupliqué
- * ici tant que `VARIABLE_EDIT_EVENT` n'est pas exporté par le core (lot L13).
- */
-export const VARIABLE_EDIT_EVENT = 'aster:variable-edit';
-
-/** Détail de `aster:variable-edit` : position du nœud et nom de la variable. */
-export interface VariableEditEventDetail {
-  readonly pos: number;
-  readonly name: string;
-}
+// Réexportés pour les intégrateurs de `ui` : la source de vérité est le core.
+export { VARIABLE_EDIT_EVENT } from '@aster-editor/core';
+export type { VariableEditEventDetail } from '@aster-editor/core';
 
 /** Dialogue d'édition de puce monté sur un éditeur. */
 export interface VariableDialog extends ToolbarWidget {
@@ -83,12 +81,40 @@ function variableNamed(editor: AsterEditor, name: string): AsterVariable {
 }
 
 /**
+ * Libellé porté par le nœud `variable` à `pos` : la puce est la source de vérité (une
+ * puce non déclarée insérée avec un libellé n'existe pas dans le magasin). `null` si le
+ * nœud n'a pas de libellé, `undefined` si la vue n'est pas disponible (mock) ou si le
+ * nœud n'est pas une variable.
+ */
+function nodeLabel(editor: AsterEditor, pos: number): string | null | undefined {
+  try {
+    const tiptap: unknown = editor.tiptap;
+    if (!isRecord(tiptap) || !isRecord(tiptap['state'])) return undefined;
+    const node = editor.tiptap.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== 'variable') return undefined;
+    return variableLabel(node);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Saisie en cours, conservée quand le dialogue est reconstruit (changement de locale). */
+interface DialogDraft {
+  readonly label: string;
+  readonly value: string;
+  readonly focused: 'label' | 'value' | null;
+}
+
+/**
  * Édition d'une puce : sur `aster:variable-edit` (double-clic, émis par le core), un
- * panneau `dialog` s'ouvre sous la puce avec le libellé et la valeur modifiables, et un
- * bouton « Supprimer ». Appliquer → `variables.setValues({ [name]: value })` (vide efface)
- * et, si le libellé change, mise à jour du nœud et de la déclaration (`define`).
- * Supprimer → `variable.remove` (le core a sélectionné la puce). Fermé à Échap, au clic
- * extérieur, après action et au `destroy`. Monté par `createAster`, utilisable seul.
+ * panneau `dialog` s'ouvre sous la puce avec le libellé (celui du nœud, sinon celui du
+ * magasin) et la valeur modifiables, et un bouton « Supprimer ». Appliquer →
+ * `variables.setValues({ [name]: value })` (vide efface) et, si le libellé change, mise à
+ * jour du nœud et de la déclaration (`define([{ name, label }])`, sans `value` pour ne
+ * pas ressusciter une valeur effacée). Supprimer → `variable.remove` (le core a
+ * sélectionné la puce). Retraduit sur `localeChange` tant qu'il est ouvert, saisie
+ * conservée. Fermé à Échap, au clic extérieur, après action et au `destroy`. Monté par
+ * `createAster`, utilisable seul.
  */
 export function createVariableDialog(editor: AsterEditor): VariableDialog {
   const panel = el('div', {
@@ -96,6 +122,9 @@ export function createVariableDialog(editor: AsterEditor): VariableDialog {
     attrs: { role: 'dialog', hidden: '' },
   });
   let opened = false;
+  let current: VariableEditEventDetail | null = null;
+  // Abonné à `localeChange` seulement tant que le dialogue est ouvert.
+  let unsubscribeLocale: Unsubscribe | null = null;
 
   const onDocumentMouseDown = (event: MouseEvent): void => {
     if (!(event.target instanceof Node) || !panel.contains(event.target)) close(false);
@@ -104,6 +133,9 @@ export function createVariableDialog(editor: AsterEditor): VariableDialog {
   const close = (focusEditor = false): void => {
     if (!opened) return;
     opened = false;
+    current = null;
+    unsubscribeLocale?.();
+    unsubscribeLocale = null;
     panel.setAttribute('hidden', '');
     document.removeEventListener('mousedown', onDocumentMouseDown, true);
     clear(panel);
@@ -117,10 +149,12 @@ export function createVariableDialog(editor: AsterEditor): VariableDialog {
     panel.style.top = `${clampToViewport(rect.bottom + PANEL_OFFSET, size.height, window.innerHeight)}px`;
   };
 
-  const render = (detail: VariableEditEventDetail): void => {
+  const render = (detail: VariableEditEventDetail, draft?: DialogDraft): void => {
     const t = (key: string): string => editor.i18n.t(key);
     const { name } = detail;
-    const current = variableNamed(editor, name);
+    const declared = variableNamed(editor, name);
+    const initialLabel = nodeLabel(editor, detail.pos) ?? declared.label ?? '';
+    const initialValue = declared.value ?? '';
     const suffix = Math.random().toString(36).slice(2, 8);
     const labelId = `aster-variable-edit-label-${suffix}`;
     const valueId = `aster-variable-edit-value-${suffix}`;
@@ -133,22 +167,22 @@ export function createVariableDialog(editor: AsterEditor): VariableDialog {
       className: 'aster-dialog__input aster-variable-dialog__label',
       attrs: { type: 'text', id: labelId, autocomplete: 'off' },
     });
-    labelInput.value = current.label ?? '';
+    labelInput.value = draft ? draft.label : initialLabel;
     const valueInput = el('input', {
       className: 'aster-dialog__input aster-variable-dialog__value',
       attrs: { type: 'text', id: valueId, autocomplete: 'off' },
     });
-    valueInput.value = current.value ?? '';
+    valueInput.value = draft ? draft.value : initialValue;
 
     const apply = (): void => {
       const label = labelInput.value.trim();
       const value = valueInput.value;
-      if (label !== (current.label ?? '')) {
+      if (label !== initialLabel) {
         const next = label || undefined;
         updateNodeLabel(editor, detail.pos, next);
-        editor.variables.define([{ ...current, label: next }]);
+        editor.variables.define([{ name, label: next }]);
       }
-      if (value !== (current.value ?? '')) {
+      if (value !== initialValue) {
         editor.variables.setValues({ [name]: value === '' ? undefined : value });
       }
       close(true);
@@ -205,17 +239,42 @@ export function createVariableDialog(editor: AsterEditor): VariableDialog {
     );
   };
 
+  const input = (kind: 'label' | 'value'): HTMLInputElement | null =>
+    panel.querySelector<HTMLInputElement>(`.aster-variable-dialog__${kind}`);
+
+  /** Reconstruit le dialogue ouvert dans la nouvelle locale, saisie et focus conservés. */
+  const retranslate = (): void => {
+    if (!opened || !current) return;
+    const label = input('label');
+    const value = input('value');
+    const draft: DialogDraft = {
+      label: label?.value ?? '',
+      value: value?.value ?? '',
+      focused:
+        document.activeElement === value
+          ? 'value'
+          : document.activeElement === label
+            ? 'label'
+            : null,
+    };
+    clear(panel);
+    render(current, draft);
+    if (draft.focused) input(draft.focused)?.focus();
+  };
+
   const open = (detail: VariableEditEventDetail, anchor?: HTMLElement | null): void => {
     close(false);
     if (editor.isReadOnly()) return;
     opened = true;
+    current = detail;
     clear(panel);
     render(detail);
     panel.removeAttribute('hidden');
     if (!panel.isConnected) editor.element.append(panel);
     position(anchor ?? findAnchor(editor, detail));
     document.addEventListener('mousedown', onDocumentMouseDown, true);
-    panel.querySelector<HTMLInputElement>('input')?.focus();
+    unsubscribeLocale = editor.on('localeChange', retranslate);
+    input('label')?.focus();
   };
 
   const onVariableEdit = (event: Event): void => {

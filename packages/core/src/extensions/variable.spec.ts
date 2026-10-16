@@ -93,6 +93,49 @@ describe('extension Variable', () => {
       expect(mounted.editor.getHTML()).not.toContain('data-aster-variable');
     });
 
+    it('une puce collée via pasteHTML garde son nom et son libellé', () => {
+      mounted.editor.setHTML('<p>Bonjour</p>');
+      mounted.editor.focus('end');
+      mounted.editor.tiptap.view.pasteHTML(
+        '<p><span data-aster-variable="ville" data-label="Ville">{{ville}}</span></p>',
+      );
+      expect(mounted.editor.getHTML()).toBe(
+        '<p>Bonjour<span data-aster-variable="ville" data-label="Ville">{{ville}}</span></p>',
+      );
+      expect(chip(mounted, 'ville').textContent).toBe('Ville');
+      // Le libellé vit sur la puce ; le magasin ne connaît que le nom de la variable présente.
+      expect(mounted.editor.variables.getNames()).toEqual(['ville']);
+      expect(mounted.editor.variables.list()).toEqual([{ name: 'ville' }]);
+    });
+
+    it('un nom invalide injecté via setJSON ne produit ni puce listée ni data-aster-variable (V-12)', () => {
+      mounted.editor.setJSON({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'A ' },
+              { type: 'variable', attrs: { name: 'a b', label: 'Hostile' } },
+              { type: 'variable', attrs: { name: '"><img src=x onerror=alert(1)>' } },
+            ],
+          },
+        ],
+      });
+      const html = mounted.editor.getHTML();
+      expect(html).not.toContain('data-aster-variable');
+      expect(html).not.toContain('<img');
+      expect(mounted.editor.variables.getNames()).toEqual([]);
+      expect(mounted.editor.variables.list()).toEqual([]);
+      // Le DOM du NodeView ne porte pas non plus le nom hostile.
+      const chips = mounted.editor.contentElement.querySelectorAll(`span.${VARIABLE_CLASS}`);
+      expect(Array.from(chips, (el) => el.getAttribute('data-name'))).toEqual(['', '']);
+      // Relu, le HTML exporté redevient du texte : aucune puce ne survit.
+      mounted.editor.setHTML(html);
+      expect(mounted.editor.getHTML()).not.toContain('aster-variable');
+      expect(mounted.editor.variables.getNames()).toEqual([]);
+    });
+
     it('getHTML en mode resolve substitue les valeurs en texte échappé', () => {
       mounted.editor.variables.setValues({ client: '<b>Dupont & fils</b>' });
       expect(mounted.editor.getHTML({ variables: 'resolve' })).toBe(
