@@ -172,6 +172,10 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 | L18 parité                | 27 min           | 325k               | 113          | +57                 | 1 bug trouvé en navigateur (sommaire dupliqué) |
 | L20 fix variables         | 17 min           | 261k               | 101          | +25                 | 14/14 corrigés                                 |
 | R14 / R15 / R16           | 14 / 13 / 13 min | 231k / 197k / 189k | 69 / 32 / 31 | preuves exécutables | 10 bloquants, 30 mineurs au total              |
+| L21 fix import            | 21 min           | 224k               | 65           | +45                 | 15/15 corrigés                                 |
+| L22 fix export            | 13 min           | 207k               | 88           | +19                 | 13/13 corrigés                                 |
+| L19a e2e                  | 9 min            | 168k               | 51           | +14 e2e             | 1 bug trouvé (Entrée menu /)                   |
+| L19b docs                 | —                | —                  | —            | —                   | —                                              |
 
 ## ✅ Ce qui a mieux marché qu'en session 1
 
@@ -179,6 +183,14 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 - **Contrat des variables écrit en phase 0 et respecté par 5 lots en parallèle** sans aucun aller-retour ; une seule collision (nom de type `DocxVariableOptions`) résolue par les agents eux-mêmes.
 - **Tests d'intégration réels imposés** dans le brief de correctifs : c'est ce qui a masqué le bug « Entrée dans le menu `{{` » dans 42 tests sur mock.
 - Vérification en navigateur par l'orchestrateur après chaque intégration : 2 bugs trouvés (valeurs perdues à la réimportation `fields`, sommaire dupliqué).
+
+## 📐 Ce que la session 2 ajoute à la méthode
+
+1. **Lancer les revues dès l'intégration de chaque lot et les lots de correctifs dès le rapport de revue** : les trois revues et leurs correctifs ont tourné pendant que la vague 2 se développait. Coût : zéro attente, 41 findings corrigés avant le gel.
+2. **Imposer des tests d'intégration réels dans les briefs de correctifs** (vrai core, vrai `keydown`) : les deux bugs « Entrée coupe le paragraphe » (menu `{{`, menu `/`) étaient invisibles dans 60 tests sur mock.
+3. **Un même bug dans deux composants jumeaux** (`registerPlugin` sans ordre) : quand un correctif touche un pattern, grep les autres usages du pattern avant de clore (fait a posteriori ici par l'agent e2e).
+4. **Chaque relecteur reçoit la liste des fichiers qu'un autre agent modifie en ce moment** et un périmètre de lecture : aucune revue n'a été polluée par du code en cours.
+5. **Épingler les dépendances d'un écosystème en lockstep** (Tiptap) en version exacte, et vérifier l'absence de copies imbriquées après chaque `npm install`.
 
 ## 🧱 Frictions nouvelles
 
