@@ -3,6 +3,7 @@ import type { AsterCommand } from './commands';
 import type { AsterDocument } from './document';
 import type { AsterLocale } from './i18n';
 import type { PasteTransformer } from './paste';
+import type { VariableSource } from './variables';
 
 /** Politique de sécurité et de comportement des liens. */
 export interface LinkPolicy {
@@ -43,6 +44,8 @@ export interface AsterOptions {
   pasteTransformers?: readonly PasteTransformer[];
   upload?: UploadHandler;
   linkPolicy?: LinkPolicy;
+  /** Variables de document (champs de fusion) : déclarations, valeurs, résolveur. */
+  variables?: VariableSource;
   /**
    * Désactive des commandes standard par identifiant. Utile pour une toolbar réduite
    * qui veut aussi bloquer le raccourci clavier correspondant.

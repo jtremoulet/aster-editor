@@ -20,6 +20,15 @@ export type { AsterDictionary, AsterLocale, I18n, TranslateParams } from './i18n
 export type { AsterOptions, LinkPolicy, UploadHandler } from './options';
 export type { PasteContext, PasteTransformer } from './paste';
 export type {
+  AsterVariable,
+  GetHtmlOptions,
+  VariableRenderMode,
+  VariableResolver,
+  VariableSource,
+  VariableStore,
+  VariableValues,
+} from './variables';
+export type {
   AsterTheme,
   ToolbarButtonItem,
   ToolbarConfig,

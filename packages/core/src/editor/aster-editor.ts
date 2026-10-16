@@ -11,6 +11,8 @@ import type {
   AsterEvents,
   AsterOptions,
   CommandRegistry,
+  GetHtmlOptions,
+  VariableStore,
   I18n,
   Unsubscribe,
 } from '../api';
@@ -24,6 +26,7 @@ import { collectShortcutBindings } from '../extensions/shortcuts';
 import { normalizeOutputHtml } from '../html/normalize-output';
 import { createI18n } from '../i18n/create-i18n';
 import { createEventEmitter, type AsterEventEmitter } from './event-emitter';
+import { createVariableStore } from './variable-store';
 
 /** Classe CSS du conteneur créé dans `options.element`. */
 export const CONTENT_CLASS = 'aster-content';
@@ -56,6 +59,7 @@ export class AsterEditorImpl implements AsterEditor {
   readonly tiptap: Editor;
   readonly commands: CommandRegistry;
   readonly i18n: I18n;
+  readonly variables: VariableStore;
   readonly element: HTMLElement;
   readonly contentElement: HTMLElement;
 
@@ -71,6 +75,7 @@ export class AsterEditorImpl implements AsterEditor {
     this.emitter = createEventEmitter();
     this.i18n = createI18n(options.locale ?? 'fr', this);
     this.commands = createCommandRegistry(this);
+    this.variables = createVariableStore(this, options.variables);
 
     const linkPolicy = resolveLinkPolicy(options.linkPolicy);
     const disabled = new Set(options.disabledCommands ?? []);
@@ -140,7 +145,8 @@ export class AsterEditorImpl implements AsterEditor {
    * dès qu'il contient une table. Le document est immuable, toute transaction en
    * produit un nouveau : le cache s'invalide tout seul, sans compteur ni événement.
    */
-  getHTML(): string {
+  getHTML(_options?: GetHtmlOptions): string {
+    // Le mode `variables: 'resolve'` est appliqué par l'extension Variable (lot L13).
     this.assertAlive();
     const { doc } = this.tiptap.state;
     if (doc === this.cachedDoc) {

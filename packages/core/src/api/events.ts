@@ -1,5 +1,6 @@
 import type { AsterEditor } from './editor';
 import type { AsterLocale } from './i18n';
+import type { VariableValues } from './variables';
 
 /**
  * Événements émis par un `AsterEditor`. Les handlers reçoivent toujours l'éditeur
@@ -19,6 +20,8 @@ export interface AsterEvents {
   focus: (payload: { editor: AsterEditor; event: FocusEvent }) => void;
   blur: (payload: { editor: AsterEditor; event: FocusEvent }) => void;
   readOnlyChange: (payload: { editor: AsterEditor; readOnly: boolean }) => void;
+  /** Les valeurs ou les déclarations de variables ont changé (`VariableStore.setValues` / `define`). */
+  variablesChange: (payload: { editor: AsterEditor; values: VariableValues }) => void;
   localeChange: (payload: { editor: AsterEditor; locale: AsterLocale }) => void;
   /**
    * Une image est en cours d'upload via le hook `upload`. Permet à l'UI d'afficher

@@ -238,3 +238,17 @@
 1. Lire `BILAN.md` puis la section « À vérifier par toi ».
 2. Les 10 propositions de contrat différées sont dans les entrées L1, L6, L7, L10, L11 ci-dessus : à instruire en V1.1 avec un dégel explicite de `packages/core/src/api/`.
 3. Serveurs encore lancés en fin de nuit : playground esbuild (4300) et `ng serve` (4200), à tuer si besoin.
+
+---
+
+# 📓 Session 2 — 16 → 19 octobre 2026
+
+> Objectif : d'ici lundi 19 octobre 09:00, se rapprocher de CKEditor, en priorité sur l'import et l'export Word avec variables (champs de fusion). Plan dans `docs/ROADMAP_SESSION2.md`.
+
+### 16/10 — GO de Joris avec les défauts proposés, cadrage et phase 0
+
+- État de départ : 0.3.0 + 7 fixtures, 893 TU + 21 e2e verts, aucun document client déposé, serveurs arrêtés.
+- Défauts validés : `{{nom}}` canonique, détection aussi des `MERGEFIELD` et des contrôles de contenu ; valeurs statiques + résolveur asynchrone optionnel ; export `resolve` ou `fields`.
+- Vérifications phase 0 : `docx` expose `SimpleMailMergeField`, `SimpleField`, `TableOfContents`, `Header`/`Footer`, `PageBreak` ; mammoth ignore l'instruction `MERGEFIELD` (il rend le texte résultat) et traverse les `w:sdt` → prétraitement du XML avant mammoth ; `@tiptap/suggestion` installé pour le menu `{{` ; `jszip` déclaré dans `word` (MIT, déjà transitif via mammoth).
+- `npm run check` de base vert après installation. Serveurs relancés (4200, 4300).
+- Dégel **additif** du contrat : `api/variables.ts`, `AsterOptions.variables`, `AsterEditor.variables` + `getHTML(options?)`, événement `variablesChange`, commandes `variable.insert`/`variable.remove`, widget `variable`, clés i18n.

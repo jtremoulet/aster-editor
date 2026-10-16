@@ -10,6 +10,7 @@ import { MARK_COMMANDS } from './marks';
 import { SEARCH_COMMANDS } from './search';
 import { TABLE_COMMANDS } from './tables';
 import { TEXT_STYLE_COMMANDS } from './text-style';
+import { VARIABLE_COMMANDS } from './variables';
 
 /** Ce dont les commandes standard dépendantes de l'éditeur ont besoin. */
 export interface StandardCommandsContext {
@@ -33,6 +34,7 @@ export function createStandardCommands(context: StandardCommandsContext): AsterC
     ...createImageCommands(context.linkPolicy, context.upload),
     ...TABLE_COMMANDS,
     ...TEXT_STYLE_COMMANDS,
+    ...VARIABLE_COMMANDS,
     ...HISTORY_COMMANDS,
     ...SEARCH_COMMANDS,
   ];

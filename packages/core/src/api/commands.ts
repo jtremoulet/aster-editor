@@ -59,6 +59,9 @@ export const STANDARD_COMMAND_IDS = [
   'backgroundColor',
   'fontFamily',
   'fontSize',
+  // Variables (champs de fusion)
+  'variable.insert',
+  'variable.remove',
   // Historique et divers
   'undo',
   'redo',
@@ -92,6 +95,7 @@ export interface StandardCommandArgs {
   backgroundColor: { color: string | null };
   fontFamily: { family: string | null };
   fontSize: { size: string | null };
+  'variable.insert': { name: string; label?: string };
 }
 
 /** Type d'argument d'une commande standard, `undefined` si elle n'en prend pas. */

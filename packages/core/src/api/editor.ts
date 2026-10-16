@@ -3,6 +3,7 @@ import type { CommandRegistry } from './commands';
 import type { AsterCounts, AsterDocument } from './document';
 import type { AsterEventName, AsterEvents, Unsubscribe } from './events';
 import type { I18n } from './i18n';
+import type { GetHtmlOptions, VariableStore } from './variables';
 
 /**
  * Instance d'éditeur Aster. C'est l'objet que manipulent `ui`, `word` et `angular`.
@@ -19,6 +20,8 @@ export interface AsterEditor {
   readonly tiptap: Editor;
   readonly commands: CommandRegistry;
   readonly i18n: I18n;
+  /** Variables de document (champs de fusion), voir `VariableStore`. */
+  readonly variables: VariableStore;
   /** Élément hôte passé dans les options. */
   readonly element: HTMLElement;
   /** Élément contenteditable réel, utile pour les tests et le focus. */
@@ -31,7 +34,7 @@ export interface AsterEditor {
    * en cache tant que le document ne change pas : appeler `getHTML()` à chaque frappe
    * ne coûte qu'une sérialisation par transaction.
    */
-  getHTML(): string;
+  getHTML(options?: GetHtmlOptions): string;
   /**
    * Remplace tout le contenu. `emit` à `false` n'émet pas `change`, n'entre pas dans
    * l'historique d'annulation et **vide l'historique antérieur** : un `undo` qui suit
