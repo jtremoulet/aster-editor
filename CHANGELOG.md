@@ -28,6 +28,7 @@ Modèles de documents et champs de fusion : variables de bout en bout (éditeur,
 
 - **ui** : Entrée dans le menu `{{` coupait le paragraphe (plugin enregistré derrière les keymaps Tiptap) ; Échap en plein écran ignorait les panneaux de variables ; focus et libellés du dialogue de puce ; sommaire dupliqué à l'ouverture ; valeur vide invisible.
 - **core** : valeur effacée ressuscitée par `define` ; `setJSON` avec un nom hostile créait une puce.
+- **word (export)** : appels de note dans les en-têtes, pieds ou notes (Word les refuse) → exposant + `footnote-not-allowed` ; `colspan` démesuré faisait tourner l'export indéfiniment (borné à 63 colonnes, `table-span-clamped`) ; nom de champ de fusion avec blanc non cité ; valeurs multi-lignes et blancs aplatis ; valeur non chaîne rejetait l'export ; motif avec drapeau sticky ; `footer.align` ignoré pour le numéro de page ; collision de clés de notes ; marges hors page (`page-margins-clamped`).
 
 ## [0.3.0] - 2026-10-13
 
