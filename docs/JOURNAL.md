@@ -295,3 +295,9 @@
 - Leçon REX confirmée : toutes les specs ui passaient par le mock ou appelaient `onKeyDown` directement ; seul un test d'intégration réel (vrai core, vrai `keydown`) pouvait voir V-1. Imposé dans le brief de correctifs.
 - Sécurité et fuites : rien à signaler (contraste puce non résolue 4,73 light / 5,25 night mesuré).
 - Lot L20 lancé sur les 14 findings, en parallèle de L18 (fichiers disjoints listés dans le brief).
+
+### 16/10 12:05 — Revue R15 rendue (import des variables, 33 docx adversariaux)
+
+- 2 bloquants : `w:sdt` enveloppant une table → table supprimée et XML invalide ; corps `document2.xml` (relation `_rels/.rels`) ignoré par le prétraitement alors que mammoth le lit. 11 mineurs dont `readComplexField` quadratique sur des `begin` non fermés (2 000 → 12 s), parse DOM de toute partie même sans champ (225 ms pour rien sur 1,4 Mo), `PlaceholderText` cloné, `w14:checkbox` transformé en variable, `data-label` perdu au recollage.
+- Mesures utiles : réécriture jszip d'une archive de 5 Mo avec PNG = 29 ms (entrées DEFLATE réutilisées) ; l'approche « réécrire le .docx avant mammoth » est viable.
+- Sécurité confirmée (alias hostile échappé partout). Lot L21 lancé avec l'écart « valeurs perdues à la réimportation d'un export `fields` » en plus.
