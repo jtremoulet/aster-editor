@@ -24,9 +24,10 @@ import { resolveLinkPolicy } from '../extensions/link-safety';
 import { createPastePipelineProps } from '../extensions/paste-pipeline';
 import { collectShortcutBindings } from '../extensions/shortcuts';
 import { normalizeOutputHtml } from '../html/normalize-output';
+import { resolveVariablesHtml } from '../html/resolve-variables';
 import { createI18n } from '../i18n/create-i18n';
 import { createEventEmitter, type AsterEventEmitter } from './event-emitter';
-import { createVariableStore } from './variable-store';
+import { VARIABLE_NODE_NAME, createVariableStore, variableText } from './variable-store';
 
 /** Classe CSS du conteneur créé dans `options.element`. */
 export const CONTENT_CLASS = 'aster-content';
@@ -140,14 +141,26 @@ export class AsterEditorImpl implements AsterEditor {
   // --- Contenu -------------------------------------------------------------
 
   /**
+   * Mode `placeholders` (défaut) : les puces restent des `span[data-aster-variable]`,
+   * résultat mis en cache. Mode `resolve` : les puces sont substituées par leurs valeurs
+   * courantes, en texte échappé, à chaque appel (les valeurs ne font pas partie du
+   * document, donc pas du cache) ; une variable sans valeur garde `{{nom}}`.
+   */
+  getHTML(options?: GetHtmlOptions): string {
+    this.assertAlive();
+    const html = this.placeholdersHtml();
+    return options?.variables === 'resolve'
+      ? resolveVariablesHtml(html, this.variables.getValues())
+      : html;
+  }
+
+  /**
    * Le HTML est mis en cache par identité du document ProseMirror : Angular appelle
    * `getHTML()` à chaque `change`, et `normalizeOutputHtml` reparse tout le document
    * dès qu'il contient une table. Le document est immuable, toute transaction en
    * produit un nouveau : le cache s'invalide tout seul, sans compteur ni événement.
    */
-  getHTML(_options?: GetHtmlOptions): string {
-    // Le mode `variables: 'resolve'` est appliqué par l'extension Variable (lot L13).
-    this.assertAlive();
+  private placeholdersHtml(): string {
     const { doc } = this.tiptap.state;
     if (doc === this.cachedDoc) {
       return this.cachedHtml;
@@ -209,18 +222,23 @@ export class AsterEditorImpl implements AsterEditor {
    * Un seul `\n` entre deux blocs de texte, quelle que soit l'imbrication (cellule de
    * table, item de liste) ; `hardBreak` compte pour un `\n`. `tiptap.getText` ajoute
    * un séparateur à chaque niveau de conteneur, d'où des lignes vides dans les tables.
+   * Une puce de variable rend sa valeur courante si elle est connue, sinon `{{nom}}`.
    */
   getText(): string {
     this.assertAlive();
+    const values = this.variables.getValues();
     const blocks: string[] = [];
     this.tiptap.state.doc.descendants((node) => {
       if (!node.isTextblock) {
         return true;
       }
       blocks.push(
-        node.textBetween(0, node.content.size, undefined, (leaf) =>
-          leaf.type.name === 'hardBreak' ? '\n' : '',
-        ),
+        node.textBetween(0, node.content.size, undefined, (leaf) => {
+          if (leaf.type.name === 'hardBreak') {
+            return '\n';
+          }
+          return leaf.type.name === VARIABLE_NODE_NAME ? variableText(leaf, values) : '';
+        }),
       );
       return false;
     });

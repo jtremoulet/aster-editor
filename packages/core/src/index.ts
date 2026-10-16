@@ -109,3 +109,43 @@ export {
   type Autosave,
   type AutosaveOptions,
 } from './extensions/autosave';
+
+// --- Variables de document (champs de fusion) ----------------------------
+export {
+  Variable,
+  VariableNodeView,
+  renderVariableNodeView,
+  VARIABLE_CLASS,
+  VARIABLE_EDIT_EVENT,
+  VARIABLE_HTML_ATTRIBUTE,
+  VARIABLE_INPUT_RULE,
+  VARIABLE_LABEL_ATTRIBUTE,
+  VARIABLE_RESOLVED_CLASS,
+  VARIABLE_SELECTED_CLASS,
+  VARIABLE_UNRESOLVED_CLASS,
+  type VariableEditEventDetail,
+  type VariableOptions,
+} from './extensions/variable';
+export {
+  VARIABLE_COMMANDS,
+  findVariableAtSelection,
+  type VariableRange,
+} from './commands/variables';
+export {
+  VARIABLE_NODE_NAME,
+  canInsertVariable,
+  createVariableStore,
+  isAsterVariableStore,
+  isValidVariableName,
+  variableLabel,
+  variableName,
+  variablePlaceholder,
+  variableText,
+  type AsterVariableStore,
+} from './editor/variable-store';
+export {
+  VARIABLE_SELECTOR,
+  resolveVariablesHtml,
+  type HtmlContainerParser,
+  type ResolveVariablesOptions,
+} from './html/resolve-variables';

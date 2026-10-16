@@ -125,6 +125,9 @@ function serializeInlineNode(node: Node): string {
     case 'br':
       return '  \n';
     case 'span': {
+      // Puce de variable : la syntaxe canonique, sans échappement (le nom n'en a pas besoin).
+      const variable = node.getAttribute('data-aster-variable');
+      if (variable !== null) return `{{${variable}}}`;
       const style = node.getAttribute('style');
       return style
         ? `<span style="${style.replace(/"/g, '&quot;')}">${serializeInline(node)}</span>`

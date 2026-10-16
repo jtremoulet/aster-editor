@@ -188,6 +188,35 @@ describe('markdownToHtml', () => {
   });
 });
 
+describe('variables de document', () => {
+  const CHIP = '<span data-aster-variable="client_nom" data-label="Client">{{client_nom}}</span>';
+
+  it('htmlToMarkdown rend une puce en {{nom}}, sans échapper le nom', () => {
+    expect(htmlToMarkdown(`<p>Bonjour ${CHIP} !</p>`)).toBe('Bonjour {{client_nom}} !');
+    expect(
+      htmlToMarkdown(
+        `<h1>${CHIP}</h1><table><tbody><tr><td><p>${CHIP}</p></td></tr></tbody></table>`,
+      ),
+    ).toBe('# {{client_nom}}\n\n| {{client_nom}} |\n| --- |');
+  });
+
+  it('markdownToHtml laisse {{nom}} en texte, même avec des _ dans le nom', () => {
+    expect(markdownToHtml('Bonjour {{client_nom}} !')).toBe('<p>Bonjour {{client_nom}} !</p>');
+    expect(markdownToHtml('{{_a_b}} et {{x}}')).toBe('<p>{{_a_b}} et {{x}}</p>');
+    // Un nom invalide suit les règles Markdown habituelles.
+    expect(parseInline('{{a b}}')).toBe('{{a b}}');
+  });
+
+  it('l’aller-retour éditeur garde {{nom}} en texte : la puce se crée par saisie ou via word', () => {
+    const mounted = mountEditor({ content: `<p>Bonjour ${CHIP} !</p>` });
+    const markdown = getMarkdown(mounted.editor);
+    expect(markdown).toBe('Bonjour {{client_nom}} !');
+    setMarkdown(mounted.editor, markdown);
+    expect(mounted.editor.getHTML()).toBe('<p>Bonjour {{client_nom}} !</p>');
+    mounted.cleanup();
+  });
+});
+
 describe('getMarkdown / setMarkdown', () => {
   let mounted: MountedEditor;
 

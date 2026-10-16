@@ -19,6 +19,8 @@ const ENTITY = /^&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/;
 const AUTOLINK = /^<((?:https?|mailto):[^\s<>]+)>/;
 const RAW_TAG = /^<(\/?)(u|sub|sup)>|^<br\s*\/?>|^<span style="([^"<>]*)">|^<\/span>/;
 const PUNCTUATION = /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/;
+/** Variable `{{nom}}` (même motif que `isValidVariableName`) : rendue en texte, jamais en puce. */
+const VARIABLE = /^\{\{[\p{L}\p{N}_][\p{L}\p{N}_.-]*\}\}/u;
 
 /** Échappe le texte pour l'inclure dans du HTML. */
 export function escapeHtml(text: string): string {
@@ -192,6 +194,15 @@ export function parseInline(src: string): string {
       out += ' ';
       i += 1;
       continue;
+    }
+    if (char === '{' && next === '{') {
+      // Un `_` dans le nom ne doit pas ouvrir une emphase : on copie la variable d'un bloc.
+      const variable = VARIABLE.exec(src.slice(i));
+      if (variable) {
+        out += variable[0];
+        i += variable[0].length;
+        continue;
+      }
     }
     if (char === '`') {
       let fence = '';

@@ -13,6 +13,7 @@ import { createImageExtension } from './image';
 import { createLinkExtension, type ResolvedLinkPolicy } from './link-safety';
 import { Search } from './search';
 import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
+import { Variable } from './variable';
 
 /** Dépendances de l'assemblage, fournies par l'éditeur au montage. */
 export interface AsterExtensionsContext {
@@ -52,6 +53,8 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     Superscript,
     Highlight.configure({ multicolor: true }),
     TextStyleKit,
+    // Lié à l'éditeur Aster : les puces lisent le magasin de valeurs et l'i18n.
+    Variable.configure({ aster: editor }),
     Placeholder.configure({
       // Fonction, pas chaîne : le texte suit la locale courante après `setLocale`.
       placeholder: () => options.placeholder ?? editor.i18n.t('editor.placeholder'),
