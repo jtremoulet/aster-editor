@@ -288,3 +288,10 @@
 - **Tour complet vérifié en navigateur** : import de `09-variables-mergefields` → `setValues` → export `fields` → réimport retrouve les 5 variables ; export `resolve` → réimport : texte substitué, `{{DateEcheance}}`/`{{Signataire}}` préservés et re-détectés, 2 avertissements `variable-unresolved` ; export complet 12 kB sans erreur.
 - **Écart pour le lot de correctifs** : à la réimportation d'un export `fields` avec valeurs connues, les valeurs sont perdues (L15 jette le résultat du champ ; L16 l'émet pourtant via `SimpleField`). Correctif : conserver le résultat comme valeur quand il n'est pas le placeholder `«nom»`.
 - Vague 1 de la session 2 : 4 lots intégrés en **1h15** après le lancement, 0 fichier hors périmètre, 1 collision de nom de type résolue par les agents eux-mêmes (`DocxVariableOptions` vs `DocxExportVariableOptions`).
+
+### 16/10 11:50 — Revue R14 rendue (variables core + ui, 35 specs de preuve dont 9 rouges = bugs, vérifs navigateur)
+
+- 5 bloquants : **Entrée dans le menu `{{` coupe le paragraphe** (plugin enregistré derrière le keymap Tiptap : `registerPlugin(p, (p, ps) => [p, ...ps])`), Échap en plein écran ignore les panneaux de variables (sélecteur de panneaux ouverts non extensible), `list()` ressuscite une valeur effacée, dialogue qui lit le libellé dans le magasin plutôt que sur le nœud. 9 mineurs (a11y `aria-activedescendant`, `resolve()` qui perd les succès sur un rejet, suggestion dans un bloc de code, `setJSON` avec nom hostile, valeur vide invisible, flip du panneau, re-rendu du menu à 200 variables).
+- Leçon REX confirmée : toutes les specs ui passaient par le mock ou appelaient `onKeyDown` directement ; seul un test d'intégration réel (vrai core, vrai `keydown`) pouvait voir V-1. Imposé dans le brief de correctifs.
+- Sécurité et fuites : rien à signaler (contraste puce non résolue 4,73 light / 5,25 night mesuré).
+- Lot L20 lancé sur les 14 findings, en parallèle de L18 (fichiers disjoints listés dans le brief).
