@@ -104,6 +104,7 @@ docxInput.addEventListener('change', async () => {
     const result = await importDocx(file);
     instance.editor.setHTML(result.html);
     log(`importDocx(${file.name}) — ${result.warnings.length} avertissement(s)`, result.warnings);
+    refreshNames();
   } catch (error) {
     log('importDocx — erreur', error instanceof Error ? error.message : String(error));
   }

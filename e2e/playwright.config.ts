@@ -36,7 +36,8 @@ export default defineConfig({
   projects: [
     {
       name: 'playground',
-      testMatch: /playground\.spec\.ts$/,
+      // `variables.spec.ts` (variables, bulles, menu `/`, sommaire) tourne aussi sur le playground.
+      testMatch: /(playground|variables)\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'], baseURL: PLAYGROUND_URL },
     },
     {

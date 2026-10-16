@@ -1,6 +1,13 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { editor, fixturePath, getDemoHtml, screenshot, toolbarButton } from './fixtures';
+import {
+  downloadSize,
+  editor,
+  fixturePath,
+  getDemoHtml,
+  screenshot,
+  toolbarButton,
+} from './fixtures';
 
 /** `<select>` d'un contrôle du playground Angular, repéré par le texte de son `<label>`. */
 function control(page: Page, label: string): Locator {
@@ -128,5 +135,60 @@ test.describe('Démo Angular', () => {
 
     expect(await getDemoHtml(page)).toContain('<h1>Bienvenue dans Aster Editor</h1>');
     await screenshot(page, 'demo-night-en');
+  });
+
+  test('/template : exemple chargé, formulaire généré, aperçu résolu et export résolu', async ({
+    page,
+  }) => {
+    test.slow();
+    await page.goto('/template');
+    await expect(editor(page)).toBeVisible();
+
+    const dropzone = page.locator('.demo-dropzone');
+    // Même précaution que /import : le premier chargement de mammoth sous `ng serve` peut
+    // recharger la page en plein import, on relance le bouton tant que rien n'est importé.
+    await expect(async () => {
+      await dropzone.getByRole('button', { name: "Charger l'exemple" }).click();
+      await expect(dropzone).toContainText('Importé : 08-variables-braces.docx', {
+        timeout: 10_000,
+      });
+    }).toPass({ timeout: 45_000, intervals: [1_000] });
+    await expect(page.locator('.demo-error')).toHaveCount(0);
+    await expect(editor(page).locator('.aster-variable')).toHaveCount(11);
+
+    // Formulaire généré depuis `variableNames()` : un champ par variable présente.
+    const form = page.locator('form.demo-variables');
+    await expect(form).toBeVisible();
+    await expect(form.locator('.demo-field')).toHaveCount(9);
+    await expect(form.locator('input[name="client.nom"]')).toHaveAttribute(
+      'placeholder',
+      '{{client.nom}}',
+    );
+    await expect(form.locator('.demo-variables__status')).toHaveText('9 variables sans valeur');
+
+    await form.locator('input[name="client.nom"]').fill('ACME SAS');
+    await form.locator('input[name="prestataire"]').fill('Nebula');
+    await form.getByRole('button', { name: 'Appliquer', exact: true }).click();
+    const client = editor(page).locator('.aster-variable[data-name="client.nom"]').first();
+    await expect(client).toHaveClass(/aster-variable--resolved/);
+    await expect(client).toHaveText('ACME SAS');
+    await expect(form.locator('.demo-variables__status')).toHaveText('7 variables sans valeur');
+
+    // Onglet « Résolu » : aperçu sans puce, avec les valeurs substituées.
+    await page.getByRole('tab', { name: 'Résolu' }).click();
+    const resolved = page.locator('.demo-resolved');
+    await expect(resolved).toBeVisible();
+    await expect(resolved.locator('h1')).toHaveText('Contrat de prestation — ACME SAS');
+    await expect(resolved.locator('.aster-variable')).toHaveCount(0);
+    await expect(resolved).toContainText('Nebula');
+    await expect(resolved).toContainText('{{lieu}}');
+    await screenshot(page, 'demo-template');
+
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Télécharger résolu' }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe('modele-resolu.docx');
+    expect(await downloadSize(download)).toBeGreaterThan(1_000);
+    await expect(page.locator('.demo-error')).toHaveCount(0);
   });
 });

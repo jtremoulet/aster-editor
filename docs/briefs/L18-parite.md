@@ -7,14 +7,17 @@
 Monorepo `C:\workspace\aster-editor`, `develop`. Lire `CLAUDE.md`, `docs/ROADMAP_SESSION2.md`, `packages/core/src/api/**`, `packages/ui/src/components/dropdown.ts`, `link-dialog.ts`, `image-dialog.ts`, `variable-suggestion.ts` (panneau flottant positionné au curseur, modèle pour la bulle et le menu `/`), `table-context-menu.ts` (clamp viewport), `toolbar/widgets.ts`, `create-aster.ts`, `testing/mock-editor.ts`. `@tiptap/suggestion` et `@floating-ui/dom` sont installés.
 
 ## Sous-lot A — Bulles contextuelles (`ui`)
+
 - `components/link-bubble.ts` : quand la sélection est dans un lien (`tiptap.isActive('link')`), bulle flottante sous le lien : URL tronquée cliquable (ouvre dans un nouvel onglet), boutons Modifier (ouvre le dialogue de lien existant ou un mini-champ inline), Supprimer (`link.unset`). Positionnée avec `@floating-ui/dom` (`computePosition`, `flip`, `shift`), re-positionnée sur `selectionChange`, cachée hors lien, en lecture seule, et en vue source.
 - `components/image-bubble.ts` : image sélectionnée (`isActive('image')`) → bulle au-dessus : alignement gauche/centre/droite (`image.setAttributes { align }`), Modifier (émet `aster:image-edit` ou ouvre le dialogue), Supprimer (`deleteSelection` via `tiptap`), largeur 25/50/100 % (en px depuis `contentElement.clientWidth`).
 - Montées par `createAster` (options additives `linkBubble?: boolean`, `imageBubble?: boolean`, défaut `true`), détruites avec l'instance. CSS dans `themes/bubbles.css` (nouveau).
 
 ## Sous-lot B — Menu `/` (`ui`)
+
 - `components/slash-menu.ts` : `Suggestion` char `/` en début de bloc vide (`startOfLine: true`), panneau filtrable : Paragraphe, Titre 1-3, Liste à puces, Liste numérotée, Liste de tâches, Citation, Bloc de code, Séparateur, Tableau 3×3, Image (ouvre le dialogue), Lien, Variable (ouvre la suggestion de variable), Saut de page (insère `<hr data-page-break>` si le schéma l'accepte ; sinon documente). Chaque entrée : icône, libellé i18n, raccourci affiché. Sélection → `commands.run(...)` après suppression du `/texte`. Option `slashMenu?: boolean` (défaut `true`) dans `createAster`.
 
 ## Sous-lot C — Sommaire et format painter
+
 - `core/extensions/outline.ts` : `getOutline(editor): readonly { level, text, pos, id }[]` (titres), `scrollToHeading(editor, pos)`, ids stables `aster-h-<n>` posés en attribut `id` sur les titres (sérialisés dans `getHTML`, parsés en entrée). `ui/components/outline-panel.ts` : widget `outline` : dropdown listant les titres, clic → sélection + `scrollIntoView`. Ajouté au preset `full`.
 - `core/commands/format-painter.ts` : `formatPainter.copy` (mémorise les marques de la sélection et l'alignement/bloc) et `formatPainter.paste` (applique à la sélection), ids ajoutés hors `STANDARD_COMMAND_IDS` (comme `search.*`), raccourcis `Mod-Shift-c` / `Mod-Shift-v`. Widget `formatPainter` (bouton à état : actif = presse-papier de format chargé, un clic applique puis vide, double-clic verrouille). Preset `full`.
 

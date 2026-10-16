@@ -1,6 +1,6 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Download, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +22,7 @@ export const OUTPUT_DIR = path.join(E2E_DIR, 'output');
  * peuvent référencer aucune fonction de ce module, d'où l'accès à `window` répété inline.
  */
 interface PlaygroundEditor {
-  getHTML(): string;
+  getHTML(options?: { variables?: 'placeholders' | 'resolve' }): string;
   setHTML(html: string, emit?: boolean): void;
   focus(position?: 'start' | 'end' | 'all'): void;
   commands: { run(id: string, args?: Record<string, unknown>): boolean };
@@ -68,6 +68,34 @@ export async function getHtml(page: Page): Promise<string> {
     if (!aster) throw new Error('window.aster is not available: playground not mounted');
     return aster.editor.getHTML();
   });
+}
+
+/** HTML du playground avec les variables substituées (`getHTML({ variables: 'resolve' })`). */
+export async function getResolvedHtml(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const aster = (window as unknown as PlaygroundWindow).aster;
+    if (!aster) throw new Error('window.aster is not available: playground not mounted');
+    return aster.editor.getHTML({ variables: 'resolve' });
+  });
+}
+
+/**
+ * Importe une fixture `.docx` dans le playground via `<input id="docx">` et attend la
+ * trace `importDocx(<nom>)` dans `#out`, signe que `setHTML` a été appliqué.
+ */
+export async function importPlaygroundDocx(page: Page, fileName: string): Promise<void> {
+  await page.locator('#docx').setInputFiles(fixturePath('docx', fileName));
+  await expect(page.locator('#out')).toContainText(`importDocx(${fileName})`);
+}
+
+/**
+ * Taille en octets d'un téléchargement intercepté (`page.waitForEvent('download')`), une
+ * fois le fichier entièrement écrit sur disque. Un `.docx` vide ou tronqué fait moins
+ * d'un kilooctet : on vérifie qu'il y a bien une archive dedans.
+ */
+export async function downloadSize(download: Download): Promise<number> {
+  const file = await download.path();
+  return (await stat(file)).size;
 }
 
 /** Remplace le document du playground, sans passer par le clavier. */

@@ -438,7 +438,8 @@ export function createSlashMenu(editor: AsterEditor, options: SlashMenuOptions =
       onKeyDown: ({ event }: SuggestionKeyDownProps) => panel.onKeyDown(event),
     }),
   });
-  editor.tiptap.registerPlugin(plugin);
+  // Avant les keymaps Tiptap, sinon Entrée coupe le paragraphe au lieu de valider (même cause que le menu {{).
+  editor.tiptap.registerPlugin(plugin, (added, plugins) => [added, ...plugins]);
 
   return {
     panel,
