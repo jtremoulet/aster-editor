@@ -1,6 +1,6 @@
 # ✳️ @aster-editor/core
 
-> Moteur d'Aster Editor : `createEditor` sur Tiptap 3 / ProseMirror, registre de commandes typées, recherche / remplacement, i18n, événements, sérialisation HTML, JSON et Markdown, autosave. Aucune UI dedans, aucun framework.
+> Moteur d'Aster Editor : `createEditor` sur Tiptap 3 / ProseMirror, registre de commandes typées, variables de document (champs de fusion), recherche / remplacement, sommaire, reproduction de mise en forme, i18n, événements, sérialisation HTML, JSON et Markdown, autosave. Aucune UI dedans, aucun framework.
 
 Ce README est le tutoriel. La référence exhaustive du contrat est dans [`docs/API_CORE.md`](../../docs/API_CORE.md).
 
@@ -28,7 +28,7 @@ editor.commands.run('bold');
 editor.destroy();
 ```
 
-`createEditor` crée un `<div class="aster-content">` dans `element` et y monte le `contenteditable` (`.ProseMirror`). Sans `@aster-editor/ui`, aucun style n'est injecté (`injectCSS: false`) : c'est à toi de styler `.aster-content .ProseMirror`, y compris la `figure.aster-image` des images et les classes `aster-search-match` de la recherche.
+`createEditor` crée un `<div class="aster-content">` dans `element` et y monte le `contenteditable` (`.ProseMirror`). Sans `@aster-editor/ui`, aucun style n'est injecté (`injectCSS: false`) : c'est à toi de styler `.aster-content .ProseMirror`, y compris la `figure.aster-image` des images, les puces `span.aster-variable` des variables et les classes `aster-search-match` de la recherche.
 
 ## ⚙️ Options (`AsterOptions`)
 
@@ -45,9 +45,10 @@ editor.destroy();
 | `pasteTransformers` | `readonly PasteTransformer[]` | `[]`    | Transformateurs de HTML collé, chaînés dans l'ordre.                                                                                 |
 | `upload`            | `UploadHandler`               | —       | `(file: File) => Promise<string>` : URL finale d'une image. Sans hook, repli en data URL base64.                                     |
 | `linkPolicy`        | `LinkPolicy`                  | voir §  | Protocoles autorisés, cible et `rel` par défaut, autolink. S'applique aussi aux sources d'images.                                    |
+| `variables`         | `VariableSource`              | `{}`    | Variables de document : déclarations, valeurs initiales, résolveur, `allowUnknown`. Voir « Variables de document ».                  |
 | `disabledCommands`  | `readonly string[]`           | `[]`    | Commandes standard retirées du registre **et** dont le raccourci clavier est avalé (sinon la liaison native de Tiptap continuerait). |
 
-Le contrat `AsterOptions` est figé : ce qui n'y entre pas (autosave, Markdown) est fourni par des **fonctions compagnons** qui prennent l'éditeur en premier argument.
+Le contrat `AsterOptions` est figé : ce qui n'y entre pas (autosave, Markdown, sommaire, reproduction de mise en forme) est fourni par des **fonctions compagnons** qui prennent l'éditeur en premier argument.
 
 ## 🧰 API de `AsterEditor`
 
@@ -58,21 +59,22 @@ Le contrat `AsterOptions` est figé : ce qui n'y entre pas (autosave, Markdown) 
 | `tiptap`         | `Editor`          | Instance Tiptap. Porte de sortie assumée, pas garantie stable entre mineures. |
 | `commands`       | `CommandRegistry` | Registre : `run`, `canRun`, `isActive`, `register`, `list`…                   |
 | `i18n`           | `I18n`            | `t`, `getLocale`, `setLocale`, `addTranslations`, `has`.                      |
+| `variables`      | `VariableStore`   | Magasin des variables de document, voir « Variables de document ».            |
 | `element`        | `HTMLElement`     | L'hôte passé dans les options.                                                |
 | `contentElement` | `HTMLElement`     | Le `contenteditable` réel (`.ProseMirror`), utile pour tests et focus.        |
 
 ### Contenu
 
-| Méthode                    | Rôle                                                                                                                                                                                                                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getHTML(): string`        | HTML sémantique stable, sans `colgroup`, `min-width` ni `colspan="1"` sur les tables. `setHTML(getHTML())` est idempotent. Mis en cache tant que le document ne change pas : l'appeler à chaque frappe ne coûte qu'une sérialisation par transaction.                                   |
-| `setHTML(html, emit?)`     | Remplace tout le contenu. `emit = false` n'émet pas `change`, n'entre pas dans l'historique **et vide l'historique antérieur** (un `undo` qui suit ne fait rien) : c'est le mode de `writeValue` côté formulaire. Avec `emit = true` (défaut), le remplacement est une étape annulable. |
-| `getJSON(): AsterDocument` | Document JSON ProseMirror (`JSONContent` de Tiptap).                                                                                                                                                                                                                                    |
-| `setJSON(doc, emit?)`      | Idem avec un document JSON, mêmes règles pour `emit`.                                                                                                                                                                                                                                   |
-| `getText(): string`        | Texte brut : un seul `\n` entre deux blocs de texte, cellules de table et items de liste compris ; un `\n` par `hardBreak`.                                                                                                                                                             |
-| `insertHTML(html)`         | Insère à la sélection courante, en passant par le schéma. HTML **brut, non transformé** : ni `pasteTransformers` ni normaliseur Word ne s'appliquent, seule la politique de liens et d'images filtre. Transforme le HTML avant si besoin. Donne le focus.                               |
-| `isEmpty(): boolean`       | Vrai pour un document sans contenu. Note : `getHTML()` d'un document vide vaut `<p></p>`, teste `isEmpty()` plutôt.                                                                                                                                                                     |
-| `getCounts(): AsterCounts` | `{ words, characters }` via `CharacterCount`.                                                                                                                                                                                                                                           |
+| Méthode                    | Rôle                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getHTML(options?)`        | HTML sémantique stable, sans `colgroup`, `min-width` ni `colspan="1"` sur les tables. `setHTML(getHTML())` est idempotent. Mis en cache tant que le document ne change pas : l'appeler à chaque frappe ne coûte qu'une sérialisation par transaction. `{ variables: 'resolve' }` substitue les valeurs connues aux puces (texte brut échappé, `{{nom}}` conservé sans valeur) ; `'placeholders'` (défaut) garde les `<span data-aster-variable>`. |
+| `setHTML(html, emit?)`     | Remplace tout le contenu. `emit = false` n'émet pas `change`, n'entre pas dans l'historique **et vide l'historique antérieur** (un `undo` qui suit ne fait rien) : c'est le mode de `writeValue` côté formulaire. Avec `emit = true` (défaut), le remplacement est une étape annulable.                                                                                                                                                           |
+| `getJSON(): AsterDocument` | Document JSON ProseMirror (`JSONContent` de Tiptap).                                                                                                                                                                                                                                                                                                                                                                                              |
+| `setJSON(doc, emit?)`      | Idem avec un document JSON, mêmes règles pour `emit`.                                                                                                                                                                                                                                                                                                                                                                                             |
+| `getText(): string`        | Texte brut : un seul `\n` entre deux blocs de texte, cellules de table et items de liste compris ; un `\n` par `hardBreak`. Une puce de variable rend sa valeur si elle est connue, sinon `{{nom}}`.                                                                                                                                                                                                                                              |
+| `insertHTML(html)`         | Insère à la sélection courante, en passant par le schéma. HTML **brut, non transformé** : ni `pasteTransformers` ni normaliseur Word ne s'appliquent, seule la politique de liens et d'images filtre. Transforme le HTML avant si besoin. Donne le focus.                                                                                                                                                                                         |
+| `isEmpty(): boolean`       | Vrai pour un document sans contenu. Note : `getHTML()` d'un document vide vaut `<p></p>`, teste `isEmpty()` plutôt.                                                                                                                                                                                                                                                                                                                               |
+| `getCounts(): AsterCounts` | `{ words, characters }` via `CharacterCount`.                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Markdown : `getMarkdown(editor)` et `setMarkdown(editor, markdown, emit?)`, fonctions compagnons, voir plus bas.
 
@@ -112,66 +114,68 @@ editor.commands.isActive('heading', { level: 2 });
 
 Les identifiants standard sont autocomplétés et leurs arguments typés par `StandardCommandArgs` (`run('heading', …)` attend `{ level }`). Le registre garde aussi une surcharge libre `run(id: string, args?: unknown)` pour les commandes custom et `search.*` : `run('heading')` sans argument compile donc par cette surcharge et répond `false` à l'exécution. Vérifie tes arguments, TypeScript ne le fera pas à ta place sur cette surcharge.
 
-### Tableau des 48 commandes standard
+### Tableau des 50 commandes standard
 
 Raccourcis au format Tiptap : `Mod` = `Ctrl` sur Windows/Linux, `⌘` sur macOS. Libellés = dictionnaire `fr` (clé `command.<id>`).
 
-| Id                         | Libellé fr                   | Raccourci                 | Arguments                                                                                                                                                              |
-| -------------------------- | ---------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bold`                     | Gras                         | `Mod-b`                   | —                                                                                                                                                                      |
-| `italic`                   | Italique                     | `Mod-i`                   | —                                                                                                                                                                      |
-| `underline`                | Souligné                     | `Mod-u`                   | —                                                                                                                                                                      |
-| `strike`                   | Barré                        | `Mod-Shift-s`             | —                                                                                                                                                                      |
-| `subscript`                | Indice                       | —                         | —                                                                                                                                                                      |
-| `superscript`              | Exposant                     | —                         | —                                                                                                                                                                      |
-| `code`                     | Code                         | `Mod-e`                   | —                                                                                                                                                                      |
-| `highlight`                | Surligner                    | `Mod-Shift-h`             | —                                                                                                                                                                      |
-| `clearFormatting`          | Effacer la mise en forme     | —                         | — (retire les marks sauf `link`, ramène les blocs de texte au paragraphe sans alignement ; liste, citation et cellule restent en place ; impossible sur document vide) |
-| `paragraph`                | Paragraphe                   | —                         | — (pose le type sans repli : impossible dans un item de liste ou si le bloc est déjà un paragraphe)                                                                    |
-| `heading`                  | Titre                        | `Mod-Alt-1` … `Mod-Alt-6` | `{ level: 1 \| 2 \| 3 \| 4 \| 5 \| 6 }` (idem : pas de bascule, pas de titre dans un item de liste en V1)                                                              |
-| `blockquote`               | Citation                     | —                         | —                                                                                                                                                                      |
-| `codeBlock`                | Bloc de code                 | —                         | —                                                                                                                                                                      |
-| `horizontalRule`           | Séparateur                   | —                         | —                                                                                                                                                                      |
-| `hardBreak`                | Saut de ligne                | —                         | —                                                                                                                                                                      |
-| `bulletList`               | Liste à puces                | `Mod-Shift-8`             | —                                                                                                                                                                      |
-| `orderedList`              | Liste numérotée              | `Mod-Shift-7`             | —                                                                                                                                                                      |
-| `taskList`                 | Liste de tâches              | —                         | —                                                                                                                                                                      |
-| `indent`                   | Augmenter le retrait         | —                         | — (`listItem` puis `taskItem`)                                                                                                                                         |
-| `outdent`                  | Réduire le retrait           | —                         | —                                                                                                                                                                      |
-| `alignLeft`                | Aligner à gauche             | —                         | — (retire l'attribut ; actif quand aucun alignement explicite)                                                                                                         |
-| `alignCenter`              | Centrer                      | —                         | —                                                                                                                                                                      |
-| `alignRight`               | Aligner à droite             | —                         | —                                                                                                                                                                      |
-| `alignJustify`             | Justifier                    | —                         | —                                                                                                                                                                      |
-| `link.set`                 | Insérer un lien              | `Mod-k`                   | `{ href: string; target?: '_blank' \| '_self'; title?: string }`                                                                                                       |
-| `link.unset`               | Supprimer le lien            | —                         | —                                                                                                                                                                      |
-| `image.insert`             | Insérer une image            | —                         | `{ src: string; alt?: string; title?: string; width?: number }` (jamais active : pas une bascule ; impossible dans un bloc de code ; `src` soumis à la politique)      |
-| `image.upload`             | Importer une image           | —                         | `{ file: File }` (asynchrone : voir `uploadStart` / `uploadDone`)                                                                                                      |
-| `image.setAttributes`      | Propriétés de l'image        | —                         | `{ alt?: string; title?: string; width?: number; align?: 'left' \| 'center' \| 'right' }` (sur l'image sélectionnée)                                                   |
-| `table.insert`             | Insérer un tableau           | —                         | `{ rows: number; cols: number; withHeaderRow?: boolean }` (`withHeaderRow` vrai par défaut ; impossible dans une table : pas de tables imbriquées en V1)               |
-| `table.delete`             | Supprimer le tableau         | —                         | —                                                                                                                                                                      |
-| `table.addRowBefore`       | Insérer une ligne au-dessus  | —                         | —                                                                                                                                                                      |
-| `table.addRowAfter`        | Insérer une ligne en dessous | —                         | —                                                                                                                                                                      |
-| `table.deleteRow`          | Supprimer la ligne           | —                         | —                                                                                                                                                                      |
-| `table.addColumnBefore`    | Insérer une colonne à gauche | —                         | —                                                                                                                                                                      |
-| `table.addColumnAfter`     | Insérer une colonne à droite | —                         | —                                                                                                                                                                      |
-| `table.deleteColumn`       | Supprimer la colonne         | —                         | —                                                                                                                                                                      |
-| `table.mergeCells`         | Fusionner les cellules       | —                         | —                                                                                                                                                                      |
-| `table.splitCell`          | Scinder la cellule           | —                         | —                                                                                                                                                                      |
-| `table.toggleHeaderRow`    | Ligne d'en-tête              | —                         | —                                                                                                                                                                      |
-| `table.toggleHeaderColumn` | Colonne d'en-tête            | —                         | —                                                                                                                                                                      |
-| `textColor`                | Couleur du texte             | —                         | `{ color: string \| null }`                                                                                                                                            |
-| `backgroundColor`          | Couleur de fond              | —                         | `{ color: string \| null }`                                                                                                                                            |
-| `fontFamily`               | Police                       | —                         | `{ family: string \| null }`                                                                                                                                           |
-| `fontSize`                 | Taille                       | —                         | `{ size: string \| null }` (ex. `'14px'`)                                                                                                                              |
-| `undo`                     | Annuler                      | `Mod-z`                   | —                                                                                                                                                                      |
-| `redo`                     | Rétablir                     | `Mod-Shift-z`, `Mod-y`    | —                                                                                                                                                                      |
-| `selectAll`                | Tout sélectionner            | `Mod-a`                   | —                                                                                                                                                                      |
+| Id                         | Libellé fr                   | Raccourci                 | Arguments                                                                                                                                                                |
+| -------------------------- | ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bold`                     | Gras                         | `Mod-b`                   | —                                                                                                                                                                        |
+| `italic`                   | Italique                     | `Mod-i`                   | —                                                                                                                                                                        |
+| `underline`                | Souligné                     | `Mod-u`                   | —                                                                                                                                                                        |
+| `strike`                   | Barré                        | `Mod-Shift-s`             | —                                                                                                                                                                        |
+| `subscript`                | Indice                       | —                         | —                                                                                                                                                                        |
+| `superscript`              | Exposant                     | —                         | —                                                                                                                                                                        |
+| `code`                     | Code                         | `Mod-e`                   | —                                                                                                                                                                        |
+| `highlight`                | Surligner                    | `Mod-Shift-h`             | —                                                                                                                                                                        |
+| `clearFormatting`          | Effacer la mise en forme     | —                         | — (retire les marks sauf `link`, ramène les blocs de texte au paragraphe sans alignement ; liste, citation et cellule restent en place ; impossible sur document vide)   |
+| `paragraph`                | Paragraphe                   | —                         | — (pose le type sans repli : impossible dans un item de liste ou si le bloc est déjà un paragraphe)                                                                      |
+| `heading`                  | Titre                        | `Mod-Alt-1` … `Mod-Alt-6` | `{ level: 1 \| 2 \| 3 \| 4 \| 5 \| 6 }` (idem : pas de bascule, pas de titre dans un item de liste en V1)                                                                |
+| `blockquote`               | Citation                     | —                         | —                                                                                                                                                                        |
+| `codeBlock`                | Bloc de code                 | —                         | —                                                                                                                                                                        |
+| `horizontalRule`           | Séparateur                   | —                         | —                                                                                                                                                                        |
+| `hardBreak`                | Saut de ligne                | —                         | —                                                                                                                                                                        |
+| `bulletList`               | Liste à puces                | `Mod-Shift-8`             | —                                                                                                                                                                        |
+| `orderedList`              | Liste numérotée              | `Mod-Shift-7`             | —                                                                                                                                                                        |
+| `taskList`                 | Liste de tâches              | —                         | —                                                                                                                                                                        |
+| `indent`                   | Augmenter le retrait         | —                         | — (`listItem` puis `taskItem`)                                                                                                                                           |
+| `outdent`                  | Réduire le retrait           | —                         | —                                                                                                                                                                        |
+| `alignLeft`                | Aligner à gauche             | —                         | — (retire l'attribut ; actif quand aucun alignement explicite)                                                                                                           |
+| `alignCenter`              | Centrer                      | —                         | —                                                                                                                                                                        |
+| `alignRight`               | Aligner à droite             | —                         | —                                                                                                                                                                        |
+| `alignJustify`             | Justifier                    | —                         | —                                                                                                                                                                        |
+| `link.set`                 | Insérer un lien              | `Mod-k`                   | `{ href: string; target?: '_blank' \| '_self'; title?: string }`                                                                                                         |
+| `link.unset`               | Supprimer le lien            | —                         | —                                                                                                                                                                        |
+| `image.insert`             | Insérer une image            | —                         | `{ src: string; alt?: string; title?: string; width?: number }` (jamais active : pas une bascule ; impossible dans un bloc de code ; `src` soumis à la politique)        |
+| `image.upload`             | Importer une image           | —                         | `{ file: File }` (asynchrone : voir `uploadStart` / `uploadDone`)                                                                                                        |
+| `image.setAttributes`      | Propriétés de l'image        | —                         | `{ alt?: string; title?: string; width?: number; align?: 'left' \| 'center' \| 'right' }` (sur l'image sélectionnée)                                                     |
+| `table.insert`             | Insérer un tableau           | —                         | `{ rows: number; cols: number; withHeaderRow?: boolean }` (`withHeaderRow` vrai par défaut ; impossible dans une table : pas de tables imbriquées en V1)                 |
+| `table.delete`             | Supprimer le tableau         | —                         | —                                                                                                                                                                        |
+| `table.addRowBefore`       | Insérer une ligne au-dessus  | —                         | —                                                                                                                                                                        |
+| `table.addRowAfter`        | Insérer une ligne en dessous | —                         | —                                                                                                                                                                        |
+| `table.deleteRow`          | Supprimer la ligne           | —                         | —                                                                                                                                                                        |
+| `table.addColumnBefore`    | Insérer une colonne à gauche | —                         | —                                                                                                                                                                        |
+| `table.addColumnAfter`     | Insérer une colonne à droite | —                         | —                                                                                                                                                                        |
+| `table.deleteColumn`       | Supprimer la colonne         | —                         | —                                                                                                                                                                        |
+| `table.mergeCells`         | Fusionner les cellules       | —                         | —                                                                                                                                                                        |
+| `table.splitCell`          | Scinder la cellule           | —                         | —                                                                                                                                                                        |
+| `table.toggleHeaderRow`    | Ligne d'en-tête              | —                         | —                                                                                                                                                                        |
+| `table.toggleHeaderColumn` | Colonne d'en-tête            | —                         | —                                                                                                                                                                        |
+| `textColor`                | Couleur du texte             | —                         | `{ color: string \| null }`                                                                                                                                              |
+| `backgroundColor`          | Couleur de fond              | —                         | `{ color: string \| null }`                                                                                                                                              |
+| `fontFamily`               | Police                       | —                         | `{ family: string \| null }`                                                                                                                                             |
+| `fontSize`                 | Taille                       | —                         | `{ size: string \| null }` (ex. `'14px'`)                                                                                                                                |
+| `variable.insert`          | Insérer une variable         | —                         | `{ name: string; label?: string }` (remplace la sélection par une puce ; refusé si le nom est invalide, non déclaré avec `allowUnknown: false`, ou dans un bloc de code) |
+| `variable.remove`          | Supprimer la variable        | —                         | — (la puce sélectionnée ou collée au curseur ; `canRun` et `isActive` disent s'il y en a une)                                                                            |
+| `undo`                     | Annuler                      | `Mod-z`                   | —                                                                                                                                                                        |
+| `redo`                     | Rétablir                     | `Mod-Shift-z`, `Mod-y`    | —                                                                                                                                                                        |
+| `selectAll`                | Tout sélectionner            | `Mod-a`                   | —                                                                                                                                                                        |
 
 Les raccourcis à liaisons multiples (`heading`, `redo`) sont déclarés dans `EXTRA_SHORTCUT_BINDINGS` (7 liaisons) ; `Tab` / `Shift-Tab` dans les listes et les tables sont gérés nativement par Tiptap. Une commande custom qui déclare un `shortcut` est câblée automatiquement par `collectShortcutBindings`.
 
 ### Les 6 commandes de recherche (`search.*`)
 
-Enregistrées par `createStandardCommands` en plus des 48 du contrat (54 commandes au total), mais **hors de `STANDARD_COMMAND_IDS`** : leurs identifiants sont dans `SEARCH_COMMAND_IDS` et leurs arguments dans `SearchCommandArgs` (`{ query: string; replacement?: string; caseSensitive?: boolean }`, tous lus de façon tolérante : `run('search.next')` sans argument marche).
+Enregistrées par `createStandardCommands` en plus des 50 du contrat, mais **hors de `STANDARD_COMMAND_IDS`** : leurs identifiants sont dans `SEARCH_COMMAND_IDS` et leurs arguments dans `SearchCommandArgs` (`{ query: string; replacement?: string; caseSensitive?: boolean }`, tous lus de façon tolérante : `run('search.next')` sans argument marche). Avec les deux commandes `formatPainter.*` (voir plus bas), le registre compte 58 commandes au montage.
 
 | Id                  | Libellé fr                | Raccourci | Comportement                                                                                                                                                                                          |
 | ------------------- | ------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -211,6 +215,136 @@ const { matches, currentIndex } = getSearchStorage(editor);
 ```
 
 Exports bas niveau : `findMatches(doc, query, caseSensitive?)`, `searchPluginKey`, `SEARCH_EXTENSION_NAME`, `SEARCH_MATCH_CLASS`, `SEARCH_CURRENT_CLASS`, types `SearchMatch`, `SearchStorage`, `SearchQueryOptions`.
+
+## 🧩 Variables de document (champs de fusion)
+
+Une variable est une **puce** inline et atomique dans le document : un nom stable (`client.nom`), un libellé optionnel, et une valeur courante qui vit dans le magasin `editor.variables`, pas dans le document. Syntaxe canonique partout (texte, HTML, Word) : `{{nom}}`.
+
+### Contrat (`AsterVariable`, `VariableSource`, `VariableStore`)
+
+| Type / champ                           | Rôle                                                                                                                                                                                                                                                                    |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AsterVariable`                        | `{ name, label?, value?, description? }`. `name` : lettres, chiffres, `_`, `.`, `-`, sensible à la casse (`isValidVariableName`). `label` est affiché dans la puce et les menus, `description` dans le menu d'insertion.                                                |
+| `VariableValues`                       | `Readonly<Record<string, string>>`, valeurs par nom.                                                                                                                                                                                                                    |
+| `VariableResolver`                     | `(name, editor) => string \| undefined \| Promise<string \| undefined>`, appelé par `resolve()` pour chaque variable présente sans valeur.                                                                                                                              |
+| `VariableSource` (`options.variables`) | `variables` (déclarées, proposées dans le menu même absentes du document), `values` (initiales), `resolve` (résolveur), `allowUnknown` (vrai par défaut : un `.docx` importé peut contenir n'importe quel nom ; `false` → `variable.insert` refuse un nom non déclaré). |
+| `VariableRenderMode`                   | `'placeholders'` (défaut, puces conservées) ou `'resolve'` (valeurs substituées), pour `getHTML({ variables })`.                                                                                                                                                        |
+
+```ts
+const editor = createEditor({
+  element,
+  content: '<p>Bonjour <span data-aster-variable="client.nom">{{client.nom}}</span></p>',
+  variables: {
+    variables: [
+      { name: 'client.nom', label: 'Client' },
+      { name: 'ref', label: 'Référence' },
+    ],
+    values: { ref: '2026-042' },
+    resolve: async (name) => {
+      const response = await fetch(`/api/variables/${encodeURIComponent(name)}`);
+      return response.ok ? ((await response.json()) as { value: string }).value : undefined;
+    },
+    allowUnknown: false,
+  },
+});
+```
+
+### Le magasin (`editor.variables`)
+
+| Méthode                | Rôle                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getNames()`           | Noms **réellement présents** dans le document, par parcours des nœuds `variable`, sans doublon.                                                                                                                                                                           |
+| `list()`               | Variables déclarées puis présentes non déclarées, chacune avec `value` si connue. Une seule source de valeurs : une déclaration qui porte `value` la verse dans le magasin puis l'oublie.                                                                                 |
+| `getValues()`          | Copie des valeurs connues.                                                                                                                                                                                                                                                |
+| `setValues(values)`    | Fusionne (`undefined` efface une valeur), émet `variablesChange`, les puces se rafraîchissent.                                                                                                                                                                            |
+| `define(variables)`    | Déclare ou met à jour libellé, description, valeur ; fusion par nom ; émet `variablesChange`. Un `define` sans `value` ne ressuscite pas une valeur effacée.                                                                                                              |
+| `insert(name, label?)` | Équivaut à `commands.run('variable.insert', { name, label })`.                                                                                                                                                                                                            |
+| `resolve()`            | Appelle le résolveur pour toutes les variables présentes sans valeur, applique les valeurs obtenues (les succès sont conservés même si une résolution rejette, puis la promesse rejette avec la première erreur), rend `getValues()`. Sans résolveur, rend `getValues()`. |
+| `hasUnresolved()`      | Vrai si une variable présente n'a pas de valeur.                                                                                                                                                                                                                          |
+
+```ts
+editor.variables.getNames(); // ['client.nom']
+editor.variables.list(); // déclarées + présentes, avec `value` si connue
+editor.variables.getValues(); // { ref: '2026-042' }
+editor.variables.setValues({ 'client.nom': 'ACME', ref: undefined }); // undefined efface
+editor.variables.define([{ name: 'ville', label: 'Ville', description: 'Siège social' }]);
+editor.variables.insert('ville'); // = commands.run('variable.insert', { name: 'ville' })
+editor.variables.hasUnresolved(); // true tant que `ville` n'a pas de valeur
+const values: VariableValues = await editor.variables.resolve(); // appelle `resolve` pour les manquantes
+```
+
+### Commandes et règle de saisie
+
+`variable.insert` et `variable.remove` font partie du contrat (voir le tableau des commandes). Taper `{{nom}}` au clavier crée la puce (règle de saisie `VARIABLE_INPUT_RULE`, nom validé : `{{a b}}` reste du texte). En revanche, un `{{nom}}` **chargé ou collé** en texte brut n'est pas converti par le core : c'est le rôle de `@aster-editor/word` (import `.docx` et collage) ou de ton propre prétraitement.
+
+```ts
+editor.commands.run('variable.insert', { name: 'client.nom', label: 'Client' });
+editor.commands.canRun('variable.insert', { name: 'a b' }); // false : nom invalide
+editor.commands.isActive('variable.remove'); // vrai si une puce est sélectionnée ou collée au curseur
+editor.commands.run('variable.remove');
+```
+
+### HTML et événements
+
+- **HTML figé** : `<span data-aster-variable="nom" data-label="Libellé">{{nom}}</span>`. Le texte `{{nom}}` est dans la sortie pour rester lisible hors éditeur, et ignoré à la relecture (nœud atomique). Un `span` au nom invalide n'est pas reconnu, et un nœud au nom invalide injecté via `setJSON` est inerte : absent de `getNames`, exporté sans attribut.
+- **Puce** (NodeView `VariableNodeView`) : `span.aster-variable[data-name]` avec `aster-variable--resolved` (texte = valeur, `title` = `{{nom}}`) ou `aster-variable--unresolved` (texte = libellé ou nom, `title` traduit `variable.unresolved`), `aster-variable--selected` quand elle est sélectionnée. Le NodeView s'abonne à `variablesChange` et `localeChange`, et se désabonne quand la puce quitte le document.
+- **Double-clic** sur une puce (hors lecture seule) : le nœud est sélectionné puis l'événement DOM `aster:variable-edit` (`VARIABLE_EDIT_EVENT`, `bubbles`) part de `view.dom` avec `{ pos, name }` (`VariableEditEventDetail`). C'est ce qu'écoute le dialogue de `ui` ; sans `ui`, branche le tien :
+
+```ts
+editor.element.addEventListener(VARIABLE_EDIT_EVENT, (event) => {
+  const { pos, name } = (event as CustomEvent<VariableEditEventDetail>).detail;
+  const value = window.prompt(`Valeur de {{${name}}} (position ${pos})`);
+  if (value !== null) editor.variables.setValues({ [name]: value });
+});
+```
+
+- **`variablesChange`** (`{ editor, values }`) est émis par `setValues`, `define` et `resolve` quand une valeur arrive.
+
+### `resolveVariablesHtml` hors éditeur
+
+`getHTML({ variables: 'resolve' })` repose sur `resolveVariablesHtml(html, values, options?)`, fonction pure exportée : utile côté serveur ou sur un HTML stocké, sans monter d'éditeur. Les valeurs sont insérées comme **nœuds texte**, jamais via `innerHTML` : une valeur contenant du HTML est échappée. Un HTML sans `data-aster-variable` est renvoyé tel quel sans passer par le DOM ; `options.parse` (`HtmlContainerParser`) injecte un parseur dans un environnement sans `DOMParser`.
+
+```ts
+const stored = '<p>Bonjour <span data-aster-variable="client.nom">{{client.nom}}</span></p>';
+resolveVariablesHtml(stored, { 'client.nom': 'ACME <b>' });
+// '<p>Bonjour ACME &lt;b&gt;</p>' ; sans valeur, `{{client.nom}}` reste en texte
+```
+
+Exports bas niveau : `Variable` (extension), `VariableNodeView`, `renderVariableNodeView`, `createVariableStore`, `isAsterVariableStore`, `canInsertVariable`, `isValidVariableName`, `variableName`, `variableLabel`, `variablePlaceholder`, `variableText`, `findVariableAtSelection`, `VARIABLE_COMMANDS`, `VARIABLE_NODE_NAME`, `VARIABLE_SELECTOR`, `VARIABLE_CLASS`, `VARIABLE_RESOLVED_CLASS`, `VARIABLE_UNRESOLVED_CLASS`, `VARIABLE_SELECTED_CLASS`, `VARIABLE_HTML_ATTRIBUTE`, `VARIABLE_LABEL_ATTRIBUTE`, `VARIABLE_INPUT_RULE`, types `VariableOptions`, `AsterVariableStore`, `VariableRange`, `ResolveVariablesOptions`.
+
+## 🧭 Sommaire (`Outline`)
+
+L'extension `Outline` du jeu standard ajoute aux titres un attribut `id` parsé depuis le HTML et sérialisé tel quel (ancres internes). **Aucun `id` n'est posé automatiquement** : un document qui n'utilise pas le sommaire garde un HTML nu. `getOutline(editor)` renvoie les titres dans l'ordre (`OutlineEntry` : `level`, `text`, `pos`, `id`) et attribue au passage un `id` stable `aster-h-<n>` (`HEADING_ID_PREFIX`) à ceux qui n'en ont pas, hors historique ; les `id` importés (`id="intro"`) sont conservés, un doublon est renuméroté. `scrollToHeading(editor, pos)` place le curseur au début du titre et le fait défiler, `false` si la position ne porte plus un titre.
+
+```ts
+const entries = getOutline(editor); // [{ level, text, pos, id }], ids `aster-h-n` posés au passage
+const first = entries[0];
+if (first) scrollToHeading(editor, first.pos);
+```
+
+Autres exports : `ensureHeadingIds(editor)`, `headingIdNumber(id)`, `OUTLINE_EXTENSION_NAME`. Le widget `outline` de `ui` est un dropdown branché dessus.
+
+## 🖌️ Reproduction de mise en forme (`formatPainter.*`)
+
+Deux commandes hors contrat figé, comme `search.*` (`FORMAT_PAINTER_COMMAND_IDS`, `FormatPainterCommandId`) :
+
+| Id                    | Libellé fr                 | Raccourci     | Comportement                                                                                                                                                                                                                                                                                                                           |
+| --------------------- | -------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `formatPainter.copy`  | Copier la mise en forme    | `Mod-Shift-c` | Mémorise les marques du texte au curseur (marques en attente comprises) ou du premier texte sélectionné, et le type + attributs du bloc parent (`readFormat`). Active tant que le presse-papier est chargé.                                                                                                                            |
+| `formatPainter.paste` | Appliquer la mise en forme | `Mod-Shift-v` | Applique le presse-papier (`applyFormat`) : les marques remplacent celles de la sélection (le lien est conservé) ; sur une sélection vide, au mot sous le curseur, ou en marques en attente s'il n'y a pas de mot ; chaque bloc couvert prend le type et les attributs mémorisés en gardant son `id`. `canRun` : presse-papier chargé. |
+
+Le presse-papier reste chargé après `paste` : c'est le widget `formatPainter` de `ui` qui le vide après un clic simple et le garde après un double-clic (verrou). Sans presse-papier, `Mod-Shift-v` suit son cours (collage sans mise en forme du navigateur). Le chargement et le vidage émettent l'événement DOM `aster:format-painter-change` (`FORMAT_PAINTER_CHANGE_EVENT`) sur `editor.element`.
+
+```ts
+editor.commands.run('formatPainter.copy'); // Mod-Shift-c
+hasFormatClipboard(editor); // true
+editor.commands.run('formatPainter.paste'); // Mod-Shift-v
+editor.element.addEventListener(FORMAT_PAINTER_CHANGE_EVENT, () => {
+  console.log(hasFormatClipboard(editor));
+});
+```
+
+Autres exports : `getFormatClipboard`, `clearFormatClipboard`, `readFormat`, `applyFormat`, `wordRangeAt`, `FORMAT_PAINTER_COMMANDS`, types `FormatClipboard`, `FormatClipboardBlock`.
 
 ## 📝 Markdown
 
@@ -290,6 +424,7 @@ Les handlers reçoivent toujours `editor` dans le payload, pour ne pas fermer su
 | `focus` / `blur`  | `{ editor, event: FocusEvent }`  |                                                                                                                        |
 | `readOnlyChange`  | `{ editor, readOnly }`           | Après `setReadOnly` si la valeur change.                                                                               |
 | `localeChange`    | `{ editor, locale }`             | Après `i18n.setLocale` si la locale change.                                                                            |
+| `variablesChange` | `{ editor, values }`             | Après `variables.setValues`, `define`, ou `resolve` quand une valeur arrive. `values` = `getValues()` à cet instant.   |
 | `uploadStart`     | `{ editor, file }`               | Un fichier image part vers le hook `upload`.                                                                           |
 | `uploadDone`      | `{ editor, file, src?, error? }` | Après succès (`src`) ou échec (`error`) de l'upload.                                                                   |
 | `destroy`         | `{ editor }`                     | Juste avant la destruction ; l'éditeur est encore utilisable dans le handler.                                          |
@@ -303,7 +438,7 @@ off();
 
 ## 🌍 i18n
 
-`fr` et `en` sont intégrés (58 clés chacun), `en` est la locale de repli : clé absente → `en` → la clé elle-même, jamais d'exception. L'interpolation utilise `{name}`.
+`fr` et `en` sont intégrés (63 clés chacun), `en` est la locale de repli : clé absente → `en` → la clé elle-même, jamais d'exception. L'interpolation utilise `{name}`.
 
 ```ts
 import { createEditor, en } from '@aster-editor/core';
@@ -320,7 +455,7 @@ editor.i18n.t('command.bold'); // 'Fett'
 editor.i18n.setLocale('fr'); // émet localeChange, la toolbar se retraduit
 ```
 
-Convention de clés : `command.<id>` pour les 54 commandes (`command.table.insert`, `command.search.open`), `command.heading.level` avec `{level}`, `editor.placeholder`, `editor.words`, `editor.characters`. Le paquet `ui` ajoute ses propres clés (`ui.*`) via `addTranslations`.
+Convention de clés : `command.<id>` pour les 58 commandes (`command.table.insert`, `command.search.open`, `command.variable.insert`, `command.formatPainter.copy`), `command.heading.level` avec `{level}`, `editor.placeholder`, `editor.words`, `editor.characters`, `variable.unresolved` avec `{name}` (`title` d'une puce sans valeur). Le paquet `ui` ajoute ses propres clés (`ui.*`) via `addTranslations`.
 
 ## 🔗 Politique de liens et d'images (`LinkPolicy`)
 
@@ -430,7 +565,7 @@ Tu peux aussi enregistrer après coup : `editor.commands.register(command)` / `u
 
 ## 🧱 Extensions Tiptap custom
 
-`options.extensions` ajoute des extensions après le jeu standard. Le jeu standard (`createAsterExtensions`) : `StarterKit` (sans `link`, titres 1-6), `Link` sécurisé, `TaskList` / `TaskItem` imbriqués, `TableKit` redimensionnable, `TextAlign` (paragraphes et titres, sans alignement par défaut), `Image` Aster (`align`, `width`, NodeView), `Subscript`, `Superscript`, `Highlight` multicolore, `TextStyleKit`, `Placeholder` (fonction de la locale), `CharacterCount`, `Search`, raccourcis Aster.
+`options.extensions` ajoute des extensions après le jeu standard. Le jeu standard (`createAsterExtensions`) : `StarterKit` (sans `link`, titres 1-6), `Link` sécurisé, `TaskList` / `TaskItem` imbriqués, `TableKit` redimensionnable, `TextAlign` (paragraphes et titres, sans alignement par défaut), `Image` Aster (`align`, `width`, NodeView), `Variable` (puces liées au magasin de l'éditeur), `Subscript`, `Superscript`, `Highlight` multicolore, `TextStyleKit`, `Placeholder` (fonction de la locale), `CharacterCount`, `Search`, `Outline` (`id` des titres), raccourcis Aster.
 
 ```ts
 import { Extension } from '@tiptap/core';
@@ -463,9 +598,11 @@ const { from, to } = editor.tiptap.state.selection;
 
 Tout ce qui suit est dans `packages/core/src/index.ts` :
 
-- **Contrat** (`api/`) : `STANDARD_COMMAND_IDS` et tous les types (`AsterEditor`, `AsterOptions`, `AsterCommand`, `CommandRegistry`, `AsterEvents`, `AsterDocument`, `AsterCounts`, `I18n`, `PasteTransformer`, `ToolbarConfig`…).
-- **Commandes** : `MARK_COMMANDS`, `BLOCK_COMMANDS`, `LIST_COMMANDS`, `ALIGNMENT_COMMANDS`, `TABLE_COMMANDS`, `TEXT_STYLE_COMMANDS`, `HISTORY_COMMANDS`, `SEARCH_COMMANDS`, `SEARCH_COMMAND_IDS`, `createLinkCommands(policy)`, `createImageCommands(policy, upload)`, `createStandardCommands(context)`, `defineStandardCommand(id, spec)`, `iconIdFor(id)`, `toImageAttributes`, `getSearchStorage`, `SEARCH_OPEN_EVENT`.
+- **Contrat** (`api/`) : `STANDARD_COMMAND_IDS` et tous les types (`AsterEditor`, `AsterOptions`, `AsterCommand`, `CommandRegistry`, `AsterEvents`, `AsterDocument`, `AsterCounts`, `I18n`, `PasteTransformer`, `ToolbarConfig`, `AsterVariable`, `VariableSource`, `VariableStore`, `VariableValues`, `VariableResolver`, `VariableRenderMode`, `GetHtmlOptions`…).
+- **Commandes** : `MARK_COMMANDS`, `BLOCK_COMMANDS`, `LIST_COMMANDS`, `ALIGNMENT_COMMANDS`, `TABLE_COMMANDS`, `TEXT_STYLE_COMMANDS`, `HISTORY_COMMANDS`, `SEARCH_COMMANDS`, `SEARCH_COMMAND_IDS`, `VARIABLE_COMMANDS`, `FORMAT_PAINTER_COMMANDS`, `FORMAT_PAINTER_COMMAND_IDS`, `createLinkCommands(policy)`, `createImageCommands(policy, upload)`, `createStandardCommands(context)`, `defineStandardCommand(id, spec)`, `iconIdFor(id)`, `toImageAttributes`, `getSearchStorage`, `SEARCH_OPEN_EVENT`, `FORMAT_PAINTER_CHANGE_EVENT`.
 - **Recherche** : `Search`, `findMatches`, `searchPluginKey`, `SEARCH_EXTENSION_NAME`, `SEARCH_MATCH_CLASS`, `SEARCH_CURRENT_CLASS`.
+- **Variables** : `Variable`, `createVariableStore`, `resolveVariablesHtml`, `findVariableAtSelection`, `isValidVariableName`, `variablePlaceholder`, `VARIABLE_EDIT_EVENT`, `VARIABLE_SELECTOR` et le reste de la liste de la section « Variables de document ».
+- **Sommaire et pinceau** : `Outline`, `getOutline`, `scrollToHeading`, `ensureHeadingIds`, `headingIdNumber`, `HEADING_ID_PREFIX`, `OUTLINE_EXTENSION_NAME`, `getFormatClipboard`, `hasFormatClipboard`, `clearFormatClipboard`, `readFormat`, `applyFormat`, `wordRangeAt`.
 - **Markdown** : `getMarkdown`, `setMarkdown`, `htmlToMarkdown`, `markdownToHtml`, `escapeHtml`, `parseInline`.
 - **Autosave** : `createAutosave`, `AUTOSAVE_DEFAULT_INTERVAL`.
 - **i18n et registre** : `createCommandRegistry(editor)`, `createI18n(locale, editor)`, `interpolate(template, params)`, `fr`, `en`, `FALLBACK_LOCALE`.

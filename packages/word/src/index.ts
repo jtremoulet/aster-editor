@@ -3,7 +3,7 @@
  *
  * - `docx/` : `importDocx`, conversion .docx → HTML sémantique via mammoth (import dynamique)
  *   et post-traitements DOM ;
- * - `paste/` : `normalizeWordHtml`, détecteurs et les huit passes du collage Word ;
+ * - `paste/` : `normalizeWordHtml`, détecteurs et les neuf passes du collage Word ;
  * - `google/` : `normalizeGoogleDocsHtml`, pipeline court pour Google Docs ;
  * - `extension/` : `wordPasteTransformer`, branchement sur `pasteTransformers` du core ;
  * - `export/` : `exportDocx`, `downloadDocx`, `jsonToHtml`, HTML → .docx via `docx`.

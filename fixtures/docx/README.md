@@ -14,7 +14,7 @@ Points à vérifier avant dépôt : aucune donnée personnelle, aucun nom de cli
 npm run fixtures
 ```
 
-Les fichiers `01` à `03` viennent de `scripts/generate-fixtures.ts`, `04` à `07` de `scripts/generate-fixtures-extra.ts`, `08` à `10` de `scripts/generate-fixtures-variables.ts`. Les deux scripts sont reproductibles.
+Les fichiers `01` à `03` viennent de `scripts/generate-fixtures.ts`, `04` à `07` de `scripts/generate-fixtures-extra.ts`, `08` à `10` de `scripts/generate-fixtures-variables.ts`. Les trois scripts sont reproductibles.
 
 ## 📋 Inventaire
 
@@ -35,4 +35,5 @@ Les fichiers `01` à `03` viennent de `scripts/generate-fixtures.ts`, `04` à `0
 ## 🧪 Comment les tester à la main
 
 - Démo Angular : `npm run demo`, page **Import Word**, glisser un fichier.
-- Playground vanilla : `npm run playground`, bouton **Importer .docx**, puis **getHTML()** pour voir la sortie, et **Exporter .docx** pour l'aller-retour.
+- Playground vanilla : `npm run playground`, bouton **Importer .docx**, puis **getHTML()** pour voir la sortie, et **Exporter .docx** pour l'aller-retour. Le panneau **Variables** liste les noms trouvés (`08` à `10`), applique des valeurs JSON et exporte en modes `fields` et `resolve`.
+- Démo Angular, page **Modèle** (`/template`) : « Charger l'exemple » importe `08-variables-braces.docx`, génère le formulaire et exporte dans les trois modes.

@@ -1,21 +1,22 @@
 # 📚 Référence API — `@aster-editor/core`
 
-> Référence exhaustive du contrat public défini dans `packages/core/src/api/`. Chaque type, chaque champ, avec la sémantique que la JSDoc du code garantit en 0.3.0. Le fichier source fait foi ; le [README du core](../packages/core/README.md) est le tutoriel.
+> Référence exhaustive du contrat public défini dans `packages/core/src/api/`. Chaque type, chaque champ, avec la sémantique que la JSDoc du code garantit en 0.4.0. Le fichier source fait foi ; le [README du core](../packages/core/README.md) est le tutoriel.
 
-Le contrat est figé : `ui`, `word` et `angular` codent contre ces types. Tout est réexporté depuis `@aster-editor/core`. Ce qui a été ajouté depuis sans toucher au contrat (recherche `search.*`, Markdown, autosave, NodeView d'image) vit hors de `api/` et est décrit dans le README du core.
+Le contrat est figé : `ui`, `word` et `angular` codent contre ces types. Tout est réexporté depuis `@aster-editor/core`. Ce qui a été ajouté depuis sans toucher au contrat (recherche `search.*`, reproduction de mise en forme `formatPainter.*`, sommaire `Outline`, Markdown, autosave, NodeViews d'image et de variable, `resolveVariablesHtml`) vit hors de `api/` et est décrit dans le README du core. La session 2 a enrichi le contrat sans rupture : `variables.ts`, `AsterOptions.variables`, `AsterEditor.variables`, `getHTML(options?)`, `variable.insert` / `variable.remove`, `variablesChange`.
 
 ## 🧭 Index
 
-| Type                                                                                                                                                                | Fichier       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `AsterOptions`, `LinkPolicy`, `UploadHandler`                                                                                                                       | `options.ts`  |
-| `AsterEditor`                                                                                                                                                       | `editor.ts`   |
-| `AsterCommand`, `CommandRegistry`, `CommandId`, `StandardCommandId`, `STANDARD_COMMAND_IDS`, `StandardCommandArgs`, `CommandArgs`, `CommandRunArgs`, `HeadingLevel` | `commands.ts` |
-| `AsterEvents`, `AsterEventName`, `Unsubscribe`                                                                                                                      | `events.ts`   |
-| `AsterDocument`, `AsterCounts`                                                                                                                                      | `document.ts` |
-| `I18n`, `AsterLocale`, `AsterDictionary`, `TranslateParams`                                                                                                         | `i18n.ts`     |
-| `PasteTransformer`, `PasteContext`                                                                                                                                  | `paste.ts`    |
-| `AsterTheme`, `ToolbarConfig`, `ToolbarPreset`, `ToolbarGroup`, `ToolbarItem`, `ToolbarButtonItem`, `ToolbarDropdownItem`, `ToolbarWidgetItem`                      | `toolbar.ts`  |
+| Type                                                                                                                                                                | Fichier        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `AsterOptions`, `LinkPolicy`, `UploadHandler`                                                                                                                       | `options.ts`   |
+| `AsterEditor`                                                                                                                                                       | `editor.ts`    |
+| `AsterCommand`, `CommandRegistry`, `CommandId`, `StandardCommandId`, `STANDARD_COMMAND_IDS`, `StandardCommandArgs`, `CommandArgs`, `CommandRunArgs`, `HeadingLevel` | `commands.ts`  |
+| `AsterEvents`, `AsterEventName`, `Unsubscribe`                                                                                                                      | `events.ts`    |
+| `AsterVariable`, `VariableValues`, `VariableResolver`, `VariableSource`, `VariableRenderMode`, `GetHtmlOptions`, `VariableStore`                                    | `variables.ts` |
+| `AsterDocument`, `AsterCounts`                                                                                                                                      | `document.ts`  |
+| `I18n`, `AsterLocale`, `AsterDictionary`, `TranslateParams`                                                                                                         | `i18n.ts`      |
+| `PasteTransformer`, `PasteContext`                                                                                                                                  | `paste.ts`     |
+| `AsterTheme`, `ToolbarConfig`, `ToolbarPreset`, `ToolbarGroup`, `ToolbarItem`, `ToolbarButtonItem`, `ToolbarDropdownItem`, `ToolbarWidgetItem`                      | `toolbar.ts`   |
 
 ## ⚙️ `AsterOptions`
 
@@ -34,6 +35,7 @@ Options de `createEditor(options)`. Seul `element` est obligatoire.
 | `pasteTransformers` | `readonly PasteTransformer[]` | non         | `[]`                         | Transformateurs de collage, dans l'ordre d'application.                                  |
 | `upload`            | `UploadHandler`               | non         | —                            | Hook d'upload d'image. Absent : data URL base64.                                         |
 | `linkPolicy`        | `LinkPolicy`                  | non         | voir `LinkPolicy`            | Politique de sécurité et de comportement des liens, appliquée aussi aux images.          |
+| `variables`         | `VariableSource`              | non         | `{}`                         | Variables de document (champs de fusion) : déclarations, valeurs, résolveur.             |
 | `disabledCommands`  | `readonly string[]`           | non         | `[]`                         | Commandes standard désactivées par identifiant : retirées du registre, raccourci avalé.  |
 
 ### `LinkPolicy`
@@ -68,21 +70,22 @@ Instance retournée par `createEditor`. Toute l'API est synchrone sauf mention c
 | `tiptap`         | `Editor`          | Instance Tiptap sous-jacente. Porte de sortie assumée, non garantie stable entre versions mineures. |
 | `commands`       | `CommandRegistry` | Registre des commandes.                                                                             |
 | `i18n`           | `I18n`            | Service de traduction attaché à l'éditeur.                                                          |
+| `variables`      | `VariableStore`   | Variables de document (champs de fusion), voir `VariableStore`.                                     |
 | `element`        | `HTMLElement`     | Élément hôte passé dans les options.                                                                |
 | `contentElement` | `HTMLElement`     | Élément contenteditable réel (`.ProseMirror`), utile pour les tests et le focus.                    |
 
 ### Méthodes — contenu
 
-| Signature                                           | Description                                                                                                                                                                                                                                                                                                        |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `getHTML(): string`                                 | HTML sémantique, stable : `setHTML(getHTML())` est idempotent. Bruit de table (`colgroup`, `min-width`, `colspan="1"`) retiré. Mis en cache tant que le document ne change pas : appeler `getHTML()` à chaque frappe ne coûte qu'une sérialisation par transaction.                                                |
-| `setHTML(html: string, emit?: boolean): void`       | Remplace tout le contenu. `emit` (défaut `true`) à `false` n'émet pas `change`, n'entre pas dans l'historique d'annulation **et vide l'historique antérieur** : un `undo` qui suit ne fait rien plutôt que de rejouer sur le nouveau document des étapes qui visaient l'ancien. Mode de `writeValue` côté Angular. |
-| `getJSON(): AsterDocument`                          | Document JSON ProseMirror.                                                                                                                                                                                                                                                                                         |
-| `setJSON(doc: AsterDocument, emit?: boolean): void` | Pendant JSON de `setHTML` : mêmes règles pour `emit` (pas de `change`, historique vidé).                                                                                                                                                                                                                           |
-| `getText(): string`                                 | Texte brut : un seul `\n` entre deux blocs de texte, quelle que soit l'imbrication (cellules de table, items de liste), et un `\n` par saut de ligne (`hardBreak`).                                                                                                                                                |
-| `insertHTML(html: string): void`                    | Insère du HTML à la position courante, en passant par le schéma. Le HTML est inséré **tel quel** : ni les `pasteTransformers` ni le normaliseur Word ne s'appliquent, seule la politique de liens et d'images filtre au parsing. Transforme le HTML avant si besoin. Donne le focus.                               |
-| `isEmpty(): boolean`                                | Vrai si le document est vide (`tiptap.isEmpty`).                                                                                                                                                                                                                                                                   |
-| `getCounts(): AsterCounts`                          | Compteurs de mots et de caractères.                                                                                                                                                                                                                                                                                |
+| Signature                                           | Description                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `getHTML(options?: GetHtmlOptions): string`         | HTML sémantique, stable : `setHTML(getHTML())` est idempotent. Bruit de table (`colgroup`, `min-width`, `colspan="1"`) retiré. Mis en cache tant que le document ne change pas : appeler `getHTML()` à chaque frappe ne coûte qu'une sérialisation par transaction. `options.variables` : `'placeholders'` (défaut, puces `<span data-aster-variable>` conservées) ou `'resolve'` (valeurs substituées en texte brut, `{{nom}}` conservé sans valeur). |
+| `setHTML(html: string, emit?: boolean): void`       | Remplace tout le contenu. `emit` (défaut `true`) à `false` n'émet pas `change`, n'entre pas dans l'historique d'annulation **et vide l'historique antérieur** : un `undo` qui suit ne fait rien plutôt que de rejouer sur le nouveau document des étapes qui visaient l'ancien. Mode de `writeValue` côté Angular.                                                                                                                                     |
+| `getJSON(): AsterDocument`                          | Document JSON ProseMirror.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `setJSON(doc: AsterDocument, emit?: boolean): void` | Pendant JSON de `setHTML` : mêmes règles pour `emit` (pas de `change`, historique vidé).                                                                                                                                                                                                                                                                                                                                                               |
+| `getText(): string`                                 | Texte brut : un seul `\n` entre deux blocs de texte, quelle que soit l'imbrication (cellules de table, items de liste), et un `\n` par saut de ligne (`hardBreak`). Une variable rend sa valeur connue, sinon `{{nom}}`.                                                                                                                                                                                                                               |
+| `insertHTML(html: string): void`                    | Insère du HTML à la position courante, en passant par le schéma. Le HTML est inséré **tel quel** : ni les `pasteTransformers` ni le normaliseur Word ne s'appliquent, seule la politique de liens et d'images filtre au parsing. Transforme le HTML avant si besoin. Donne le focus.                                                                                                                                                                   |
+| `isEmpty(): boolean`                                | Vrai si le document est vide (`tiptap.isEmpty`).                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `getCounts(): AsterCounts`                          | Compteurs de mots et de caractères.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Méthodes — état
 
@@ -108,11 +111,11 @@ Instance retournée par `createEditor`. Toute l'API est synchrone sauf mention c
 
 ### `STANDARD_COMMAND_IDS` et `StandardCommandId`
 
-Tuple `as const` des 48 identifiants standard, dans l'ordre : `bold`, `italic`, `underline`, `strike`, `subscript`, `superscript`, `code`, `highlight`, `clearFormatting`, `paragraph`, `heading`, `blockquote`, `codeBlock`, `horizontalRule`, `hardBreak`, `bulletList`, `orderedList`, `taskList`, `indent`, `outdent`, `alignLeft`, `alignCenter`, `alignRight`, `alignJustify`, `link.set`, `link.unset`, `image.insert`, `image.upload`, `image.setAttributes`, `table.insert`, `table.delete`, `table.addRowBefore`, `table.addRowAfter`, `table.deleteRow`, `table.addColumnBefore`, `table.addColumnAfter`, `table.deleteColumn`, `table.mergeCells`, `table.splitCell`, `table.toggleHeaderRow`, `table.toggleHeaderColumn`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `undo`, `redo`, `selectAll`.
+Tuple `as const` des 50 identifiants standard, dans l'ordre : `bold`, `italic`, `underline`, `strike`, `subscript`, `superscript`, `code`, `highlight`, `clearFormatting`, `paragraph`, `heading`, `blockquote`, `codeBlock`, `horizontalRule`, `hardBreak`, `bulletList`, `orderedList`, `taskList`, `indent`, `outdent`, `alignLeft`, `alignCenter`, `alignRight`, `alignJustify`, `link.set`, `link.unset`, `image.insert`, `image.upload`, `image.setAttributes`, `table.insert`, `table.delete`, `table.addRowBefore`, `table.addRowAfter`, `table.deleteRow`, `table.addColumnBefore`, `table.addColumnAfter`, `table.deleteColumn`, `table.mergeCells`, `table.splitCell`, `table.toggleHeaderRow`, `table.toggleHeaderColumn`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `variable.insert`, `variable.remove`, `undo`, `redo`, `selectAll`.
 
 `StandardCommandId = (typeof STANDARD_COMMAND_IDS)[number]`. Un identifiant pointé indique un domaine (`table.insert`).
 
-Les six commandes `search.*` (`SEARCH_COMMAND_IDS`, `SearchCommandId`, `SearchCommandArgs` dans `commands/search.ts`) sont enregistrées par le core en plus de ces 48 mais restent hors du contrat figé : elles passent par la surcharge libre de `run`.
+Les six commandes `search.*` (`SEARCH_COMMAND_IDS`, `SearchCommandId`, `SearchCommandArgs` dans `commands/search.ts`) et les deux commandes `formatPainter.*` (`FORMAT_PAINTER_COMMAND_IDS`, `FormatPainterCommandId` dans `commands/format-painter.ts`) sont enregistrées par le core en plus de ces 50 mais restent hors du contrat figé : elles passent par la surcharge libre de `run`.
 
 ### `CommandId`
 
@@ -144,6 +147,7 @@ Arguments typés des commandes standard qui en prennent. Les commandes absentes 
 | `backgroundColor`     | `{ color: string \| null }`                                                               |
 | `fontFamily`          | `{ family: string \| null }`                                                              |
 | `fontSize`            | `{ size: string \| null }`                                                                |
+| `variable.insert`     | `{ name: string; label?: string }`                                                        |
 
 ### `CommandArgs<K>` et `CommandRunArgs<K>`
 
@@ -195,18 +199,19 @@ Seule porte d'entrée pour `ui` et `angular`. `run`, `canRun` et `isActive` sont
 
 Interface des handlers, indexée par nom d'événement. Les handlers reçoivent toujours `editor` dans le payload.
 
-| Événement         | Signature du handler                                                                    | Description                                                                                                                                                   |
-| ----------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ready`           | `(payload: { editor: AsterEditor }) => void`                                            | Éditeur monté et prêt. Émis une seule fois, dans une microtâche après `createEditor`, pour qu'un `on('ready')` posé juste après la création soit bien appelé. |
-| `change`          | `(payload: { editor: AsterEditor }) => void`                                            | Le document a changé. Non émis pour un simple déplacement de sélection, ni par `setReadOnly`, ni par `setHTML` / `setJSON(…, false)`.                         |
-| `selectionChange` | `(payload: { editor: AsterEditor }) => void`                                            | La sélection a bougé ou le document a changé. La toolbar se resynchronise dessus.                                                                             |
-| `focus`           | `(payload: { editor: AsterEditor; event: FocusEvent }) => void`                         |                                                                                                                                                               |
-| `blur`            | `(payload: { editor: AsterEditor; event: FocusEvent }) => void`                         |                                                                                                                                                               |
-| `readOnlyChange`  | `(payload: { editor: AsterEditor; readOnly: boolean }) => void`                         | Après `setReadOnly` si la valeur change.                                                                                                                      |
-| `localeChange`    | `(payload: { editor: AsterEditor; locale: AsterLocale }) => void`                       | Après `i18n.setLocale` si la locale change.                                                                                                                   |
-| `uploadStart`     | `(payload: { editor: AsterEditor; file: File }) => void`                                | Une image part vers le hook `upload`. Permet d'afficher un état d'attente.                                                                                    |
-| `uploadDone`      | `(payload: { editor: AsterEditor; file: File; src?: string; error?: unknown }) => void` | Après succès (`src`) ou échec (`error`) de l'upload.                                                                                                          |
-| `destroy`         | `(payload: { editor: AsterEditor }) => void`                                            | Juste avant la destruction. Après cet événement, toute méthode de l'éditeur est indéfinie (les méthodes de contenu lèvent).                                   |
+| Événement         | Signature du handler                                                                    | Description                                                                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`           | `(payload: { editor: AsterEditor }) => void`                                            | Éditeur monté et prêt. Émis une seule fois, dans une microtâche après `createEditor`, pour qu'un `on('ready')` posé juste après la création soit bien appelé.   |
+| `change`          | `(payload: { editor: AsterEditor }) => void`                                            | Le document a changé. Non émis pour un simple déplacement de sélection, ni par `setReadOnly`, ni par `setHTML` / `setJSON(…, false)`.                           |
+| `selectionChange` | `(payload: { editor: AsterEditor }) => void`                                            | La sélection a bougé ou le document a changé. La toolbar se resynchronise dessus.                                                                               |
+| `focus`           | `(payload: { editor: AsterEditor; event: FocusEvent }) => void`                         |                                                                                                                                                                 |
+| `blur`            | `(payload: { editor: AsterEditor; event: FocusEvent }) => void`                         |                                                                                                                                                                 |
+| `readOnlyChange`  | `(payload: { editor: AsterEditor; readOnly: boolean }) => void`                         | Après `setReadOnly` si la valeur change.                                                                                                                        |
+| `localeChange`    | `(payload: { editor: AsterEditor; locale: AsterLocale }) => void`                       | Après `i18n.setLocale` si la locale change.                                                                                                                     |
+| `variablesChange` | `(payload: { editor: AsterEditor; values: VariableValues }) => void`                    | Les valeurs ou les déclarations de variables ont changé (`VariableStore.setValues` / `define`, et `resolve` quand une valeur arrive). `values` = `getValues()`. |
+| `uploadStart`     | `(payload: { editor: AsterEditor; file: File }) => void`                                | Une image part vers le hook `upload`. Permet d'afficher un état d'attente.                                                                                      |
+| `uploadDone`      | `(payload: { editor: AsterEditor; file: File; src?: string; error?: unknown }) => void` | Après succès (`src`) ou échec (`error`) de l'upload.                                                                                                            |
+| `destroy`         | `(payload: { editor: AsterEditor }) => void`                                            | Juste avant la destruction. Après cet événement, toute méthode de l'éditeur est indéfinie (les méthodes de contenu lèvent).                                     |
 
 ### `AsterEventName`
 
@@ -221,6 +226,80 @@ type Unsubscribe = () => void;
 ```
 
 Renvoyée par `on`.
+
+## 🧩 Variables de document
+
+Types de `variables.ts`. Une variable est une puce inline atomique du document (nœud `variable`, HTML `<span data-aster-variable="nom" data-label="Libellé">{{nom}}</span>`) ; sa valeur vit dans le magasin `AsterEditor.variables`, pas dans le document.
+
+### `AsterVariable`
+
+| Champ         | Type     | Obligatoire | Description                                                                                                              |
+| ------------- | -------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | `string` | oui         | Identifiant stable : lettres, chiffres, `_`, `.`, `-` (premier caractère : lettre, chiffre ou `_`). Sensible à la casse. |
+| `label`       | `string` | non         | Libellé humain affiché dans la puce et les menus. Par défaut `name`.                                                     |
+| `value`       | `string` | non         | Valeur courante. Absente → la puce affiche le libellé.                                                                   |
+| `description` | `string` | non         | Aide affichée dans le menu d'insertion.                                                                                  |
+
+Tous les champs sont `readonly`.
+
+### `VariableValues`
+
+```ts
+type VariableValues = Readonly<Record<string, string>>;
+```
+
+Valeurs par nom de variable.
+
+### `VariableResolver`
+
+```ts
+type VariableResolver = (
+  name: string,
+  editor: AsterEditor,
+) => string | undefined | Promise<string | undefined>;
+```
+
+Résolveur optionnel, appelé par `VariableStore.resolve()` pour chaque variable présente sans valeur. `undefined` laisse la variable sans valeur.
+
+### `VariableSource`
+
+Configuration dans `AsterOptions.variables`. Tous les champs optionnels et `readonly`.
+
+| Champ          | Type                       | Défaut | Description                                                                                                                                                 |
+| -------------- | -------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `variables`    | `readonly AsterVariable[]` | `[]`   | Variables déclarées, proposées dans le menu d'insertion même si absentes du document. Une `value` portée ici est versée dans les valeurs.                   |
+| `values`       | `VariableValues`           | `{}`   | Valeurs initiales (appliquées après celles des déclarations).                                                                                               |
+| `resolve`      | `VariableResolver`         | —      | Résolveur appelé à la demande (`VariableStore.resolve`) pour les valeurs manquantes.                                                                        |
+| `allowUnknown` | `boolean`                  | `true` | Autoriser l'insertion d'une variable non déclarée (saisie libre dans le menu). Vrai par défaut : un document Word importé peut contenir n'importe quel nom. |
+
+### `VariableRenderMode` et `GetHtmlOptions`
+
+```ts
+type VariableRenderMode = 'placeholders' | 'resolve';
+
+interface GetHtmlOptions {
+  readonly variables?: VariableRenderMode;
+}
+```
+
+`placeholders` (défaut) : puces conservées, `<span data-aster-variable="nom">{{nom}}</span>`. `resolve` : valeurs substituées en texte brut échappé ; une variable sans valeur garde `{{nom}}`. Mode de `AsterEditor.getHTML` ; `@aster-editor/word` ajoute un troisième mode `fields` pour l'export seulement.
+
+### `VariableStore`
+
+Magasin des variables d'un éditeur (`AsterEditor.variables`). Les puces du document se rafraîchissent à chaque `setValues`.
+
+| Signature                                                                | Description                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list(): readonly AsterVariable[]`                                       | Variables déclarées, puis variables présentes dans le document non déclarées ; `value` renseignée quand connue.                                                                                                                      |
+| `getNames(): readonly string[]`                                          | Noms réellement présents dans le document, sans doublon.                                                                                                                                                                             |
+| `getValues(): VariableValues`                                            | Valeurs connues.                                                                                                                                                                                                                     |
+| `setValues(values: Readonly<Record<string, string \| undefined>>): void` | Fusionne les valeurs, émet `variablesChange`, rafraîchit les puces. `undefined` efface.                                                                                                                                              |
+| `define(variables: readonly AsterVariable[]): void`                      | Déclare ou met à jour des variables (libellé, description, valeur), fusion par nom ; émet `variablesChange`.                                                                                                                         |
+| `insert(name: string, label?: string): boolean`                          | Insère une puce à la sélection courante. Équivaut à `commands.run('variable.insert', { name })`.                                                                                                                                     |
+| `resolve(): Promise<VariableValues>`                                     | Appelle le résolveur pour toutes les variables présentes sans valeur, applique les valeurs obtenues et les renvoie. Sans résolveur, renvoie `getValues()`. Les succès sont appliqués avant qu'un rejet ne fasse rejeter la promesse. |
+| `hasUnresolved(): boolean`                                               | Vrai si au moins une variable présente dans le document n'a pas de valeur.                                                                                                                                                           |
+
+L'implémentation du core (`createVariableStore`, type `AsterVariableStore`) ajoute `allowUnknown`, `isDeclared(name)` et `canInsert(name)`, hors contrat : `isAsterVariableStore(store)` et `canInsertVariable(editor, name)` y donnent accès sans supposer que le magasin est celui du core.
 
 ## 📄 Document
 
@@ -265,7 +344,7 @@ type TranslateParams = Readonly<Record<string, string | number>>;
 
 ### `I18n`
 
-Service attaché à un éditeur. Convention de clés : `command.<id>` (libellés de commandes, `search.*` compris), `ui.<composant>.<clé>` (toolbar et dialogues), `word.<clé>` (messages d'import Word), `editor.*` (placeholder, compteurs).
+Service attaché à un éditeur. Convention de clés : `command.<id>` (libellés de commandes, `search.*`, `variable.*` et `formatPainter.*` compris), `ui.<composant>.<clé>` (toolbar, dialogues, panneaux), `editor.*` (placeholder, compteurs), `variable.unresolved` (`title` d'une puce sans valeur, `{name}`).
 
 | Signature                                                                 | Description                                                                                                                 |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -339,10 +418,10 @@ Menu déroulant regroupant plusieurs entrées.
 
 Composant UI spécialisé fourni par `ui`.
 
-| Champ    | Type       | Obligatoire | Description                                                                                                                                                                                                                             |
-| -------- | ---------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`   | `'widget'` | oui         |                                                                                                                                                                                                                                         |
-| `widget` | `string`   | oui         | Identifiants cités par le contrat : `heading`, `table`, `link`, `image`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`. `ui` en reconnaît cinq de plus en 0.3.0 : `search`, `source`, `fullscreen`, `specialChars`, `print`. |
+| Champ    | Type       | Obligatoire | Description                                                                                                                                                                                                                                                                                     |
+| -------- | ---------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`   | `'widget'` | oui         |                                                                                                                                                                                                                                                                                                 |
+| `widget` | `string`   | oui         | Identifiants cités par le contrat : `heading`, `table`, `link`, `image`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `search`, `source`, `fullscreen`, `specialChars`, `print`, `variable`. `ui` en reconnaît deux de plus en 0.4.0 : `outline` et `formatPainter` (16 au total). |
 
 ### `ToolbarItem`, `ToolbarGroup`, `ToolbarConfig`
 

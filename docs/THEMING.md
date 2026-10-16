@@ -4,16 +4,18 @@
 
 ## 📄 Feuilles CSS
 
-`@aster-editor/ui/themes/aster.css` importe les sept feuilles du dossier, dans cet ordre. Chaque feuille ne dépend que de `base.css` et des variables :
+`@aster-editor/ui/themes/aster.css` importe les huit feuilles du dossier, dans cet ordre. Chaque feuille ne dépend que de `base.css` et des variables :
 
-| Feuille             | Rôle                                                                                                                                                                               | Obligatoire ?                                     |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `base.css`          | Structure (`.aster`, toolbar, dropdowns, menus, dialogues, sélecteurs) et mise en forme du contenu (`.aster-content .ProseMirror …`), valeurs de repli des variables sur `.aster`. | Oui                                               |
-| `images-tables.css` | `figure.aster-image` (alignement, sélection, poignée de redimensionnement), `.tableWrapper`, `.column-resize-handle`, `.resize-cursor`, `.aster-context-menu`.                     | Si tu utilises images ou tables                   |
-| `search-source.css` | `.aster-search-match`, `.aster-search-panel`, `.aster-source`, `.aster--source`, `.aster--fullscreen`.                                                                             | Si tu utilises recherche, vue source, plein écran |
-| `print.css`         | `.aster-special-chars` et règles `@media print` de la page hôte (toolbar et panneaux masqués, surlignages neutralisés, sauts de page).                                             | Si tu utilises caractères spéciaux ou impression  |
-| `light.css`         | Les 30 variables sur `.aster[data-theme='light']` + `color-scheme: light`.                                                                                                         | Un thème au moins                                 |
-| `night.css`         | Les mêmes 30 variables sur `.aster[data-theme='night']` + `color-scheme: dark`.                                                                                                    |                                                   |
+| Feuille             | Rôle                                                                                                                                                                                               | Obligatoire ?                                      |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `base.css`          | Structure (`.aster`, toolbar, dropdowns, menus, dialogues, sélecteurs) et mise en forme du contenu (`.aster-content .ProseMirror …`), valeurs de repli des variables sur `.aster`.                 | Oui                                                |
+| `images-tables.css` | `figure.aster-image` (alignement, sélection, poignée de redimensionnement), `.tableWrapper`, `.column-resize-handle`, `.resize-cursor`, `.aster-context-menu`.                                     | Si tu utilises images ou tables                    |
+| `search-source.css` | `.aster-search-match`, `.aster-search-panel`, `.aster-source`, `.aster--source`, `.aster--fullscreen`.                                                                                             | Si tu utilises recherche, vue source, plein écran  |
+| `print.css`         | `.aster-special-chars` et règles `@media print` de la page hôte (toolbar et panneaux masqués, surlignages neutralisés, sauts de page).                                                             | Si tu utilises caractères spéciaux ou impression   |
+| `variables.css`     | Puce `span.aster-variable` et ses états, entrées de variable (`.aster-variable-entry__*`), widget `.aster-variable-menu`, panneau `.aster-variable-suggestion`, dialogue `.aster-variable-dialog`. | Si tu utilises les variables                       |
+| `bubbles.css`       | `.aster-bubble` (lien, image), `.aster-slash-menu`, `.aster-outline`, `.aster-format-painter--locked`.                                                                                             | Si tu utilises bulles, menu `/`, sommaire, pinceau |
+| `light.css`         | Les 30 variables sur `.aster[data-theme='light']` + `color-scheme: light`.                                                                                                                         | Un thème au moins                                  |
+| `night.css`         | Les mêmes 30 variables sur `.aster[data-theme='night']` + `color-scheme: dark`.                                                                                                                    |                                                    |
 
 La fenêtre d'impression ouverte par le widget `print` n'utilise aucune de ces feuilles : elle embarque `PRINT_CONTENT_STYLES` (noir sur blanc, Georgia 12 pt) dans un conteneur `.aster-print`. `buildPrintDocument(html, { title, lang, styles })` accepte du CSS additionnel si tu veux y retrouver ta charte.
 
@@ -68,37 +70,45 @@ Produite par `createAster` (le core seul ne crée que `.aster-content` et son `.
 
 ### Classes de structure
 
-| Sélecteur                                                                                                                                              | Élément                                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `.aster`                                                                                                                                               | Racine. Porte `data-theme` et les variables. Bordure, fond, rayon `--aster-radius-lg`.           |
-| `.aster__toolbar`                                                                                                                                      | Bande de toolbar (fond `--aster-surface-2`, bordure basse).                                      |
-| `.aster__content`                                                                                                                                      | Conteneur du contenu, `flex: 1`.                                                                 |
-| `.aster-toolbar`                                                                                                                                       | La toolbar elle-même (`role="toolbar"`), flex wrap.                                              |
-| `.aster-toolbar__group`                                                                                                                                | Groupe d'items, séparé par une bordure droite.                                                   |
-| `.aster-toolbar__button`                                                                                                                               | Tout bouton (commande, déclencheur, entrée de menu, bouton de dialogue).                         |
-| `.aster-toolbar__icon`                                                                                                                                 | Enveloppe de l'icône SVG, 20 × 20.                                                               |
-| `.aster-toolbar__text`                                                                                                                                 | Texte visible d'un bouton.                                                                       |
-| `.aster-dropdown`                                                                                                                                      | Conteneur d'un dropdown (`position: relative`).                                                  |
-| `.aster-dropdown__trigger`                                                                                                                             | Bouton déclencheur.                                                                              |
-| `.aster-dropdown__chevron`                                                                                                                             | Chevron du déclencheur.                                                                          |
-| `.aster-dropdown__panel`                                                                                                                               | Panneau flottant (`position: absolute`, `z-index: 50`, ombre `--aster-shadow`).                  |
-| `.aster-menu`                                                                                                                                          | Panneau en liste verticale.                                                                      |
-| `.aster-menu__item`                                                                                                                                    | Entrée de menu.                                                                                  |
-| `.aster-menu--heading`, `.aster-menu__item--paragraph`, `.aster-menu__item--h1` … `--h6`                                                               | Menu des titres, chaque entrée rendue à sa taille.                                               |
-| `.aster-menu--font`, `.aster-menu--font-size`                                                                                                          | Menus police et taille.                                                                          |
-| `.aster-color-picker`, `__none`, `__grid`, `__swatch`, `__preview`, `__preview--empty`                                                                 | Sélecteur de couleur.                                                                            |
-| `.aster-table-picker`, `__size`, `__grid`, `__cell`, `__actions`                                                                                       | Grille d'insertion de table.                                                                     |
-| `.aster-dialog`, `__field`, `__label`, `__input`, `__error`, `__check`, `__checkbox`, `__actions`, `__button`, `__button--primary`, `__button--danger` | Dialogues lien et image.                                                                         |
-| `.aster-link-dialog`, `.aster-image-dialog`, `.aster-image-dialog__from-file`, `.aster-image-dialog__file`                                             | Spécifiques aux deux dialogues.                                                                  |
-| `.aster-search-panel`, `__row`, `__query`, `__count`, `__nav`, `__replacement`, `__replace`, `__replace-all`, `__close`                                | Panneau de recherche (un `.aster-dialog` dans un dropdown `role="dialog"`).                      |
-| `.aster-special-chars`, `__tabs`, `__tab`, `__tab--active`, `__grid`, `__char`                                                                         | Panneau des caractères spéciaux (onglets `role="tab"`, grille de 7 colonnes).                    |
-| `.aster-source-button`, `.aster-fullscreen-button`, `.aster-print-button`                                                                              | Boutons des widgets `source`, `fullscreen`, `print` (tous `.aster-toolbar__button`).             |
-| `.aster-source`                                                                                                                                        | `<textarea>` de la vue source, ajouté dans `.aster__content` à côté du contenu masqué.           |
-| `.aster-context-menu`, `.aster-table-context-menu`                                                                                                     | Menu contextuel de table (`position: fixed`, `role="menu"`, ajouté dans `.aster__content`).      |
-| `.aster-content`                                                                                                                                       | Zone de contenu (police, taille, interligne du contenu).                                         |
-| `.aster-content .ProseMirror`                                                                                                                          | Le `contenteditable` : `min-height`, padding, mise en forme des blocs.                           |
-| `figure.aster-image`, `.aster-image__handle`                                                                                                           | NodeView d'une image : `<figure contenteditable="false"><img><div class="aster-image__handle">`. |
-| `.aster-print`                                                                                                                                         | Conteneur du contenu dans la fenêtre d'impression (hors `.aster`).                               |
+| Sélecteur                                                                                                                                              | Élément                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.aster`                                                                                                                                               | Racine. Porte `data-theme` et les variables. Bordure, fond, rayon `--aster-radius-lg`.                                                                                     |
+| `.aster__toolbar`                                                                                                                                      | Bande de toolbar (fond `--aster-surface-2`, bordure basse).                                                                                                                |
+| `.aster__content`                                                                                                                                      | Conteneur du contenu, `flex: 1`.                                                                                                                                           |
+| `.aster-toolbar`                                                                                                                                       | La toolbar elle-même (`role="toolbar"`), flex wrap.                                                                                                                        |
+| `.aster-toolbar__group`                                                                                                                                | Groupe d'items, séparé par une bordure droite.                                                                                                                             |
+| `.aster-toolbar__button`                                                                                                                               | Tout bouton (commande, déclencheur, entrée de menu, bouton de dialogue).                                                                                                   |
+| `.aster-toolbar__icon`                                                                                                                                 | Enveloppe de l'icône SVG, 20 × 20.                                                                                                                                         |
+| `.aster-toolbar__text`                                                                                                                                 | Texte visible d'un bouton.                                                                                                                                                 |
+| `.aster-dropdown`                                                                                                                                      | Conteneur d'un dropdown (`position: relative`).                                                                                                                            |
+| `.aster-dropdown__trigger`                                                                                                                             | Bouton déclencheur.                                                                                                                                                        |
+| `.aster-dropdown__chevron`                                                                                                                             | Chevron du déclencheur.                                                                                                                                                    |
+| `.aster-dropdown__panel`                                                                                                                               | Panneau flottant (`position: absolute`, `z-index: 50`, ombre `--aster-shadow`).                                                                                            |
+| `.aster-menu`                                                                                                                                          | Panneau en liste verticale.                                                                                                                                                |
+| `.aster-menu__item`                                                                                                                                    | Entrée de menu.                                                                                                                                                            |
+| `.aster-menu--heading`, `.aster-menu__item--paragraph`, `.aster-menu__item--h1` … `--h6`                                                               | Menu des titres, chaque entrée rendue à sa taille.                                                                                                                         |
+| `.aster-menu--font`, `.aster-menu--font-size`                                                                                                          | Menus police et taille.                                                                                                                                                    |
+| `.aster-color-picker`, `__none`, `__grid`, `__swatch`, `__preview`, `__preview--empty`                                                                 | Sélecteur de couleur.                                                                                                                                                      |
+| `.aster-table-picker`, `__size`, `__grid`, `__cell`, `__actions`                                                                                       | Grille d'insertion de table.                                                                                                                                               |
+| `.aster-dialog`, `__field`, `__label`, `__input`, `__error`, `__check`, `__checkbox`, `__actions`, `__button`, `__button--primary`, `__button--danger` | Dialogues lien et image.                                                                                                                                                   |
+| `.aster-link-dialog`, `.aster-image-dialog`, `.aster-image-dialog__from-file`, `.aster-image-dialog__file`                                             | Spécifiques aux deux dialogues.                                                                                                                                            |
+| `.aster-search-panel`, `__row`, `__query`, `__count`, `__nav`, `__replacement`, `__replace`, `__replace-all`, `__close`                                | Panneau de recherche (un `.aster-dialog` dans un dropdown `role="dialog"`).                                                                                                |
+| `.aster-special-chars`, `__tabs`, `__tab`, `__tab--active`, `__grid`, `__char`                                                                         | Panneau des caractères spéciaux (onglets `role="tab"`, grille de 7 colonnes).                                                                                              |
+| `.aster-source-button`, `.aster-fullscreen-button`, `.aster-print-button`                                                                              | Boutons des widgets `source`, `fullscreen`, `print` (tous `.aster-toolbar__button`).                                                                                       |
+| `.aster-source`                                                                                                                                        | `<textarea>` de la vue source, ajouté dans `.aster__content` à côté du contenu masqué.                                                                                     |
+| `.aster-context-menu`, `.aster-table-context-menu`                                                                                                     | Menu contextuel de table (`position: fixed`, `role="menu"`, ajouté dans `.aster__content`).                                                                                |
+| `span.aster-variable[data-name]`                                                                                                                       | NodeView d'une variable dans le contenu (`contenteditable="false"`, `title` = `{{nom}}` ou libellé traduit).                                                               |
+| `.aster-variable-entry__label`, `__name`, `__value`, `__unresolved`                                                                                    | Entrée de variable partagée par le widget `variable` et le panneau de suggestion : libellé, `{{nom}}` en mono, valeur courante ou pastille « sans valeur ».                |
+| `.aster-variable-menu`, `__item`, `__empty`, `__new`, `--create`, `__name`                                                                             | Panneau du widget `variable` ; `--create` quand il affiche le formulaire « Nouvelle variable ».                                                                            |
+| `.aster-variable-suggestion`, `__option`, `__option--create`, `__decoration`                                                                           | Panneau `listbox` de la suggestion `{{` (`position: fixed`, `z-index: 60`, monté dans `.aster__content`) ; `__decoration` est posée sur le texte `{{…` en cours de saisie. |
+| `.aster-variable-dialog`, `__title`                                                                                                                    | Dialogue d'édition de puce (`role="dialog"`, `position: fixed`), champs en `.aster-dialog__*`.                                                                             |
+| `.aster-bubble`, `__button`, `__button--primary`, `__button--danger`, `__separator`, `__url`, `__input`, `.aster-image-bubble__size`                   | Bulles contextuelles de lien et d'image (`position: fixed`, `z-index: 60`, montées dans `.aster__content`).                                                                |
+| `.aster-slash-menu`, `__option`, `__label`, `__shortcut`, `__empty`, `__decoration`                                                                    | Panneau `listbox` du menu `/` ; `__decoration` sur le texte `/…` saisi.                                                                                                    |
+| `.aster-outline`, `__item`, `__item--h1` … `--h6`, `__empty`                                                                                           | Panneau du widget `outline`, chaque entrée indentée selon son niveau.                                                                                                      |
+| `.aster-content`                                                                                                                                       | Zone de contenu (police, taille, interligne du contenu).                                                                                                                   |
+| `.aster-content .ProseMirror`                                                                                                                          | Le `contenteditable` : `min-height`, padding, mise en forme des blocs.                                                                                                     |
+| `figure.aster-image`, `.aster-image__handle`                                                                                                           | NodeView d'une image : `<figure contenteditable="false"><img><div class="aster-image__handle">`.                                                                           |
+| `.aster-print`                                                                                                                                         | Conteneur du contenu dans la fenêtre d'impression (hors `.aster`).                                                                                                         |
 
 ### Classes et attributs d'état
 
@@ -126,6 +136,12 @@ Produite par `createAster` (le core seul ne crée que `.aster-content` et son `.
 | Curseurs ProseMirror                | `.ProseMirror-gapcursor`, `.ProseMirror-dropcursor`, `.column-resize-handle`, `.ProseMirror.resize-cursor`                                                                                  |
 | Commande d'un bouton                | `[data-command='bold']` (utile pour cibler un bouton précis)                                                                                                                                |
 | Liste de tâches                     | `.ProseMirror ul[data-type='taskList']`                                                                                                                                                     |
+| Variable résolue                    | `.aster-variable--resolved` (bordure `--aster-accent`, texte = valeur) ; vide, elle affiche `∅` en `--aster-text-muted` via `::before`                                                      |
+| Variable sans valeur                | `.aster-variable--unresolved` (bordure pointillée `--aster-danger`, libellé italique `--aster-text-muted`)                                                                                  |
+| Variable sélectionnée               | `.aster-variable--selected` (et `.ProseMirror-selectednode`) : anneau `--aster-accent`, fond `--aster-selection`                                                                            |
+| Option surlignée (suggestion, `/`)  | `.aster-variable-suggestion__option--selected`, `.aster-slash-menu__option--selected`, `[aria-selected='true']`                                                                             |
+| Panneau flottant fermé              | `[hidden]` sur `.aster-variable-suggestion`, `.aster-variable-dialog`, `.aster-bubble`, `.aster-slash-menu`                                                                                 |
+| Pinceau verrouillé                  | `.aster-format-painter--locked` (bordure et anneau intérieur `--aster-accent`), en plus de `aria-pressed`                                                                                   |
 
 ## 🎛️ Variables
 
@@ -142,7 +158,7 @@ Trente variables, définies sur `.aster[data-theme='light']` (`light.css`) et `.
 
 Chaque thème pose aussi `color-scheme` (`light` / `dark`) pour les contrôles natifs (cases à cocher des listes de tâches, `<input type="file">`, `<textarea>` de la vue source).
 
-Les feuilles `images-tables.css`, `search-source.css` et `print.css` ne définissent aucune variable : elles consomment celles-ci (`--aster-highlight` pour les correspondances, `--aster-accent` pour la poignée d'image et la poignée de colonne, `--aster-font-mono` pour la vue source, `--aster-button-size` pour la grille des caractères spéciaux). Un thème custom les habille donc sans rien ajouter. Le test `themes.spec.ts` du paquet `ui` vérifie que chaque `var(--aster-*)` utilisée dans ces feuilles existe dans `light.css` et `night.css`, et que sept paires texte / fond atteignent WCAG AA (4,5 : 1).
+Les feuilles `images-tables.css`, `search-source.css`, `print.css`, `variables.css` et `bubbles.css` ne définissent aucune variable : elles consomment celles-ci (`--aster-highlight` pour les correspondances, `--aster-accent` pour la poignée d'image, la poignée de colonne et la bordure d'une puce résolue, `--aster-danger` pour une puce sans valeur, `--aster-accent-soft` pour la puce et les options surlignées, `--aster-surface` / `--aster-shadow` / `--aster-radius-lg` pour tous les panneaux flottants, `--aster-font-mono` pour la vue source et les `{{nom}}`, `--aster-button-size` pour la grille des caractères spéciaux et la hauteur des options). Un thème custom les habille donc sans rien ajouter. Le test `themes.spec.ts` du paquet `ui` vérifie que chaque `var(--aster-*)` utilisée dans ces feuilles existe dans `light.css` et `night.css`, et que sept paires texte / fond atteignent WCAG AA (4,5 : 1).
 
 ## 🏢 Exemple : thème « corporate » complet
 
@@ -254,6 +270,26 @@ Vérifie le contraste AA (texte sur surface ≥ 4.5:1, accent-contrast sur accen
 .aster[data-theme='corporate'] .aster-content .ProseMirror p.is-editor-empty:first-child::before {
   font-style: italic;
 }
+
+/* Puces de variables : pleines en accent, sans italique quand la valeur manque */
+.aster[data-theme='corporate'] .aster-content .ProseMirror .aster-variable {
+  border-radius: 999px;
+  background: var(--aster-accent);
+  color: var(--aster-accent-contrast);
+}
+.aster[data-theme='corporate'] .aster-content .ProseMirror .aster-variable--unresolved {
+  background: transparent;
+  color: var(--aster-danger);
+  font-style: normal;
+}
+
+/* Bulles et menus flottants plus discrets */
+.aster[data-theme='corporate'] .aster-bubble,
+.aster[data-theme='corporate'] .aster-slash-menu,
+.aster[data-theme='corporate'] .aster-variable-suggestion {
+  border-radius: var(--aster-radius);
+  box-shadow: none;
+}
 ```
 
 Règles de `base.css` à connaître pour ne pas se battre contre elles :
@@ -265,6 +301,7 @@ Règles de `base.css` à connaître pour ne pas se battre contre elles :
 - Dans l'éditeur, une image est une `figure.aster-image` en `display: table; max-width: 100%`, alignée via `data-align` sur la figure (`margin-left` / `margin-right: auto`), l'`<img>` en `display: block; height: auto` ; la poignée `.aster-image__handle` n'apparaît qu'au survol, à la sélection ou pendant le drag, jamais en lecture seule.
 - Le `mark` utilise `--aster-highlight` sauf si une couleur est posée inline (surlignage multicolore). Les correspondances de recherche réutilisent `--aster-highlight`.
 - La vue source (`.aster-source`) reprend `--aster-font-mono`, `--aster-font-size-ui` et `--aster-content-min-height` ; en plein écran elle occupe toute la hauteur.
+- Une puce de variable (`variables.css`) est `display: inline; white-space: nowrap; user-select: none`, en `--aster-font-ui` à `0.9em`, fond `--aster-accent-soft`, rayon `--aster-radius`. Les panneaux flottants (suggestion, dialogue, bulles, menu `/`) sont en `position: fixed; z-index: 60` dans `.aster__content` : ils héritent des variables du thème et passent au-dessus des dropdowns de la toolbar (`z-index: 50`).
 
 ## 🖨️ Rendu hors éditeur
 
@@ -276,7 +313,7 @@ Pour afficher le HTML stocké avec la même mise en forme sans monter d'éditeur
 </div>
 ```
 
-Hors éditeur, les images sont des `<img data-align>` nus (le NodeView n'existe pas dans `getHTML()`) : `base.css` ne les aligne pas, ajoute toi-même les deux règles que son commentaire suggère :
+Hors éditeur, les variables sont des `<span data-aster-variable>{{nom}}</span>` nus, sans la classe `aster-variable` du NodeView : pour un aperçu, passe par `getHTML({ variables: 'resolve' })` ou `resolveVariablesHtml` (texte substitué), ou style `span[data-aster-variable]` toi-même. Les images sont des `<img data-align>` nus (le NodeView n'existe pas dans `getHTML()`) : `base.css` ne les aligne pas, ajoute toi-même les deux règles que son commentaire suggère :
 
 ```css
 .ProseMirror img[data-align='center'] {
@@ -292,4 +329,4 @@ Hors éditeur, les images sont des `<img data-align>` nus (le NodeView n'existe 
 
 Ou monte un éditeur `readOnly: true, toolbar: false` : le schéma refiltre le HTML au passage, ce qui vaut une sanitization de plus côté client, et le NodeView aligne les images. Pour imprimer ce même HTML avec une feuille autonome, `buildPrintDocument` de `ui` produit un document complet prêt pour une fenêtre ou un PDF.
 
-> ℹ️ Depuis 0.3.0, les règles des tables redimensionnables, des images, de la recherche, de la vue source, du plein écran, des caractères spéciaux et de l'impression vivent dans des feuilles dédiées (`images-tables.css`, `search-source.css`, `print.css`), toutes importées par `aster.css`. `base.css` seul ne suffit plus pour ces fonctionnalités.
+> ℹ️ Depuis 0.3.0, les règles des tables redimensionnables, des images, de la recherche, de la vue source, du plein écran, des caractères spéciaux et de l'impression vivent dans des feuilles dédiées (`images-tables.css`, `search-source.css`, `print.css`) ; 0.4.0 ajoute `variables.css` (puces et panneaux de variables) et `bubbles.css` (bulles, menu `/`, sommaire, pinceau). Toutes sont importées par `aster.css` ; `base.css` seul ne suffit plus pour ces fonctionnalités.

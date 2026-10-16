@@ -389,7 +389,7 @@ riche, `/import` dépôt de `.docx` avec avertissements, `/readonly` rendu figé
 ```bash
 npx ng test aster-angular --watch=false   # 39 tests du composant et de provideAster
 npx ng test demo --watch=false            # 23 tests des pages de la démo
-npm run e2e -- --project=demo             # 5 tests Playwright sur la démo (ng serve lancé par Playwright)
+npm run e2e -- --project=demo             # tests Playwright sur la démo, page Modèle comprise (ng serve lancé par Playwright)
 ```
 
 TestBed + Vitest, environnement jsdom. Monte le composant, appelle `fixture.detectChanges()`
