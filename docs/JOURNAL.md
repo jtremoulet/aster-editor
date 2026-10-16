@@ -280,3 +280,11 @@
 - **Vérifié en navigateur** sur les 3 fixtures : 08 → 9 variables et 11 puces (le `{{` coupé sur deux runs est recollé), 09 → 5 champs de fusion simples et complexe en puces, 10 → 3 contrôles de contenu avec libellés et valeurs (« Jean Dupont », placeholder ignoré). Zéro avertissement.
 - Décision L15 à retenir : avec un `pattern` custom ou `braces` désactivé, les `{{nom}}` produits par le prétraitement ne sont reconnus que pour les noms collectés (jamais de conversion contre la volonté de l'intégrateur). Les variables d'en-tête/pied sont remontées dans `result.variables` bien qu'absentes du HTML.
 - Inventaires des fixtures mis à jour, `npm run fixtures` enchaîne les trois générateurs. Revue R15 lancée.
+
+### 16/10 11:35 — L16 word-export-fidélité rendu et intégré (agent 25 min, 301k tokens, 96 outils). Vague 1 close.
+
+- 45 tests, word à 409 (98,4 %), charge 224 ms. Trois modes de variables, en-têtes/pieds avec `PAGE`/`NUMPAGES`, saut de page, TOC préremplie par docx 9.10 + `updateFields`, notes de bas de page réelles avec aller-retour, titres numérotés `decimal`/`legal`, largeurs DXA, A4/Letter, orientation, marges, `lang`, police, styles de titres.
+- Échantillon « toutes options » rangé dans `samples/export-fidelite-complet.docx` avec une checklist de 12 points dans `samples/README.md` pour l'ouverture dans Word réel par Joris.
+- **Tour complet vérifié en navigateur** : import de `09-variables-mergefields` → `setValues` → export `fields` → réimport retrouve les 5 variables ; export `resolve` → réimport : texte substitué, `{{DateEcheance}}`/`{{Signataire}}` préservés et re-détectés, 2 avertissements `variable-unresolved` ; export complet 12 kB sans erreur.
+- **Écart pour le lot de correctifs** : à la réimportation d'un export `fields` avec valeurs connues, les valeurs sont perdues (L15 jette le résultat du champ ; L16 l'émet pourtant via `SimpleField`). Correctif : conserver le résultat comme valeur quand il n'est pas le placeholder `«nom»`.
+- Vague 1 de la session 2 : 4 lots intégrés en **1h15** après le lancement, 0 fichier hors périmètre, 1 collision de nom de type résolue par les agents eux-mêmes (`DocxVariableOptions` vs `DocxExportVariableOptions`).
