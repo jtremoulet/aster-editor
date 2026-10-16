@@ -6,6 +6,7 @@ import { normalizeTables } from '../paste/passes/normalize-tables';
 import { normalizeWhitespace } from '../paste/passes/normalize-whitespace';
 import { stripConditionalComments } from '../paste/passes/strip-conditional-comments';
 import { stripOfficeNamespaces } from '../paste/passes/strip-office-namespaces';
+import { wrapVariables } from '../paste/passes/variables';
 import { resolvePasteOptions, type PastePass, type WordPasteOptions } from '../paste/types';
 
 /** `list-style-type` que Google pose sur chaque `<li>`, traduit en attribut `type` du `<ol>`. */
@@ -101,6 +102,7 @@ const GOOGLE_PASSES: readonly PastePass[] = [
   normalizeTables,
   collapseEmptyParagraphs,
   normalizeWhitespace,
+  wrapVariables,
 ];
 
 /**

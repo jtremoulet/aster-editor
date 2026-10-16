@@ -1,0 +1,18 @@
+<p>Bonjour <span data-aster-variable="prenom">{{prenom}}</span> <span data-aster-variable="nom">{{nom}}</span>,</p>
+<p>
+  Votre contrat <strong><span data-aster-variable="reference">{{reference}}</span></strong> arrive à échéance le
+  <span data-aster-variable="date_fin">{{date_fin}}</span>. Les accolades { seules } et un {{ incomplet restent du texte.
+</p>
+<table>
+  <tbody>
+    <tr>
+      <td>Montant HT</td>
+      <td><span data-aster-variable="montant_ht">{{montant_ht}}</span> €</td>
+    </tr>
+    <tr>
+      <td>TVA</td>
+      <td><span data-aster-variable="tva">{{tva}}</span> %</td>
+    </tr>
+  </tbody>
+</table>
+<p>Cordialement, <span data-aster-variable="signataire">{{signataire}}</span></p>

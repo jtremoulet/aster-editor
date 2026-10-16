@@ -17,6 +17,8 @@ export type {
   HtmlParser,
 } from './docx/types';
 export { importDocx } from './docx/import-docx';
+export type { DocxVariableOptions, VariableDetection } from './docx/types';
+export type { PasteVariableOptions } from './paste/types';
 export type { WordPasteOptions, ListLevelFormat } from './paste/types';
 export { isWordHtml, isGoogleDocsHtml } from './paste/detectors';
 export { normalizeWordHtml } from './paste/normalize-word-html';
@@ -30,6 +32,21 @@ export type {
   DocxImageFetcher,
   DocxPageSize,
   DocxWarning,
+} from './export/types';
+export type {
+  DocxDefaultFont,
+  DocxExportVariableOptions,
+  DocxFooterOptions,
+  DocxHeaderAlign,
+  DocxHeaderOptions,
+  DocxHeadingStyle,
+  DocxHeadingStyles,
+  DocxNumberedHeadingsOptions,
+  DocxPageMargins,
+  DocxPageOptions,
+  DocxPageOrientation,
+  DocxTocOptions,
+  DocxVariableMode,
 } from './export/types';
 export { exportDocx, DOCX_MIME_TYPE } from './export/export-docx';
 export { downloadDocx } from './export/download-docx';

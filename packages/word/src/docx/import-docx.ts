@@ -1,6 +1,14 @@
 import type { UploadHandler } from '@aster-editor/core';
 import type mammothTypes from 'mammoth';
+import {
+  collectResultVariables,
+  createVariablesPass,
+  resolveDocxVariableOptions,
+  variablePatterns,
+} from './postprocess/variables';
 import { runPostprocess } from './postprocess/run-postprocess';
+import type { CollectedVariable } from './preprocess/variables';
+import { preprocessVariables } from './preprocess/variables';
 import { buildStyleMap } from './style-map';
 import type {
   DocxImportOptions,
@@ -189,10 +197,26 @@ export async function importDocx(
   const parser = resolveParser(options.parse);
   const mammoth = await loadMammoth();
   const warnings: DocxImportWarning[] = [];
+  const variableOptions = resolveDocxVariableOptions(options.variables);
+
+  // Prétraitement des champs de fusion et contrôles de contenu avant mammoth. Ne doit
+  // jamais faire échouer l'import : en cas d'erreur, on convertit l'archive d'origine.
+  let mammothBuffer = buffer;
+  let collected: ReadonlyMap<string, CollectedVariable> = new Map();
+  try {
+    const preprocessed = await preprocessVariables(buffer, variableOptions);
+    mammothBuffer = preprocessed.buffer;
+    collected = preprocessed.variables;
+  } catch (error) {
+    warnings.push({
+      code: 'variables-preprocess-failed',
+      message: `Prétraitement des variables impossible, document importé sans : ${describeError(error)}`,
+    });
+  }
 
   let raw: Awaited<ReturnType<Mammoth['convertToHtml']>>;
   try {
-    raw = await mammoth.convertToHtml(toMammothInput(buffer), {
+    raw = await mammoth.convertToHtml(toMammothInput(mammothBuffer), {
       styleMap: buildStyleMap(options.styleMap),
       convertImage: createImageConverter(mammoth, options.upload, warnings),
       ignoreEmptyParagraphs: true,
@@ -209,7 +233,10 @@ export async function importDocx(
     `<!doctype html><html><body>${raw.value}</body></html>`,
     'text/html',
   );
-  runPostprocess(doc, { options: { footnotes: options.footnotes !== false }, warnings });
+  const patterns = variablePatterns(variableOptions, collected);
+  runPostprocess(doc, { options: { footnotes: options.footnotes !== false }, warnings }, [
+    createVariablesPass(patterns, collected),
+  ]);
 
-  return { html: doc.body.innerHTML, warnings };
+  return { html: doc.body.innerHTML, warnings, variables: collectResultVariables(doc, collected) };
 }

@@ -21,28 +21,31 @@ Convertit un `.docx` en HTML prêt pour `editor.setHTML` ou `editor.insertHTML`.
 
 ### Options (`DocxImportOptions`)
 
-| Champ       | Type                | Défaut            | Rôle                                                                                                                                                        |
-| ----------- | ------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `upload`    | `UploadHandler`     | —                 | Hook `(file: File) => Promise<string>` appelé pour chaque image embarquée. Sans hook : data URL base64.                                                     |
-| `footnotes` | `boolean`           | `true`            | Conserver les notes de bas de page et de fin en liste finale. `false` les supprime avec un avertissement.                                                   |
-| `styleMap`  | `readonly string[]` | `[]`              | Règles mammoth additionnelles (`p[style-name='X'] => h2:fresh`), ajoutées **après** celles d'Aster, qui restent prioritaires. Lignes vides et `#` ignorées. |
-| `parse`     | `HtmlParser`        | `new DOMParser()` | Parseur HTML injectable (`{ parseFromString(html, 'text/html'): Document }`) pour SSR ou tests.                                                             |
+| Champ       | Type                  | Défaut            | Rôle                                                                                                                                                        |
+| ----------- | --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `upload`    | `UploadHandler`       | —                 | Hook `(file: File) => Promise<string>` appelé pour chaque image embarquée. Sans hook : data URL base64.                                                     |
+| `footnotes` | `boolean`             | `true`            | Conserver les notes de bas de page et de fin en liste finale. `false` les supprime avec un avertissement.                                                   |
+| `styleMap`  | `readonly string[]`   | `[]`              | Règles mammoth additionnelles (`p[style-name='X'] => h2:fresh`), ajoutées **après** celles d'Aster, qui restent prioritaires. Lignes vides et `#` ignorées. |
+| `parse`     | `HtmlParser`          | `new DOMParser()` | Parseur HTML injectable (`{ parseFromString(html, 'text/html'): Document }`) pour SSR ou tests.                                                             |
+| `variables` | `DocxVariableOptions` | tout actif        | `{ detect?, pattern? }` : sources de variables reconnues et motif alternatif à `{{nom}}`. Voir [Variables](#variables).                                     |
 
 ### Résultat (`DocxImportResult`)
 
-| Champ      | Type                           | Rôle                                         |
-| ---------- | ------------------------------ | -------------------------------------------- |
-| `html`     | `string`                       | HTML sémantique, `body.innerHTML`.           |
-| `warnings` | `readonly DocxImportWarning[]` | `{ code, message }`, vide si tout est passé. |
+| Champ       | Type                           | Rôle                                                                                               |
+| ----------- | ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `html`      | `string`                       | HTML sémantique, `body.innerHTML`.                                                                 |
+| `warnings`  | `readonly DocxImportWarning[]` | `{ code, message }`, vide si tout est passé.                                                       |
+| `variables` | `readonly AsterVariable[]`     | Variables trouvées (`name`, `label?`, `value?`), ordre d'apparition. Voir [Variables](#variables). |
 
 ### Codes d'avertissement (`DocxImportWarningCode`)
 
-| Code                  | Sens                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `mammoth`             | Message mammoth remonté tel quel (`warning: Unrecognised paragraph style…`, image illisible).           |
-| `image-upload-failed` | Le hook `upload` a rejeté ou résolu autre chose qu'une chaîne non vide ; l'image est repliée en base64. |
-| `footnotes-dropped`   | Des notes existaient et `footnotes: false` les a supprimées.                                            |
-| `unsupported-style`   | Réservé aux post-traitements : élément non converti fidèlement.                                         |
+| Code                          | Sens                                                                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mammoth`                     | Message mammoth remonté tel quel (`warning: Unrecognised paragraph style…`, image illisible).                                                                                         |
+| `image-upload-failed`         | Le hook `upload` a rejeté ou résolu autre chose qu'une chaîne non vide ; l'image est repliée en base64.                                                                               |
+| `footnotes-dropped`           | Des notes existaient et `footnotes: false` les a supprimées.                                                                                                                          |
+| `unsupported-style`           | Réservé aux post-traitements : élément non converti fidèlement.                                                                                                                       |
+| `variables-preprocess-failed` | Le prétraitement des champs de fusion et contrôles de contenu a échoué (XML illisible, pas de `DOMParser` XML) ; le document est importé sans, les `{{nom}}` saisis restent détectés. |
 
 ### Ce que l'import produit
 
@@ -55,7 +58,30 @@ Convertit un `.docx` en HTML prêt pour `editor.setHTML` ou `editor.insertHTML`.
 - **Images** : `src` = URL du hook ou data URL, `alt` toujours présent (vide si absent), `width`/`height` nuls retirés.
 - **Notes** : liste `<ol data-footnotes>` en fin de document, appels `[1]` en texte simple, identifiants dans `data-footnote`. Note : le schéma Tiptap ne conserve pas `data-footnote` après `setHTML`.
 - **Liens** : `<a href>` natifs mammoth, puis filtrés par la politique de liens du core à l'insertion.
+- **Variables** : `<span data-aster-variable="nom" data-label="…">{{nom}}</span>`, voir ci-dessous.
 - Paragraphes vides supprimés.
+
+### Variables
+
+Trois sources sont reconnues et ramenées à la même puce `<span data-aster-variable="nom">{{nom}}</span>`, que le core transforme en variable à l'insertion :
+
+| Source (`detect`) | Dans Word                                                                                                                                                                                                                                             | Ce qu'on garde                                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `braces`          | `{{nom}}` tapé dans le texte, espaces intérieurs tolérés (`{{ nom }}`), y compris dans un titre, une liste, une cellule, une marque, ou coupé sur deux runs.                                                                                          | Le nom. Accolades seules et `{{` incomplet restent du texte ; `<pre>` et `<code>` ne sont jamais analysés.                                                                           |
+| `mergeFields`     | Champs de fusion `MERGEFIELD nom`, forme simple (`w:fldSimple`) ou complexe (`w:fldChar begin … end`, instruction répartie sur plusieurs runs). Un nom entre guillemets (`"Nom complet"`) est normalisé : minuscules, accents retirés, espaces → `_`. | Le nom et la mise en forme du run. Le résultat affiché par Word (`«Nom»`, échantillon de publipostage) est jeté. Les autres champs (`HYPERLINK`, `PAGE`, `TOC`, `IF`…) sont intacts. |
+| `contentControls` | Contrôles de contenu `w:sdt` avec `w:tag` (nom) et `w:alias` (libellé) ; sans tag, l'alias normalisé sert de nom ; sans ni l'un ni l'autre, ou pour une table des matières, un groupe, une ligne de table, le contrôle est laissé tel quel.           | Le nom, le libellé (`data-label`, `label`) et **la valeur saisie** (`value`), sauf si le contrôle affiche encore son texte de remplissage (`w:showingPlcHdr`).                       |
+
+Les champs et contrôles sont réécrits dans le XML du `.docx` **avant** mammoth (`document.xml`, en-têtes, pieds de page, notes), car mammoth perd les premiers et traverse les seconds. Le prétraitement ne lève jamais : en cas d'échec, le document est importé sans et un avertissement `variables-preprocess-failed` est émis. `result.variables` liste les variables du HTML dans l'ordre d'apparition, puis celles trouvées dans les en-têtes et pieds de page (que mammoth ne rend pas) ; donne-la au core avec `editor.variables.define(result.variables)`.
+
+```ts
+const { html, variables } = await importDocx(file, {
+  variables: { detect: ['braces', 'contentControls'], pattern: /\[([a-z_]+)\]/g },
+});
+editor.setHTML(html);
+editor.variables.define(variables); // libellés et valeurs connues
+```
+
+`pattern` remplace la syntaxe `{{nom}}` du texte libre par un motif dont le **groupe 1 est le nom** (validé par la règle du core : lettres, chiffres, `_`, `.`, `-`). Les runs `{{nom}}` produits par le prétraitement restent reconnus, mais seulement pour les noms qu'il a collectés. Un motif à backtracking exponentiel est à la charge de l'intégrateur. `detect: []` désactive tout.
 
 ### Exemple avec `<input type="file">`
 
@@ -104,13 +130,14 @@ Les deux normaliseurs sont aussi une barrière : balises actives supprimées ave
 
 ### Options (`WordPasteOptions`)
 
-| Champ           | Type                         | Défaut      | Rôle                                                                                        |
-| --------------- | ---------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
-| `keepColors`    | `boolean`                    | `false`     | Conserver `color` explicite. Jamais le noir / `windowtext` par défaut, jamais dans un lien. |
-| `keepAlignment` | `boolean`                    | `true`      | Conserver `text-align` (`center`, `right`, `justify` ; `left` est le défaut et tombe).      |
-| `parse`         | `(html: string) => Document` | `DOMParser` | Parseur injectable pour tests ou environnement sans DOM.                                    |
+| Champ           | Type                         | Défaut      | Rôle                                                                                                                        |
+| --------------- | ---------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `keepColors`    | `boolean`                    | `false`     | Conserver `color` explicite. Jamais le noir / `windowtext` par défaut, jamais dans un lien.                                 |
+| `keepAlignment` | `boolean`                    | `true`      | Conserver `text-align` (`center`, `right`, `justify` ; `left` est le défaut et tombe).                                      |
+| `parse`         | `(html: string) => Document` | `DOMParser` | Parseur injectable pour tests ou environnement sans DOM.                                                                    |
+| `variables`     | `boolean \| { pattern? }`    | `true`      | `{{nom}}` collé → puce `<span data-aster-variable>`. `false` désactive, `{ pattern }` remplace la syntaxe (groupe 1 = nom). |
 
-### Les 8 passes Word, dans l'ordre
+### Les 9 passes Word, dans l'ordre
 
 | #   | Passe                      | Ce qu'elle fait                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -122,8 +149,9 @@ Les deux normaliseurs sont aussi une barrière : balises actives supprimées ave
 | 6   | `normalizeTables`          | Retire `border`, `cellspacing`, `width`, `valign`, styles ; garde `colspan`/`rowspan` > 1 ; première ligne toute en gras → `<thead><th>` (le `mso-yfti-firstrow:yes` de Word n'est pas un indice : il marque la première ligne de toute table) ; déballe le `<p>` unique des cellules sauf s'il porte encore un attribut (alignement). Une table à une ligne n'a pas d'en-tête.                                                                                                                                                                                                                                                                                                                   |
 | 7   | `collapseEmptyParagraphs`  | Supprime `<p>&nbsp;</p>`, `<p><br></p>`, les `<br>` en fin de bloc et les `<br>` orphelins. Garde un `<p></p>` si tout se vide.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 8   | `normalizeWhitespace`      | `&nbsp;` entre mots → espace, suites d'espaces réduites, trim en début et fin de bloc (seulement pour un texte réellement en bord de bloc : l'espace entre un texte et une image inline reste), espaces de bord sortis des marks (`<em>a</em><u> b</u>` → `<em>a</em> <u>b</u>`), blancs d'indentation entre blocs supprimés. `<pre>` intact.                                                                                                                                                                                                                                                                                                                                                     |
+| 9   | `wrapVariables`            | `{{nom}}` dans les nœuds texte (hors `<pre>`, `<code>`) → `<span data-aster-variable="nom">{{nom}}</span>`, après fusion des textes adjacents pour recoller un `{{` coupé sur deux spans. Espaces intérieurs tolérés, accolades seules ignorées, nom validé par la règle du core. Option `variables` (`false`, ou `{ pattern }`).                                                                                                                                                                                                                                                                                                                                                                 |
 
-Le pipeline Google Docs est plus court : passes 1, 2, puis déballage du `<b style="font-weight:normal" id="docs-internal-guid-…">`, réimbrication des sous-listes (`<ul><li>a</li><ul>…</ul></ul>` → dans le `li`), remontée du `list-style-type` des `<li>` (`lower-alpha`, `upper-alpha`, `lower-roman`, `upper-roman`) en attribut `type` du `<ol>`, passe 5, déballage du `<div>` nu que Google pose autour de chaque table, puis passes 6 à 8.
+Le pipeline Google Docs est plus court : passes 1, 2, puis déballage du `<b style="font-weight:normal" id="docs-internal-guid-…">`, réimbrication des sous-listes (`<ul><li>a</li><ul>…</ul></ul>` → dans le `li`), remontée du `list-style-type` des `<li>` (`lower-alpha`, `upper-alpha`, `lower-roman`, `upper-roman`) en attribut `type` du `<ol>`, passe 5, déballage du `<div>` nu que Google pose autour de chaque table, puis passes 6 à 9.
 
 ```ts
 import { isWordHtml, normalizeWordHtml } from '@aster-editor/word';
@@ -171,14 +199,23 @@ Le JSON passe par `jsonToHtml`, sérialiseur minimal limité au schéma d'Aster 
 
 ### Options (`DocxExportOptions`)
 
-| Champ        | Type                                          | Défaut            | Rôle                                                                                                                                       |
-| ------------ | --------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `parse`      | `HtmlParser`                                  | `new DOMParser()` | Parseur HTML injectable, jamais le `document` global (SSR, tests).                                                                         |
-| `fetchImage` | `(src: string) => Promise<ArrayBuffer\|null>` | —                 | Récupère les octets d'une image `http(s)://`. Sans hook, seules les data URL sont embarquées, les autres sont ignorées avec avertissement. |
-| `title`      | `string`                                      | —                 | Titre inscrit dans les propriétés du document.                                                                                             |
-| `creator`    | `string`                                      | —                 | Auteur inscrit dans les propriétés du document.                                                                                            |
-| `pageSize`   | `'A4' \| 'LETTER'`                            | `'A4'`            | Format de page, marges de 2,54 cm.                                                                                                         |
-| `onWarning`  | `(warning: DocxExportWarning) => void`        | —                 | Reçoit chaque avertissement au fil de la conversion.                                                                                       |
+| Champ              | Type                                                      | Défaut            | Rôle                                                                                                                                       |
+| ------------------ | --------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `parse`            | `HtmlParser`                                              | `new DOMParser()` | Parseur HTML injectable, jamais le `document` global (SSR, tests).                                                                         |
+| `fetchImage`       | `(src: string) => Promise<ArrayBuffer\|null>`             | —                 | Récupère les octets d'une image `http(s)://`. Sans hook, seules les data URL sont embarquées, les autres sont ignorées avec avertissement. |
+| `title`            | `string`                                                  | —                 | Titre inscrit dans les propriétés du document.                                                                                             |
+| `creator`          | `string`                                                  | —                 | Auteur inscrit dans les propriétés du document.                                                                                            |
+| `pageSize`         | `'A4' \| 'LETTER'`                                        | `'A4'`            | Format de page, marges de 2,54 cm. `page.size` prime.                                                                                      |
+| `page`             | `DocxPageOptions`                                         | —                 | `size`, `orientation` (`portrait`/`landscape`), `margins` en mm (`top`, `right`, `bottom`, `left`, 25,4 mm par défaut).                    |
+| `lang`             | `string`                                                  | —                 | Langue du document (`w:lang`, ex. `fr-FR`) pour le correcteur de Word.                                                                     |
+| `defaultFont`      | `{ family?, sizePt? }`                                    | —                 | Police et taille du texte courant (`docDefaults`).                                                                                         |
+| `variables`        | `DocxExportVariableOptions`                               | `placeholders`    | Rendu des variables : `mode` (`placeholders`/`resolve`/`fields`), `values`, `pattern`. Voir [Variables](#variables).                       |
+| `header`           | `string \| DocxHeaderOptions`                             | —                 | En-tête : `text` brut ou `html` inline (gras, liens, variables), `align`.                                                                  |
+| `footer`           | `string \| DocxFooterOptions`                             | —                 | Pied de page : idem, plus `pageNumbers: true` (`PAGE`) ou `'x-of-y'` (`PAGE / NUMPAGES`).                                                  |
+| `toc`              | `boolean \| { title?, levels? }`                          | —                 | Table des matières en tête du corps, 3 niveaux par défaut. Word propose de la mettre à jour à l'ouverture.                                 |
+| `numberedHeadings` | `boolean \| { levels?, format? }`                         | —                 | Numérotation `1.`, `1.1.`… (`decimal`) ou `1`, `1.1` (`legal`) liée aux styles `Heading 1..n`, 3 niveaux par défaut.                       |
+| `headingStyles`    | `{ h1?: { color?, sizePt?, bold?, italics?, font? }, … }` | —                 | Surcharges des styles de titres ; sans option, les titres restent ceux de Word.                                                            |
+| `onWarning`        | `(warning: DocxExportWarning) => void`                    | —                 | Reçoit chaque avertissement au fil de la conversion.                                                                                       |
 
 ### Codes d'avertissement (`DocxExportWarningCode`)
 
@@ -186,33 +223,64 @@ Le JSON passe par `jsonToHtml`, sérialiseur minimal limité au schéma d'Aster 
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `image-skipped`       | Image ignorée : URL distante sans `fetchImage`, hook en échec ou `null`, data URL illisible, format non raster (SVG, WebP). |
 | `unsupported-element` | `iframe`, `video`, `audio`, `canvas`, `svg`, `form`… sans équivalent Word, ignorés.                                         |
+| `variable-unresolved` | Mode `resolve` : variable sans valeur dans `values`, laissée en `{{nom}}`.                                                  |
+| `footnote-missing`    | `<sup data-footnote-ref="n">` sans note `n` dans la liste `data-footnotes`, laissé en exposant.                             |
 
 `DocxWarning<Code>` est le type générique commun : `DocxImportWarning` et `DocxExportWarning` en sont deux spécialisations structurellement compatibles.
 
 ### Mapping HTML → Word
 
-| HTML                                           | Word                                                                                                                                                                                                               |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `h1`..`h6`                                     | Styles `Heading 1`..`Heading 6`                                                                                                                                                                                    |
-| `p`, `text-align`                              | Paragraphe, alignement `center`/`right`/`justify` (`left` est le défaut)                                                                                                                                           |
-| `strong`/`b`, `em`/`i`, `u`, `s`               | Gras, italique, souligné, barré (aussi lus depuis `font-weight`, `font-style`, `text-decoration`)                                                                                                                  |
-| `sub`, `sup`                                   | Indice, exposant                                                                                                                                                                                                   |
-| `code`, `kbd`, `samp`                          | Style de caractère `Code`, police Consolas                                                                                                                                                                         |
-| `mark`, `background-color`                     | Surlignage jaune                                                                                                                                                                                                   |
-| `span style="color / font-family / font-size"` | Couleur (`#hex`, `rgb()` en nombres ou `%`, `hsl()`, noms courants), police, taille (`px`, `pt`, `em`, `rem`, `%` et mots-clés `small`, `large`… relatifs à 11 pt)                                                 |
-| `a href`                                       | Lien externe (`http`, `https`, `mailto`, `tel`, `ftp` ; autres schémas → texte simple). Espaces, `\|` et non-ASCII sont percent-encodés dans la cible, les `%xx` existants conservés.                              |
-| `ul`, `ol`, `ol type="a/A/i/I"`, `ol start`    | Numérotation Word sur 9 niveaux : puces, décimal, lettres, romains. Chaque liste (racine ou imbriquée) a sa propre numérotation et repart à 1, ou au `start` de l'`<ol>`. Le premier bloc d'un `li` porte la puce. |
-| `blockquote`                                   | Style de paragraphe `Quote` (italique, indenté)                                                                                                                                                                    |
-| `pre`                                          | Une ligne = un paragraphe de style `HTML Preformatted` (Consolas)                                                                                                                                                  |
-| `hr`                                           | Paragraphe vide à bordure basse                                                                                                                                                                                    |
-| `br`                                           | Saut de ligne. Les `<br>` terminaux d'un paragraphe qui a d'autre contenu sont ignorés, comme en HTML (`<p><br></p>` garde le sien).                                                                               |
-| `img`                                          | Image inline PNG/JPEG/GIF/BMP, dimensions lues dans `width`/`height` ou l'en-tête du fichier, plafonnées à la largeur de page                                                                                      |
-| `table`, `thead`, `th`, `colspan`, `rowspan`   | Table 100 % avec bordures, lignes d'en-tête marquées (`thead` ou ligne entièrement en `th`) et en gras, fusions horizontales et verticales                                                                         |
-| `div`, `section`, `article`…                   | Traversés ; les inline nus deviennent des paragraphes                                                                                                                                                              |
+| HTML                                                                               | Word                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h1`..`h6`                                                                         | Styles `Heading 1`..`Heading 6`                                                                                                                                                                                                                                            |
+| `p`, `text-align`                                                                  | Paragraphe, alignement `center`/`right`/`justify` (`left` est le défaut)                                                                                                                                                                                                   |
+| `strong`/`b`, `em`/`i`, `u`, `s`                                                   | Gras, italique, souligné, barré (aussi lus depuis `font-weight`, `font-style`, `text-decoration`)                                                                                                                                                                          |
+| `sub`, `sup`                                                                       | Indice, exposant                                                                                                                                                                                                                                                           |
+| `code`, `kbd`, `samp`                                                              | Style de caractère `Code`, police Consolas                                                                                                                                                                                                                                 |
+| `mark`, `background-color`                                                         | Surlignage jaune                                                                                                                                                                                                                                                           |
+| `span style="color / font-family / font-size"`                                     | Couleur (`#hex`, `rgb()` en nombres ou `%`, `hsl()`, noms courants), police, taille (`px`, `pt`, `em`, `rem`, `%` et mots-clés `small`, `large`… relatifs à 11 pt)                                                                                                         |
+| `a href`                                                                           | Lien externe (`http`, `https`, `mailto`, `tel`, `ftp` ; autres schémas → texte simple). Espaces, `\|` et non-ASCII sont percent-encodés dans la cible, les `%xx` existants conservés.                                                                                      |
+| `ul`, `ol`, `ol type="a/A/i/I"`, `ol start`                                        | Numérotation Word sur 9 niveaux : puces, décimal, lettres, romains. Chaque liste (racine ou imbriquée) a sa propre numérotation et repart à 1, ou au `start` de l'`<ol>`. Le premier bloc d'un `li` porte la puce.                                                         |
+| `blockquote`                                                                       | Style de paragraphe `Quote` (italique, indenté)                                                                                                                                                                                                                            |
+| `pre`                                                                              | Une ligne = un paragraphe de style `HTML Preformatted` (Consolas)                                                                                                                                                                                                          |
+| `hr`                                                                               | Paragraphe vide à bordure basse                                                                                                                                                                                                                                            |
+| `br`                                                                               | Saut de ligne. Les `<br>` terminaux d'un paragraphe qui a d'autre contenu sont ignorés, comme en HTML (`<p><br></p>` garde le sien).                                                                                                                                       |
+| `img`                                                                              | Image inline PNG/JPEG/GIF/BMP, dimensions lues dans `width`/`height` ou l'en-tête du fichier, plafonnées à la largeur de page                                                                                                                                              |
+| `table`, `thead`, `th`, `colspan`, `rowspan`                                       | Table 100 % avec bordures, lignes d'en-tête marquées (`thead` ou ligne entièrement en `th`) et en gras, fusions horizontales et verticales                                                                                                                                 |
+| `div`, `section`, `article`…                                                       | Traversés ; les inline nus deviennent des paragraphes                                                                                                                                                                                                                      |
+| `td colwidth`, `style="width"`, `col`                                              | Largeurs de colonnes en DXA (1 px = 15 twips) : grille `w:tblGrid` + `w:tcW` par cellule et disposition fixe quand toutes les colonnes sont connues (réduites à l'échelle si la table déborde de la page) ; sinon table à 100 % et largeur sur les seules cellules connues |
+| `div data-page-break`, `hr data-page-break`                                        | Saut de page (`w:br w:type="page"`)                                                                                                                                                                                                                                        |
+| `p style="page-break-before: always"` / `break-before: page` / `p data-page-break` | Paragraphe avec `w:pageBreakBefore` (titres compris)                                                                                                                                                                                                                       |
+| `span data-aster-variable`, `{{nom}}`                                              | Variable : texte, valeur ou champ `MERGEFIELD` selon `options.variables.mode`. Voir [Variables](#variables)                                                                                                                                                                |
+| `sup data-footnote-ref="n"`, `sup>[n]` + `ol data-footnotes > li data-footnote`    | Vraie note de bas de page Word (`footnotes.xml`, style `Footnote Text`), appel `w:footnoteReference`, liste retirée du corps                                                                                                                                               |
 
 Les styles `Quote`, `HTML Preformatted` et `Code` portent les noms que la style map d'`importDocx` reconnaît : un aller-retour `exportDocx` → `importDocx` restitue titres, marques, lien, listes imbriquées, citation, bloc de code, image et table. Les alignements, couleurs et polices ne survivent pas à l'import (mammoth les jette volontairement).
 
 Le texte est assaini avant d'entrer dans le XML : les caractères de contrôle que XML 1.0 interdit (U+0000-U+0008, U+000B, U+000C, U+000E-U+001F) et les non-caractères U+FFFE/U+FFFF sont retirés des runs, des `alt`/`title` d'image, des `href` et des propriétés `title`/`creator`. Sans ça, Word refuse d'ouvrir le fichier. Tabulations, sauts de ligne, espaces insécables et Unicode étendu sont conservés tels quels ; seuls les blancs HTML (espace, tabulation, LF, CR, FF) sont réduits selon les règles du HTML.
+
+### Variables
+
+Convention du core : `<span data-aster-variable="nom" data-label="Nom">{{nom}}</span>`. Un `{{nom}}` en texte brut (sans span) est aussi reconnu en modes `fields` et `resolve`, via `variables.pattern` (groupe 1 = nom ; par défaut `{{nom}}`, nom en lettres, chiffres, `_`, `.`, `-`, blancs tolérés). Les blocs `<pre>` et marques `<code>` ne sont jamais analysés.
+
+| `variables.mode`        | Rendu dans Word                                                                                                                                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `placeholders` (défaut) | Texte `{{nom}}` tel quel, marques conservées.                                                                                                                                                                                                               |
+| `resolve`               | Valeur de `values[nom]`, marques du span et de son contexte conservées. Sans valeur : `{{nom}}` + avertissement `variable-unresolved`.                                                                                                                      |
+| `fields`                | Champ de fusion `w:fldSimple w:instr=" MERGEFIELD nom "`. Résultat du champ : la valeur connue, sinon `«nom»`. `importDocx` relit ces champs en variables. `fldSimple` ne porte pas de propriétés de run : les marques du span ne survivent pas en ce mode. |
+
+```ts
+await exportDocx(editor.getHTML(), {
+  variables: { mode: 'fields', values: { nom: 'ACME' } },
+});
+```
+
+### En-têtes, pieds de page, table des matières, notes
+
+- **En-tête / pied** : `header: 'Confidentiel'` ou `{ html: '<strong>Nebula</strong> {{client}}', align: 'right' }`. Le HTML passe par le convertisseur du corps (marques, liens, variables, plusieurs paragraphes) ; `align` s'applique aux paragraphes sans `text-align` propre. `footer.pageNumbers: 'x-of-y'` ajoute un dernier paragraphe `PAGE / NUMPAGES`, centré sauf `align`. Une option vide n'émet rien.
+- **Table des matières** : `toc: { title: 'Sommaire', levels: 2 }` insère le titre (style `TOC Heading`, hors des niveaux de titre) et le champ `TOC \h \o "1-2"`, **prérempli** avec les titres du document (entrées cliquables). Les numéros de page sont calculés par Word : le fichier porte `w:updateFields`, Word demande à l'ouverture « Ce document contient des champs… mettre à jour ? » — répondre Oui. LibreOffice met le champ à jour sans demander.
+- **Notes de bas de page** : le format produit par `importDocx` (`<sup>[1]</sup>` + `<ol data-footnotes><li data-footnote="footnote-1">`) redevient de vraies notes Word ; `<sup data-footnote-ref="1">` est aussi accepté, et un `<li>` sans `data-footnote` est désigné par sa position. L'aller-retour `exportDocx` → `importDocx` restitue le même HTML.
+- **Numérotation des titres** : `numberedHeadings: true` lie une numérotation à `Heading 1..3` (`w:pStyle` dans `numbering.xml`, `w:numPr` dans le style) : Word numérote les titres existants et ceux ajoutés ensuite, la table des matières reprend les numéros. `format: 'legal'` supprime le point final (`1`, `1.1`).
+- **Mise en page** : `page: { orientation: 'landscape', margins: { top: 20, bottom: 20, left: 15, right: 15 } }`. Les images et les tables sont plafonnées à la largeur utile résultante.
 
 #### Limites connues de l'export
 
@@ -220,6 +288,11 @@ Le texte est assaini avant d'entrer dans le XML : les caractères de contrôle q
 - **`li` multi-paragraphes avec sous-liste** : export Word standard (seul le premier paragraphe porte la puce, les suivants sont indentés). À la **réimportation**, mammoth sort les paragraphes non numérotés de la liste et la coupe en listes sœurs : `<ul><li><p>a</p><p>b</p><ul><li><p>c</p></li></ul></li></ul>` revient en `<ul><li><p>a</p></li></ul><p>b</p><ul><li><p></p><ul><li><p>c</p></li></ul></li></ul>`.
 - **`<ol start>`** : écrit dans `numbering.xml` (`w:start` et `startOverride`), honoré par Word, mais **non relu par mammoth** : l'aller-retour rend un `<ol>` sans `start`.
 - **Bloc dans un inline** (`<span><div>…</div></span>`) : le bloc ne peut plus devenir un paragraphe, son texte est isolé par des sauts de ligne dans le paragraphe courant.
+- **Champs de fusion sans marques** : en mode `fields`, `w:fldSimple` n'accepte pas de propriétés de run, un `<strong><span data-aster-variable>` perd son gras. Utilise `resolve` quand la mise en forme compte plus que le champ.
+- **Table des matières à mettre à jour** : les numéros de page ne sont jamais écrits par l'export, Word les calcule à l'ouverture après confirmation.
+- **Numérotation des titres non relue** : `importDocx` (mammoth) jette les numéros automatiques, un aller-retour rend des titres sans `1.`.
+- **En-têtes, pieds et notes à la réimportation** : mammoth ignore les en-têtes et pieds de page ; les notes reviennent via `data-footnotes` comme pour tout .docx.
+- **Largeurs de colonnes** : le `colwidth` Tiptap est en pixels d'écran (1 px = 15 twips) ; une table plus large que la zone de texte est réduite proportionnellement. Les largeurs en `%` sont ignorées.
 
 Les trois premières dégradations sont figées par des tests d'aller-retour (`export/lists.spec.ts`, cas X-3, M-1 et M-2 des revues) et la quatrième par `export/html-to-docx.spec.ts` (M-5), pour qu'une régression soit visible.
 
@@ -275,4 +348,4 @@ async function loadDocx(file: File): Promise<string> {
 
 ## 🧾 Exports
 
-`importDocx`, `exportDocx`, `downloadDocx`, `jsonToHtml`, `DOCX_MIME_TYPE`, `normalizeWordHtml`, `normalizeGoogleDocsHtml`, `isWordHtml`, `isGoogleDocsHtml`, `wordPasteTransformer`, et les types `DocxInput`, `DocxImportOptions`, `DocxImportResult`, `DocxImportWarning`, `DocxImportWarningCode`, `DocxExportInput`, `DocxExportOptions`, `DocxExportWarning`, `DocxExportWarningCode`, `DocxImageFetcher`, `DocxPageSize`, `DocxWarning`, `HtmlParser`, `WordPasteOptions`, `ListLevelFormat`.
+`importDocx`, `exportDocx`, `downloadDocx`, `jsonToHtml`, `DOCX_MIME_TYPE`, `normalizeWordHtml`, `normalizeGoogleDocsHtml`, `isWordHtml`, `isGoogleDocsHtml`, `wordPasteTransformer`, et les types `DocxInput`, `DocxImportOptions`, `DocxImportResult`, `DocxImportWarning`, `DocxImportWarningCode`, `DocxExportInput`, `DocxExportOptions`, `DocxExportWarning`, `DocxExportWarningCode`, `DocxImageFetcher`, `DocxPageSize`, `DocxWarning`, `HtmlParser`, `WordPasteOptions`, `ListLevelFormat`, `DocxVariableOptions`, `VariableDetection`, `PasteVariableOptions`.

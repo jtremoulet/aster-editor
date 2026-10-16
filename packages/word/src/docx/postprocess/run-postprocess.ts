@@ -20,7 +20,17 @@ export const POSTPROCESS_PASSES: readonly PostprocessPass[] = [
   stripEmptyParagraphs,
 ];
 
-/** Applique toutes les passes sur le document, en place. */
-export function runPostprocess(doc: Document, ctx: PostprocessContext): void {
+/**
+ * Applique toutes les passes sur le document, en place, puis les passes `extra`
+ * construites par l'appelant (variables : elles dépendent de ce que le prétraitement a
+ * collecté). Elles viennent en dernier : elles ne font que poser des puces dans le texte
+ * d'un HTML déjà structuré.
+ */
+export function runPostprocess(
+  doc: Document,
+  ctx: PostprocessContext,
+  extra: readonly PostprocessPass[] = [],
+): void {
   for (const pass of POSTPROCESS_PASSES) pass(doc, ctx);
+  for (const pass of extra) pass(doc, ctx);
 }

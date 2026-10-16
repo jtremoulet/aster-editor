@@ -1,0 +1,34 @@
+<h1>Contrat de prestation — <span data-aster-variable="client.nom">{{client.nom}}</span></h1>
+<p>
+  Entre la société <strong><span data-aster-variable="prestataire">{{prestataire}}</span></strong> et
+  <span data-aster-variable="client.nom">{{client.nom}}</span>, représentée par
+  <span data-aster-variable="client.representant">{{client.representant}}</span>, ci-après « le Client ».
+</p>
+<p>Date de signature : <span data-aster-variable="date_signature">{{date_signature}}</span>.</p>
+<h2>Prestations</h2>
+<ul>
+  <li><p>Prestation principale : <span data-aster-variable="prestation">{{prestation}}</span></p></li>
+  <li><p>Durée : <span data-aster-variable="duree_jours">{{duree_jours}}</span> jours</p></li>
+</ul>
+<table>
+  <thead>
+    <tr>
+      <th><p><strong>Poste</strong></p></th>
+      <th><p><strong>Montant HT</strong></p></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><p>Forfait</p></td>
+      <td><p><span data-aster-variable="montant_ht">{{montant_ht}}</span> €</p></td>
+    </tr>
+    <tr>
+      <td><p>TVA</p></td>
+      <td><p><span data-aster-variable="tva">{{tva}}</span> %</p></td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  <em>Fait à <span data-aster-variable="lieu">{{lieu}}</span>, le <span data-aster-variable="date_signature">{{date_signature}}</span>.</em>
+</p>
+<p>Texte sans variable mais avec des accolades { seules } et un {{ incomplet.</p>

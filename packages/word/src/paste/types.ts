@@ -9,6 +9,31 @@ export interface WordPasteOptions {
    * Injectable pour les tests et les environnements sans DOM.
    */
   parse?: (html: string) => Document;
+  /**
+   * Transformer `{{nom}}` en puce `<span data-aster-variable>`. Vrai par défaut ;
+   * `{ pattern }` remplace la syntaxe `{{nom}}` par un motif dont le groupe 1 est le nom.
+   */
+  variables?: boolean | PasteVariableOptions;
+}
+
+/** Motif de variable personnalisé pour le collage. */
+export interface PasteVariableOptions {
+  readonly pattern?: RegExp;
+}
+
+/** Détection des variables résolue, telle que la dernière passe la lit. */
+export interface ResolvedVariableOptions {
+  readonly enabled: boolean;
+  readonly pattern?: RegExp;
+}
+
+/** Applique le défaut (actif, syntaxe `{{nom}}`) à l'option `variables`. */
+export function resolveVariableOptions(
+  option: boolean | PasteVariableOptions | undefined,
+): ResolvedVariableOptions {
+  if (option === false) return { enabled: false };
+  if (option === true || option === undefined) return { enabled: true };
+  return option.pattern ? { enabled: true, pattern: option.pattern } : { enabled: true };
 }
 
 /**
@@ -42,6 +67,8 @@ export interface ResolvedPasteOptions {
    * sur le texte du marqueur de liste.
    */
   readonly listFormats: ReadonlyMap<string, ListLevelDeclaration>;
+  /** Détection des variables. Absente (options construites à la main) : active, `{{nom}}`. */
+  readonly variables?: ResolvedVariableOptions;
 }
 
 /** Signature commune des passes : elles mutent le `Document` en place et ne renvoient rien. */
@@ -56,5 +83,6 @@ export function resolvePasteOptions(
     keepColors: options.keepColors ?? false,
     keepAlignment: options.keepAlignment ?? true,
     listFormats,
+    variables: resolveVariableOptions(options.variables),
   };
 }

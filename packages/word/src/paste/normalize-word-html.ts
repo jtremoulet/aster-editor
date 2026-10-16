@@ -9,9 +9,13 @@ import {
   stripConditionalCommentsText,
 } from './passes/strip-conditional-comments';
 import { stripOfficeNamespaces } from './passes/strip-office-namespaces';
+import { wrapVariables } from './passes/variables';
 import { resolvePasteOptions, type PastePass, type WordPasteOptions } from './types';
 
-/** Ordre des passes, celui documenté dans `docs/ARCHITECTURE.md`. */
+/**
+ * Ordre des passes, celui documenté dans `docs/ARCHITECTURE.md`. `wrapVariables` ferme
+ * la marche : les textes adjacents ont été fusionnés, un `{{` coupé sur deux spans est recollé.
+ */
 export const WORD_PASSES: readonly PastePass[] = [
   stripConditionalComments,
   stripOfficeNamespaces,
@@ -21,6 +25,7 @@ export const WORD_PASSES: readonly PastePass[] = [
   normalizeTables,
   collapseEmptyParagraphs,
   normalizeWhitespace,
+  wrapVariables,
 ];
 
 const START_FRAGMENT = '<!--StartFragment-->';
