@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/angular",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Composant Angular standalone pour Aster Editor : reactive forms, signals, zoneless",
   "license": "MIT",
   "author": "Joris Tremoulet",

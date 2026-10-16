@@ -295,7 +295,7 @@ test.describe('Playground vanilla — variables et parité', () => {
     await expect(options).toHaveCount(1);
     await expect(options.first()).toContainText('Tableau 3 × 3');
     await expect(options.first()).toHaveAttribute('aria-selected', 'true');
-
+    // Entrée valide l'entrée surlignée : le plugin / est enregistré avant les keymaps de Tiptap.
     // Validation au clic : le plugin `/` est enregistré après les keymaps de Tiptap, donc
     await page.keyboard.press('Enter');
     await expect(menu).toBeHidden();
