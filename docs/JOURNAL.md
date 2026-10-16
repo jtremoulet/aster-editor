@@ -315,9 +315,10 @@
 - Page `/template` : exemple, formulaire généré depuis `variableNames()`, onglet résolu, 3 exports. Vérifiée par l'agent dans le navigateur (9 champs, « Fait à Montpellier »).
 - Friction : l'agent a lancé son propre `ng serve` et l'a arrêté, ce qui a tué celui de l'orchestrateur sur 4200 (même port). À mettre dans les briefs : ne pas arrêter un serveur qu'on n'a pas lancé, ou utiliser un autre port.
 - Point à surveiller : `aster-editor.component.ts` passe à 636 lignes → extraction `lib/variables.ts` en fin de session si le temps le permet.
-- 12:40 — `/template` vérifiée par l'orchestrateur en navigateur : exemple chargé (11 puces), 9 champs générés dans l'ordre du document, « 9 variables sans valeur », onglets Puces/Résolu, 3 boutons d'export. Détail cosmétique : un « ou » apparaît deux fois dans la dropzone (texte probablement visuellement masqué dupliqué dans l'accessibilité) → à corriger dans le lot docs/e2e.
+- 12:40 — `/template` vérifiée par l'orchestrateur en navigateur : exemple chargé (11 puces), 9 champs générés dans l'ordre du document, « 9 variables sans valeur », onglets Puces/Résolu, 3 boutons d'export. Les deux « ou » de la dropzone séparent trois options (glisser, fichier, exemple) : pas un bug.
 
 ### 16/10 12:55 — L18 parité rendu et intégré (agent 27 min, 325k tokens, 113 outils)
+
 - 3 sous-lots livrés : bulles de lien/image (floating-ui), menu `/` (suggestion), sommaire + format painter. ui 270 tests, core +17. Décisions à retenir : ids de titres posés **à la demande** (ouverture du sommaire) pour ne pas casser 71 assertions sur des `<hN>` nus ; saut de page seulement si un nœud `pageBreak` existe (schéma standard sans).
 - Commité par chemins explicites (L20 toujours en cours sur les fichiers variables).
 - **Vérifié en navigateur** : bulle de lien (URL + Modifier + Supprimer), bulle d'image (3 alignements, 3 largeurs, modifier, supprimer), `/tab` → « Tableau 3 × 3 », ids `aster-h-1/2` sérialisés, 39 items de toolbar. **Bug trouvé** : le sommaire affiche chaque titre deux fois à l'ouverture (4 puis 2 après `update()`) : `ensureHeadingIds` dispatche une transaction pendant `renderPanel` → `selectionChange` → re-rendu imbriqué qui s'ajoute au rendu en cours. Correctif orchestrateur à suivre.
