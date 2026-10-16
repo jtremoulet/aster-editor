@@ -336,3 +336,9 @@
 - L21 import (agent 21 min, 224k tokens, 65 outils) : 15 findings, word 409 → 454 tests, 99 % de lignes. Décision orchestrateur sur la fixture 09 : un résultat de champ entièrement entre guillemets français est toujours le placeholder Word (jamais une valeur fusionnée), ligne corrigée dans `fieldResultInfo`.
 - L21 a choisi de scanner les `{{nom}}` tapés dans les en-têtes/pieds (regex sur le XML brut, sans parse) et d'activer le recollage inter-marques aussi au collage. Validé.
 - Changement observable à noter : une partie XML illisible **sans** marqueur ne produit plus d'avertissement (jamais parsée).
+
+### 16/10 11:40 — L19a e2e rendu et intégré (agent 9 min, 168k tokens, 51 outils)
+
+- 21 → **35 tests e2e**, 3 runs verts, ~10,5 s. L'agent a trouvé par Entrée réelle le même bug dans le menu `/` que R14 dans le menu `{{` (plugin enregistré derrière les keymaps) : corrigé par l'orchestrateur d'une ligne, test durci sur `Enter`, 35/35 revérifiés.
+- Playground : `#vars-names` n'était pas rafraîchi après un import ; corrigé.
+- `data-testid` proposés (playground, page Modèle, panneaux ui) : différés en V1.1, comme en session 1.
