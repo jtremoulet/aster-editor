@@ -1,6 +1,14 @@
-import type { FileChild, Paragraph, Table, TableCell } from 'docx';
+import type {
+  FileChild,
+  ITableCellOptions,
+  ITableOptions,
+  Paragraph,
+  Table,
+  TableCell,
+} from 'docx';
 import type { BlockScope } from './blocks';
 import type { ExportContext } from './context';
+import { parsePixels, parseStyle } from './css';
 import { childElements, positiveIntAttribute, tagOf } from './dom';
 
 /** Convertisseur de blocs injecté pour casser le cycle `blocks` ↔ `tables`. */
@@ -10,16 +18,30 @@ export type ChildrenConverter = (
   ctx: ExportContext,
 ) => Promise<FileChild[]>;
 
-/** Lignes directes d'une table, nues ou dans `thead`/`tbody`/`tfoot`, avec leur appartenance à l'en-tête. */
-function collectRows(table: Element): Array<{ row: Element; header: boolean }> {
-  const rows: Array<{ row: Element; header: boolean }> = [];
+/** Twips par pixel CSS à 96 dpi : 1 px = 0,75 pt = 15 twips. */
+const TWIPS_PER_PX = 15;
+
+/** Ligne d'une table avec ses cellules et son appartenance à l'en-tête. */
+interface TableRowInfo {
+  readonly header: boolean;
+  readonly cells: readonly Element[];
+}
+
+/** Lignes directes d'une table, nues ou dans `thead`/`tbody`/`tfoot`, avec leurs cellules. */
+function collectRows(table: Element): TableRowInfo[] {
+  const rows: TableRowInfo[] = [];
+  const push = (row: Element, header: boolean): void => {
+    const cells = childElements(row).filter((cell) => {
+      const tag = tagOf(cell);
+      return tag === 'td' || tag === 'th';
+    });
+    if (cells.length > 0) rows.push({ header, cells });
+  };
   for (const child of childElements(table)) {
     const tag = tagOf(child);
-    if (tag === 'tr') rows.push({ row: child, header: false });
+    if (tag === 'tr') push(child, false);
     else if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot') {
-      for (const row of childElements(child)) {
-        if (tagOf(row) === 'tr') rows.push({ row, header: tag === 'thead' });
-      }
+      for (const row of childElements(child)) if (tagOf(row) === 'tr') push(row, tag === 'thead');
     }
   }
   return rows;
@@ -31,12 +53,113 @@ function isAllHeaderCells(cells: readonly Element[]): boolean {
 }
 
 /**
+ * Largeurs en pixels des colonnes couvertes par une cellule : `colwidth="80,90"` (une
+ * valeur par colonne fusionnée, convention Tiptap), sinon `style="width"` ou l'attribut
+ * `width` pour une cellule simple. `null` pour une colonne inconnue.
+ */
+function cellColumnWidths(cell: Element, span: number): Array<number | null> {
+  const unknown = Array.from({ length: span }, (): number | null => null);
+  const colwidth = cell.getAttribute('colwidth');
+  if (colwidth !== null) {
+    const parts = colwidth.split(',').map((part) => parsePixels(part.trim()));
+    if (parts.length === span) return parts;
+    return unknown;
+  }
+  if (span !== 1) return unknown;
+  const style = parseStyle(cell.getAttribute('style'));
+  return [parsePixels(style.get('width') ?? cell.getAttribute('width'))];
+}
+
+/** Largeurs déclarées par `<colgroup><col style="width">` (ou `width`), par colonne. */
+function colgroupWidths(table: Element): Array<number | null> {
+  const widths: Array<number | null> = [];
+  const pushCol = (col: Element): void => {
+    const style = parseStyle(col.getAttribute('style'));
+    const width = parsePixels(style.get('width') ?? col.getAttribute('width'));
+    const span = positiveIntAttribute(col, 'span') ?? 1;
+    for (let i = 0; i < span; i += 1) widths.push(width);
+  };
+  for (const child of childElements(table)) {
+    if (tagOf(child) === 'col') pushCol(child);
+    else if (tagOf(child) === 'colgroup') {
+      for (const col of childElements(child)) if (tagOf(col) === 'col') pushCol(col);
+    }
+  }
+  return widths;
+}
+
+/** Position d'une cellule dans la grille : première colonne et nombre de colonnes couvertes. */
+interface CellPosition {
+  readonly column: number;
+  readonly span: number;
+}
+
+/** Grille de la table : largeur connue (px) de chaque colonne et position de chaque cellule. */
+interface TableGrid {
+  readonly columns: ReadonlyArray<number | null>;
+  readonly positions: ReadonlyMap<Element, CellPosition>;
+}
+
+/**
+ * Place chaque cellule dans la grille en tenant compte des fusions (`colspan`, `rowspan`)
+ * et relève la largeur de chaque colonne : première valeur rencontrée dans les cellules,
+ * puis `<colgroup>` en repli.
+ */
+function analyzeGrid(table: Element, rows: readonly TableRowInfo[]): TableGrid {
+  const columns: Array<number | null> = [];
+  const positions = new Map<Element, CellPosition>();
+  const occupied = new Map<number, Set<number>>();
+  rows.forEach(({ cells }, rowIndex) => {
+    const taken = occupied.get(rowIndex) ?? new Set<number>();
+    let column = 0;
+    for (const cell of cells) {
+      while (taken.has(column)) column += 1;
+      const span = positiveIntAttribute(cell, 'colspan') ?? 1;
+      const rowSpan = positiveIntAttribute(cell, 'rowspan') ?? 1;
+      cellColumnWidths(cell, span).forEach((width, offset) => {
+        const index = column + offset;
+        if (columns[index] === undefined || columns[index] === null) columns[index] = width;
+      });
+      for (let below = 1; below < rowSpan; below += 1) {
+        const set = occupied.get(rowIndex + below) ?? new Set<number>();
+        for (let offset = 0; offset < span; offset += 1) set.add(column + offset);
+        occupied.set(rowIndex + below, set);
+      }
+      positions.set(cell, { column, span });
+      column += span;
+    }
+  });
+  colgroupWidths(table).forEach((width, index) => {
+    if (index < columns.length && columns[index] === null) columns[index] = width;
+  });
+  return { columns, positions };
+}
+
+/**
+ * Largeurs de colonnes en twips quand toutes sont connues, réduites à l'échelle si la
+ * table déborderait de la zone de texte. `null` si une colonne au moins est inconnue :
+ * la table reste alors à 100 % et seules les cellules connues portent une largeur.
+ */
+function columnWidthsTwips(
+  columns: ReadonlyArray<number | null>,
+  ctx: ExportContext,
+): number[] | null {
+  if (columns.length === 0 || columns.some((width) => width === null)) return null;
+  const px = columns.map((width) => width ?? 0);
+  const total = px.reduce((sum, width) => sum + width, 0);
+  const scale = total > ctx.maxImageWidth ? ctx.maxImageWidth / total : 1;
+  return px.map((width) => Math.max(1, Math.round(width * scale * TWIPS_PER_PX)));
+}
+
+/**
  * `<td>`/`<th>` → `TableCell`. Les en-têtes sont en gras, `colspan`/`rowspan` deviennent
  * `columnSpan`/`rowSpan` (docx génère lui-même les cellules de continuation verticale).
- * Une cellule contient toujours au moins un paragraphe, exigence de Word.
+ * Une cellule contient toujours au moins un paragraphe, exigence de Word. La largeur
+ * (DXA) est la somme des colonnes couvertes quand elles sont connues.
  */
 async function convertCell(
   cell: Element,
+  width: number | null,
   scope: BlockScope,
   ctx: ExportContext,
   convert: ChildrenConverter,
@@ -55,16 +178,39 @@ async function convertCell(
   if (blocks.length === 0) blocks.push(new ctx.docx.Paragraph({ children: [] }));
   const columnSpan = positiveIntAttribute(cell, 'colspan');
   const rowSpan = positiveIntAttribute(cell, 'rowspan');
-  return new ctx.docx.TableCell({
+  const options: ITableCellOptions = {
     children: blocks,
     ...(columnSpan && columnSpan > 1 ? { columnSpan } : {}),
     ...(rowSpan && rowSpan > 1 ? { rowSpan } : {}),
-  });
+    ...(width !== null ? { width: { size: width, type: ctx.docx.WidthType.DXA } } : {}),
+  };
+  return new ctx.docx.TableCell(options);
+}
+
+/** Largeur en twips d'une cellule à partir des colonnes qu'elle couvre, `null` si l'une est inconnue. */
+function cellWidthTwips(
+  position: CellPosition | undefined,
+  columns: ReadonlyArray<number | null>,
+  twips: readonly number[] | null,
+  ctx: ExportContext,
+): number | null {
+  if (!position) return null;
+  const covered = columns.slice(position.column, position.column + position.span);
+  if (covered.length !== position.span || covered.some((width) => width === null)) return null;
+  if (twips) {
+    return twips
+      .slice(position.column, position.column + position.span)
+      .reduce((sum, width) => sum + width, 0);
+  }
+  const px = covered.reduce<number>((sum, width) => sum + (width ?? 0), 0);
+  return Math.round(Math.min(px, ctx.maxImageWidth) * TWIPS_PER_PX);
 }
 
 /**
- * `<table>` → `Table` sur 100 % de la largeur. Les lignes de `thead` (ou composées
- * uniquement de `th`) sont marquées `tableHeader`, ce que mammoth réimporte en `thead`.
+ * `<table>` → `Table`. Les lignes de `thead` (ou composées uniquement de `th`) sont
+ * marquées `tableHeader`, ce que mammoth réimporte en `thead`. Avec des largeurs de
+ * colonnes complètes (`colwidth`, `style="width"`, `<col>`), la table passe en
+ * disposition fixe avec sa grille en DXA ; sinon elle occupe 100 % de la largeur.
  */
 export async function convertTable(
   table: Element,
@@ -72,16 +218,17 @@ export async function convertTable(
   ctx: ExportContext,
   convert: ChildrenConverter,
 ): Promise<Table> {
-  const { Table, TableRow, WidthType } = ctx.docx;
+  const { Table, TableLayoutType, TableRow, WidthType } = ctx.docx;
+  const rowInfos = collectRows(table);
+  const grid = analyzeGrid(table, rowInfos);
+  const twips = columnWidthsTwips(grid.columns, ctx);
   const rows = [];
-  for (const { row, header } of collectRows(table)) {
-    const cellElements = childElements(row).filter((cell) => {
-      const tag = tagOf(cell);
-      return tag === 'td' || tag === 'th';
-    });
-    if (cellElements.length === 0) continue;
+  for (const { header, cells: cellElements } of rowInfos) {
     const cells = [];
-    for (const cell of cellElements) cells.push(await convertCell(cell, scope, ctx, convert));
+    for (const cell of cellElements) {
+      const width = cellWidthTwips(grid.positions.get(cell), grid.columns, twips, ctx);
+      cells.push(await convertCell(cell, width, scope, ctx, convert));
+    }
     // `tableHeader` seulement quand vrai : mammoth lit la présence de `w:tblHeader`, pas sa valeur.
     const isHeader = header || isAllHeaderCells(cellElements);
     rows.push(new TableRow({ children: cells, ...(isHeader ? { tableHeader: true } : {}) }));
@@ -95,5 +242,13 @@ export async function convertTable(
       }),
     );
   }
-  return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
+  const options: ITableOptions = twips
+    ? {
+        rows,
+        width: { size: twips.reduce((sum, width) => sum + width, 0), type: WidthType.DXA },
+        columnWidths: twips,
+        layout: TableLayoutType.FIXED,
+      }
+    : { rows, width: { size: 100, type: WidthType.PERCENTAGE } };
+  return new Table(options);
 }

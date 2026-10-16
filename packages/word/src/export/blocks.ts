@@ -1,8 +1,9 @@
 import type { FileChild, IParagraphOptions, Paragraph } from 'docx';
 import { registerList, type ExportContext } from './context';
-import { parseAlignment, parseStyle } from './css';
+import { parseAlignment, parseStyle, type ParagraphAlignment } from './css';
 import {
   BLOCK_TAGS,
+  PAGE_BREAK_ATTRIBUTE,
   childElements,
   hasBlockChild,
   isElement,
@@ -26,6 +27,10 @@ export interface BlockScope {
   readonly quote: boolean;
   readonly list: ListScope | null;
   readonly inline: InlineState;
+  /** Alignement des paragraphes sans `text-align` propre (en-têtes et pieds de page). */
+  readonly alignment?: ParagraphAlignment;
+  /** Style de paragraphe par défaut hors citation (`FootnoteText` dans une note). */
+  readonly paragraphStyle?: string;
 }
 
 /** Scope racine : ni citation, ni liste, aucune marque. */
@@ -55,8 +60,21 @@ function headingLevel(tag: string, ctx: ExportContext): IParagraphOptions['headi
 }
 
 /**
- * Options de paragraphe communes : alignement lu sur `text-align`, style `Quote` dans
- * une citation, numérotation ou retrait dans une liste.
+ * Vrai si le bloc doit commencer sur une nouvelle page : `data-page-break`,
+ * `page-break-before: always` ou `break-before: page`.
+ */
+function hasPageBreakBefore(element: Element, style: ReadonlyMap<string, string>): boolean {
+  if (element.hasAttribute(PAGE_BREAK_ATTRIBUTE)) return true;
+  return (
+    style.get('page-break-before')?.toLowerCase() === 'always' ||
+    style.get('break-before')?.toLowerCase() === 'page'
+  );
+}
+
+/**
+ * Options de paragraphe communes : alignement lu sur `text-align` (ou celui du scope),
+ * style `Quote` dans une citation ou style du scope, numérotation ou retrait dans une
+ * liste, saut de page avant.
  */
 function paragraphOptions(
   element: Element | null,
@@ -65,11 +83,11 @@ function paragraphOptions(
   numbered: boolean,
 ): MutableParagraphOptions {
   const options: MutableParagraphOptions = {};
-  const alignment = parseAlignment(
-    parseStyle(element?.getAttribute('style') ?? null).get('text-align'),
-  );
+  const style = parseStyle(element?.getAttribute('style') ?? null);
+  const alignment = parseAlignment(style.get('text-align')) ?? scope.alignment;
   if (alignment) options.alignment = alignment;
   if (scope.quote) options.style = STYLE_IDS.quote;
+  else if (scope.paragraphStyle) options.style = scope.paragraphStyle;
   if (scope.list) {
     if (numbered) {
       options.numbering = { reference: scope.list.reference, level: scope.list.level };
@@ -77,6 +95,7 @@ function paragraphOptions(
       options.indent = { left: LIST_INDENT * (scope.list.level + 1) };
     }
   }
+  if (element && hasPageBreakBefore(element, style)) options.pageBreakBefore = true;
   return options;
 }
 
@@ -133,6 +152,12 @@ function horizontalRule(ctx: ExportContext): Paragraph {
     children: [],
     border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'A0A0A0', space: 1 } },
   });
+}
+
+/** Saut de page explicite : paragraphe réduit à un `w:br w:type="page"`. */
+function pageBreak(ctx: ExportContext): Paragraph {
+  const { PageBreak, Paragraph } = ctx.docx;
+  return new Paragraph({ children: [new PageBreak()] });
 }
 
 /**
@@ -224,6 +249,11 @@ export async function convertBlock(
   ctx: ExportContext,
 ): Promise<FileChild[]> {
   const tag = tagOf(element);
+  // `<div data-page-break>` / `<hr data-page-break>` : saut de page seul, le filet n'est pas rendu.
+  if ((tag === 'div' || tag === 'hr') && element.hasAttribute(PAGE_BREAK_ATTRIBUTE)) {
+    const rest = tag === 'div' ? await convertChildren(element, scope, ctx) : [];
+    return [pageBreak(ctx), ...rest];
+  }
   switch (tag) {
     case 'h1':
     case 'h2':

@@ -105,6 +105,13 @@ function serializeNode(node: AsterDocument): string {
     }
     case 'hardBreak':
       return '<br>';
+    case 'variable': {
+      // Puce de variable du core : `<span data-aster-variable="nom" data-label="…">{{nom}}</span>`.
+      const name = String(attrOf(node, 'name') ?? '');
+      return `<span${attr('data-aster-variable', name)}${attr('data-label', attrOf(node, 'label'))}>{{${escapeHtml(name)}}}</span>`;
+    }
+    case 'pageBreak':
+      return '<div data-page-break></div>';
     case 'bulletList':
     case 'taskList':
       return `<ul>${children(node)}</ul>`;

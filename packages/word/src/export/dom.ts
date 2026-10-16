@@ -1,3 +1,5 @@
+import type { HtmlParser } from '../docx/types';
+
 /**
  * Helpers DOM de l'export, sans `instanceof` : le `Document` vient d'un parseur
  * injectable (jsdom, navigateur, autre realm) et seuls `nodeType`/`tagName` sont sûrs.
@@ -83,6 +85,9 @@ export const DROPPED_TAGS: readonly string[] = [
 /** Éléments sans contenu visible, ignorés silencieusement. */
 export const SILENT_TAGS: readonly string[] = ['script', 'style', 'template', 'noscript'];
 
+/** Attribut qui marque un saut de page (`<div data-page-break>`, `<hr data-page-break>`, `<p data-page-break>`). */
+export const PAGE_BREAK_ATTRIBUTE = 'data-page-break';
+
 /** Vrai si un conteneur a au moins un enfant élément de bloc. */
 export function hasBlockChild(element: Element): boolean {
   return childElements(element).some((child) => BLOCK_TAGS.includes(tagOf(child)));
@@ -94,4 +99,19 @@ export function positiveIntAttribute(element: Element, name: string): number | n
   if (raw === null) return null;
   const value = Number.parseInt(raw, 10);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** `DOMParser` injecté ou global : jamais `document`, pour rester compatible SSR et tests. */
+export function resolveParser(parse: HtmlParser | undefined): HtmlParser {
+  if (parse) return parse;
+  if (typeof DOMParser === 'undefined') {
+    throw new Error('exportDocx: aucun DOMParser disponible, passe `options.parse`');
+  }
+  return new DOMParser();
+}
+
+/** Parse un fragment HTML dans un document complet et rend son `<body>`. */
+export function parseFragment(html: string, parser: HtmlParser): Element {
+  return parser.parseFromString(`<!doctype html><html><body>${html}</body></html>`, 'text/html')
+    .body;
 }

@@ -5,6 +5,7 @@ import { BLOCK_TAGS, DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from 
 import { imageRun } from './images';
 import { sanitizeXmlText } from './sanitize';
 import { CODE_FONT, STYLE_IDS } from './styles';
+import { mergeField, resolvedText, splitVariables, variableNameOf } from './variables';
 
 /** Marques héritées le long de la descente dans les éléments inline. */
 export interface InlineState {
@@ -26,10 +27,20 @@ export interface InlineState {
 type Piece =
   | { readonly kind: 'text'; readonly text: string; readonly state: InlineState }
   | { readonly kind: 'break'; readonly state: InlineState }
-  | { readonly kind: 'image'; readonly run: ImageRun; readonly state: InlineState };
+  | { readonly kind: 'image'; readonly run: ImageRun; readonly state: InlineState }
+  /** Champ de fusion Word (mode `fields`). */
+  | { readonly kind: 'field'; readonly name: string; readonly state: InlineState }
+  /** Appel de note de bas de page, `id` Word déjà attribué. */
+  | { readonly kind: 'footnote'; readonly id: number; readonly state: InlineState };
 
 /** Schémas de lien que Word accepte dans un `ExternalHyperlink`. */
 const LINK_PATTERN = /^(https?:|mailto:|tel:|ftp:)/i;
+
+/** Attribut d'un `<sup>` qui porte un appel de note explicite. */
+const FOOTNOTE_REF_ATTRIBUTE = 'data-footnote-ref';
+
+/** Texte d'un appel de note tel que l'import le produit : `[1]`. */
+const FOOTNOTE_CALL_TEXT = /^\[(\d+)\]$/;
 
 /**
  * Encode une URL pour les relations du .docx : Word refuse d'ouvrir un fichier dont une
@@ -143,6 +154,56 @@ function pushBreak(pieces: Piece[], state: InlineState): void {
   if (last && last.kind !== 'break') pieces.push({ kind: 'break', state });
 }
 
+/**
+ * Morceaux d'une variable selon le mode : en `fields` un champ de fusion, en `resolve`
+ * sa valeur (ou `{{nom}}`), en `placeholders` le texte d'origine.
+ */
+function pushVariable(
+  name: string,
+  raw: string,
+  state: InlineState,
+  ctx: ExportContext,
+  pieces: Piece[],
+): void {
+  switch (ctx.variables.mode) {
+    case 'fields':
+      pieces.push({ kind: 'field', name, state });
+      return;
+    case 'resolve':
+      pieces.push({ kind: 'text', text: resolvedText(name, raw, ctx), state });
+      return;
+    default:
+      pieces.push({ kind: 'text', text: raw, state });
+  }
+}
+
+/**
+ * Texte brut : découpé sur le motif des variables en modes `fields`/`resolve`, sauf
+ * dans une marque de code, où `{{…}}` est du contenu.
+ */
+function pushText(text: string, state: InlineState, ctx: ExportContext, pieces: Piece[]): void {
+  if (text === '') return;
+  if (state.code) {
+    pieces.push({ kind: 'text', text, state });
+    return;
+  }
+  for (const segment of splitVariables(text, ctx.variables)) {
+    if (segment.kind === 'text') pieces.push({ kind: 'text', text: segment.text, state });
+    else pushVariable(segment.name, segment.raw, state, ctx, pieces);
+  }
+}
+
+/**
+ * Clé de note d'un `<sup>` : `data-footnote-ref="1"` explicite, ou texte `[1]` tel que
+ * l'import le produit. `null` si le `<sup>` est un exposant ordinaire.
+ */
+function footnoteKey(element: Element): { key: string; explicit: boolean } | null {
+  const explicit = element.getAttribute(FOOTNOTE_REF_ATTRIBUTE);
+  if (explicit !== null && explicit.trim() !== '') return { key: explicit.trim(), explicit: true };
+  const call = FOOTNOTE_CALL_TEXT.exec((element.textContent ?? '').trim());
+  return call?.[1] ? { key: call[1], explicit: false } : null;
+}
+
 /** Descente récursive : accumule les morceaux inline avec leur state. */
 async function collectPieces(
   node: Node,
@@ -151,8 +212,7 @@ async function collectPieces(
   pieces: Piece[],
 ): Promise<void> {
   if (isText(node)) {
-    const text = sanitizeXmlText(node.data);
-    if (text !== '') pieces.push({ kind: 'text', text, state });
+    pushText(sanitizeXmlText(node.data), state, ctx, pieces);
     return;
   }
   if (!isElement(node)) return;
@@ -172,6 +232,26 @@ async function collectPieces(
     return;
   }
   const next = applyElementState(node, state);
+  const variable = variableNameOf(node);
+  if (variable !== null) {
+    // Puce de variable : le span est atomique, son texte d'origine sert de repli.
+    const raw = sanitizeXmlText(node.textContent ?? '').trim() || `{{${variable}}}`;
+    pushVariable(variable, raw, next, ctx, pieces);
+    return;
+  }
+  if (tag === 'sup') {
+    const call = footnoteKey(node);
+    if (call) {
+      const note = ctx.footnotes.get(call.key);
+      if (note) {
+        pieces.push({ kind: 'footnote', id: note.id, state });
+        return;
+      }
+      if (call.explicit) {
+        warn(ctx, 'footnote-missing', `Appel de note ${call.key} sans note, laissé en exposant`);
+      }
+    }
+  }
   // Un bloc égaré en contexte inline (`<span><p>…</p></span>`) ne peut plus devenir un
   // paragraphe : on isole son texte par des sauts de ligne pour ne pas le coller au reste.
   const block = BLOCK_TAGS.includes(tag);
@@ -224,7 +304,7 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
 
 /** Fabrique le run `docx` d'un morceau. */
 function pieceToRun(piece: Piece, ctx: ExportContext): ParagraphChild {
-  const { TextRun } = ctx.docx;
+  const { FootnoteReferenceRun, TextRun } = ctx.docx;
   switch (piece.kind) {
     case 'text':
       return new TextRun(runOptions(piece.state, piece.text));
@@ -232,6 +312,10 @@ function pieceToRun(piece: Piece, ctx: ExportContext): ParagraphChild {
       return new TextRun({ ...runOptions(piece.state), break: 1 });
     case 'image':
       return piece.run;
+    case 'field':
+      return mergeField(piece.name, ctx);
+    case 'footnote':
+      return new FootnoteReferenceRun(piece.id);
   }
 }
 

@@ -1,5 +1,5 @@
-import type { HtmlParser } from '../docx/types';
 import { loadDocx } from './docx-module';
+import { resolveParser } from './dom';
 import { buildDocx } from './html-to-docx';
 import { jsonToHtml } from './json-to-html';
 import type { DocxExportInput, DocxExportOptions } from './types';
@@ -7,15 +7,6 @@ import type { DocxExportInput, DocxExportOptions } from './types';
 /** Type MIME d'un document Word .docx. */
 export const DOCX_MIME_TYPE =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-/** `DOMParser` injecté ou global : jamais `document`, pour rester compatible SSR et tests. */
-function resolveParser(parse: HtmlParser | undefined): HtmlParser {
-  if (parse) return parse;
-  if (typeof DOMParser === 'undefined') {
-    throw new Error('exportDocx: aucun DOMParser disponible, passe `options.parse`');
-  }
-  return new DOMParser();
-}
 
 /** HTML de l'entrée : tel quel pour une chaîne, sérialisé pour un JSON ProseMirror. */
 function toHtml(input: DocxExportInput): string {

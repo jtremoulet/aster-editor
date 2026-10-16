@@ -1,6 +1,13 @@
+import type { Paragraph } from 'docx';
 import type { DocxModule } from './docx-module';
 import type { ListKind } from './styles';
-import type { DocxExportWarning, DocxExportWarningCode, DocxImageFetcher } from './types';
+import type {
+  DocxExportWarning,
+  DocxExportWarningCode,
+  DocxImageFetcher,
+  DocxVariableMode,
+} from './types';
+import type { VariableValues } from '@aster-editor/core';
 
 /**
  * Numérotation dédiée à une liste HTML. Chaque `<ul>`/`<ol>` rencontré, racine ou
@@ -19,6 +26,23 @@ export interface ListDefinition {
   readonly start: number;
 }
 
+/** Options de variables résolues : mode effectif, valeurs et motif du texte brut. */
+export interface VariableSettings {
+  readonly mode: DocxVariableMode;
+  readonly values: VariableValues;
+  /** Motif global (`g`) dont le premier groupe de capture est le nom. */
+  readonly pattern: RegExp;
+}
+
+/**
+ * Note de bas de page collectée avant la conversion du corps : identifiant Word
+ * (entier, séquentiel) et paragraphes déjà convertis.
+ */
+export interface FootnoteDefinition {
+  readonly id: number;
+  readonly children: readonly Paragraph[];
+}
+
 /**
  * État partagé par toutes les passes de conversion d'un même document : le module
  * `docx` chargé dynamiquement, les options utiles et le collecteur d'avertissements.
@@ -31,6 +55,12 @@ export interface ExportContext {
   readonly warnings: DocxExportWarning[];
   /** Numérotations collectées pendant la conversion, une par liste, pour `buildNumbering`. */
   readonly lists: ListDefinition[];
+  readonly variables: VariableSettings;
+  /**
+   * Notes de bas de page indexées par la clé que le corps utilise pour y faire appel
+   * (`1` pour `data-footnote="footnote-1"` ou `<sup data-footnote-ref="1">`).
+   */
+  readonly footnotes: Map<string, FootnoteDefinition>;
 }
 
 /** Ajoute un avertissement typé au contexte. */

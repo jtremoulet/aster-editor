@@ -1,7 +1,21 @@
-import type { ICharacterStyleOptions, INumberingOptions, IParagraphStyleOptions } from 'docx';
+import type {
+  ICharacterStyleOptions,
+  INumberingOptions,
+  IParagraphStyleOptions,
+  IRunStylePropertiesOptions,
+  IStylesOptions,
+} from 'docx';
 import type { ListDefinition } from './context';
+import { parseColor } from './css';
 import type { DocxModule } from './docx-module';
-import type { DocxPageSize } from './types';
+import { sanitizeXmlText } from './sanitize';
+import type {
+  DocxExportOptions,
+  DocxHeadingStyle,
+  DocxNumberedHeadingsOptions,
+  DocxPageOrientation,
+  DocxPageSize,
+} from './types';
 
 /** Police à chasse fixe des blocs et marques de code. */
 export const CODE_FONT = 'Consolas';
@@ -15,6 +29,12 @@ export const LIST_INDENT = 720;
 /** Retrait des citations, en twips. */
 export const QUOTE_INDENT = 720;
 
+/** Référence `numbering` de la numérotation des titres. */
+export const HEADING_NUMBERING_REFERENCE = 'aster-headings';
+
+/** Nombre de niveaux de titres HTML (`h1`..`h6`). */
+export const HEADING_LEVELS = 6;
+
 /**
  * Identifiants de styles définis dans le document. Ils correspondent aux noms que la
  * style map d'import (`style-map.ts`) reconnaît : un aller-retour export → import
@@ -25,6 +45,10 @@ export const STYLE_IDS = {
   preformatted: 'HTMLPreformatted',
   code: 'Code',
   hyperlink: 'Hyperlink',
+  /** Titre de la table des matières, hors des niveaux de titre pour ne pas s'y lister. */
+  tocHeading: 'TOCHeading',
+  /** Style Word des paragraphes de note de bas de page, fourni par `docx`. */
+  footnoteText: 'FootnoteText',
 } as const;
 
 /** Formats de numérotation d'une liste HTML (`ol type`) et des puces. */
@@ -50,16 +74,48 @@ export function listKindFromType(type: string | null): ListKind {
 /** Puces Word par niveau, cyclées au-delà de trois. */
 const BULLET_GLYPHS = [String.fromCharCode(0x2022), 'o', String.fromCharCode(0x25aa)] as const;
 
+/** Numérotation des titres résolue : profondeur (1-6) et format. */
+export interface HeadingNumbering {
+  readonly levels: number;
+  readonly format: 'decimal' | 'legal';
+}
+
+/** Entier borné à `[min, max]`, `fallback` s'il n'est pas un nombre fini. */
+function clampInt(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/** `options.numberedHeadings` → numérotation effective, `null` si désactivée. */
+export function resolveHeadingNumbering(
+  option: boolean | DocxNumberedHeadingsOptions | undefined,
+): HeadingNumbering | null {
+  if (!option) return null;
+  const options = option === true ? {} : option;
+  return {
+    levels: clampInt(options.levels, 1, HEADING_LEVELS, 3),
+    format: options.format ?? 'decimal',
+  };
+}
+
+/** Texte de niveau `%1.%2.` (décimal, point final) ou `%1.%2` (légal). */
+function headingLevelText(level: number, format: HeadingNumbering['format']): string {
+  const parts = Array.from({ length: level + 1 }, (_, index) => `%${String(index + 1)}`);
+  return format === 'legal' ? parts.join('.') : `${parts.join('.')}.`;
+}
+
 /**
  * Numérotations du document : une par liste HTML rencontrée (voir `ListDefinition`),
  * chacune sur `LIST_LEVELS` niveaux avec un retrait croissant. Les numéros reprennent
  * le format à chaque niveau (`%1.`, `%2.`…) pour rester lisibles dans Word. Le `start`
  * de la liste est posé sur le niveau qu'elle occupe ; `docx` le recopie en
- * `startOverride` de l'instance quand c'est le niveau 0.
+ * `startOverride` de l'instance quand c'est le niveau 0. S'y ajoute la numérotation
+ * des titres, dont chaque niveau est lié au style `Heading n` (`w:pStyle`).
  */
 export function buildNumbering(
   docx: DocxModule,
   lists: readonly ListDefinition[],
+  headings: HeadingNumbering | null = null,
 ): INumberingOptions {
   const { AlignmentType, LevelFormat } = docx;
   const formats: Record<ListKind, (typeof LevelFormat)[keyof typeof LevelFormat]> = {
@@ -70,33 +126,47 @@ export function buildNumbering(
     lowerRoman: LevelFormat.LOWER_ROMAN,
     upperRoman: LevelFormat.UPPER_ROMAN,
   };
-  return {
-    config: lists.map((list) => ({
-      reference: list.reference,
-      levels: Array.from({ length: LIST_LEVELS }, (_, level) => ({
-        level,
-        format: formats[list.kind],
-        start: level === list.level ? list.start : 1,
-        text:
-          list.kind === 'bullet'
-            ? (BULLET_GLYPHS[level % BULLET_GLYPHS.length] ?? BULLET_GLYPHS[0])
-            : `%${String(level + 1)}.`,
-        alignment: AlignmentType.LEFT,
-        style: {
-          paragraph: { indent: { left: LIST_INDENT * (level + 1), hanging: 360 } },
-        },
-      })),
+  const config: INumberingOptions['config'][number][] = lists.map((list) => ({
+    reference: list.reference,
+    levels: Array.from({ length: LIST_LEVELS }, (_, level) => ({
+      level,
+      format: formats[list.kind],
+      start: level === list.level ? list.start : 1,
+      text:
+        list.kind === 'bullet'
+          ? (BULLET_GLYPHS[level % BULLET_GLYPHS.length] ?? BULLET_GLYPHS[0])
+          : `%${String(level + 1)}.`,
+      alignment: AlignmentType.LEFT,
+      style: {
+        paragraph: { indent: { left: LIST_INDENT * (level + 1), hanging: 360 } },
+      },
     })),
-  };
+  }));
+  if (headings) {
+    config.push({
+      reference: HEADING_NUMBERING_REFERENCE,
+      levels: Array.from({ length: headings.levels }, (_, level) => ({
+        level,
+        format: LevelFormat.DECIMAL,
+        start: 1,
+        text: headingLevelText(level, headings.format),
+        alignment: AlignmentType.LEFT,
+        ...(headings.format === 'legal' ? { isLegalNumberingStyle: true } : {}),
+        style: { style: `Heading${String(level + 1)}` },
+      })),
+    });
+  }
+  return { config };
 }
 
 /**
- * Styles de paragraphe : `Quote` (citation, italique indentée) et `HTMLPreformatted`
- * (bloc de code, Consolas). Les identifiants sont ceux que mammoth réimporte en
+ * Styles de paragraphe : `Quote` (citation, italique indentée), `HTMLPreformatted`
+ * (bloc de code, Consolas) et, avec une table des matières, `TOC Heading` pour son
+ * titre. Les deux premiers identifiants sont ceux que mammoth réimporte en
  * `blockquote` et `pre`.
  */
-export function buildParagraphStyles(): IParagraphStyleOptions[] {
-  return [
+export function buildParagraphStyles(withToc = false): IParagraphStyleOptions[] {
+  const styles: IParagraphStyleOptions[] = [
     {
       id: STYLE_IDS.quote,
       name: 'Quote',
@@ -114,11 +184,109 @@ export function buildParagraphStyles(): IParagraphStyleOptions[] {
       paragraph: { spacing: { after: 0 } },
     },
   ];
+  if (withToc) {
+    styles.push({
+      id: STYLE_IDS.tocHeading,
+      name: 'TOC Heading',
+      basedOn: 'Normal',
+      next: 'Normal',
+      run: { bold: true, size: 32, color: '2E74B5' },
+      paragraph: { spacing: { before: 240, after: 120 }, keepNext: true },
+    });
+  }
+  return styles;
 }
 
 /** Style de caractère `Code`, que mammoth réimporte en `<code>`. */
 export function buildCharacterStyles(): ICharacterStyleOptions[] {
   return [{ id: STYLE_IDS.code, name: 'Code', run: { font: CODE_FONT } }];
+}
+
+type MutableRunStyle = {
+  -readonly [K in keyof IRunStylePropertiesOptions]: IRunStylePropertiesOptions[K];
+};
+
+/**
+ * Propriétés de run que `docx` donne par défaut aux styles `Heading 1..6` (couleur
+ * bleue, tailles décroissantes, italique en 4). `docx` remplace le `run` entier
+ * quand on surcharge un titre : on repart de ces défauts pour ne changer que ce qui
+ * est demandé.
+ */
+const HEADING_RUN_DEFAULTS: readonly IRunStylePropertiesOptions[] = [
+  { color: '2E74B5', size: 32 },
+  { color: '2E74B5', size: 26 },
+  { color: '1F4D78', size: 24 },
+  { color: '2E74B5', italics: true },
+  { color: '2E74B5' },
+  { color: '1F4D78' },
+];
+
+/** Clés `docx` des styles de titres par défaut, dans l'ordre `h1`..`h6`. */
+const HEADING_STYLE_KEYS = [
+  'heading1',
+  'heading2',
+  'heading3',
+  'heading4',
+  'heading5',
+  'heading6',
+] as const;
+
+/** Clés des surcharges `headingStyles`, dans l'ordre `h1`..`h6`. */
+const HEADING_HTML_KEYS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
+
+/** Couleur de titre : CSS (`#hex`, `rgb()`, nom) ou `RRGGBB` déjà au format Word. */
+function headingColor(value: string): string | null {
+  return parseColor(value) ?? (/^[0-9a-f]{6}$/i.test(value) ? value.toUpperCase() : null);
+}
+
+/** Fusionne une surcharge de titre avec les défauts de `docx` du niveau. */
+function headingRun(
+  defaults: IRunStylePropertiesOptions,
+  override: DocxHeadingStyle | undefined,
+): IRunStylePropertiesOptions {
+  const run: MutableRunStyle = { ...defaults };
+  if (!override) return run;
+  const color = override.color === undefined ? null : headingColor(override.color);
+  if (color) run.color = color;
+  if (override.sizePt !== undefined && override.sizePt > 0)
+    run.size = Math.round(override.sizePt * 2);
+  if (override.bold !== undefined) run.bold = override.bold;
+  if (override.italics !== undefined) run.italics = override.italics;
+  if (override.font) run.font = sanitizeXmlText(override.font);
+  return run;
+}
+
+type DefaultStyles = NonNullable<IStylesOptions['default']>;
+type MutableDefaultStyles = { -readonly [K in keyof DefaultStyles]: DefaultStyles[K] };
+
+/**
+ * Styles par défaut du document : police, taille et langue du texte courant
+ * (`docDefaults`), et styles `Heading n` quand ils sont numérotés ou surchargés. Sans
+ * option, rien n'est émis et `docx` garde ses propres défauts.
+ */
+export function buildDefaultStyles(
+  options: DocxExportOptions,
+  headings: HeadingNumbering | null,
+): DefaultStyles {
+  const defaults: MutableDefaultStyles = {};
+  const run: MutableRunStyle = {};
+  if (options.defaultFont?.family) run.font = sanitizeXmlText(options.defaultFont.family);
+  const sizePt = options.defaultFont?.sizePt;
+  if (sizePt !== undefined && sizePt > 0) run.size = Math.round(sizePt * 2);
+  if (options.lang) run.language = { value: sanitizeXmlText(options.lang) };
+  if (Object.keys(run).length > 0) defaults.document = { run };
+  HEADING_STYLE_KEYS.forEach((key, index) => {
+    const override = options.headingStyles?.[HEADING_HTML_KEYS[index] ?? 'h1'];
+    const numbered = headings !== null && index < headings.levels;
+    if (!override && !numbered) return;
+    defaults[key] = {
+      run: headingRun(HEADING_RUN_DEFAULTS[index] ?? {}, override),
+      ...(numbered
+        ? { paragraph: { numbering: { reference: HEADING_NUMBERING_REFERENCE, level: index } } }
+        : {}),
+    };
+  });
+  return defaults;
 }
 
 /** Dimensions de page en twips (1/20 de point). */
@@ -135,9 +303,63 @@ export function pageDimensions(size: DocxPageSize): PageDimensions {
 /** Marge de page par défaut (1 pouce), en twips. */
 export const PAGE_MARGIN = 1440;
 
+/** Millimètres → twips (1 pouce = 25,4 mm = 1440 twips). */
+export function mmToTwips(mm: number): number {
+  return Math.round((mm * 1440) / 25.4);
+}
+
+/** Marges de page en twips. */
+export interface PageMargins {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+
+/** Mise en page résolue : dimensions portrait (docx les inverse lui-même en paysage), marges, largeur utile. */
+export interface PageLayout extends PageDimensions {
+  readonly size: DocxPageSize;
+  readonly orientation: DocxPageOrientation;
+  readonly margins: PageMargins;
+  /** Largeur utile en pixels à 96 dpi, plafond des images et des tables. */
+  readonly contentWidthPx: number;
+}
+
+/** Marge en twips depuis une valeur en mm, défaut si absente ou invalide. */
+function marginTwips(mm: number | undefined): number {
+  if (mm === undefined || !Number.isFinite(mm) || mm < 0) return PAGE_MARGIN;
+  return mmToTwips(mm);
+}
+
+/**
+ * `options.page` (et `pageSize` en repli) → mise en page. En paysage, la largeur utile
+ * est celle du grand côté : `docx` inverse `w:w`/`w:h` quand `w:orient="landscape"`,
+ * on lui donne donc toujours les dimensions portrait.
+ */
+export function resolvePageLayout(options: DocxExportOptions): PageLayout {
+  const size = options.page?.size ?? options.pageSize ?? 'A4';
+  const orientation = options.page?.orientation ?? 'portrait';
+  const { width, height } = pageDimensions(size);
+  const margins: PageMargins = {
+    top: marginTwips(options.page?.margins?.top),
+    right: marginTwips(options.page?.margins?.right),
+    bottom: marginTwips(options.page?.margins?.bottom),
+    left: marginTwips(options.page?.margins?.left),
+  };
+  const usable = (orientation === 'landscape' ? height : width) - margins.left - margins.right;
+  return {
+    size,
+    orientation,
+    width,
+    height,
+    margins,
+    contentWidthPx: Math.max(1, Math.floor((usable / 1440) * 96)),
+  };
+}
+
 /**
  * Largeur utile de la page en pixels à 96 dpi : plafond des images pour qu'elles ne
- * débordent jamais de la zone de texte.
+ * débordent jamais de la zone de texte (portrait, marges par défaut).
  */
 export function contentWidthPx(size: DocxPageSize): number {
   return Math.floor(((pageDimensions(size).width - 2 * PAGE_MARGIN) / 1440) * 96);

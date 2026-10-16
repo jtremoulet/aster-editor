@@ -12,6 +12,8 @@ async function context(overrides: Partial<ExportContext> = {}): Promise<ExportCo
     maxImageWidth: 600,
     warnings: [],
     lists: [],
+    variables: { mode: 'placeholders', values: {}, pattern: /\{\{(\w+)\}\}/g },
+    footnotes: new Map(),
     ...overrides,
   };
 }
