@@ -301,3 +301,10 @@
 - 2 bloquants : `w:sdt` enveloppant une table → table supprimée et XML invalide ; corps `document2.xml` (relation `_rels/.rels`) ignoré par le prétraitement alors que mammoth le lit. 11 mineurs dont `readComplexField` quadratique sur des `begin` non fermés (2 000 → 12 s), parse DOM de toute partie même sans champ (225 ms pour rien sur 1,4 Mo), `PlaceholderText` cloné, `w14:checkbox` transformé en variable, `data-label` perdu au recollage.
 - Mesures utiles : réécriture jszip d'une archive de 5 Mo avec PNG = 29 ms (entrées DEFLATE réutilisées) ; l'approche « réécrire le .docx avant mammoth » est viable.
 - Sécurité confirmée (alias hostile échappé partout). Lot L21 lancé avec l'écart « valeurs perdues à la réimportation d'un export `fields` » en plus.
+
+### 16/10 12:15 — Revue R16 rendue (export, 41 cas)
+
+- 3 bloquants : appels de note émis dans les en-têtes/pieds et dans une note (Word les interdit → « contenu illisible »), `colspan="1000000"` → export qui ne se termine jamais (1,2 Go ; Word plafonne à 63 colonnes). 10 mineurs (nom de champ non cité si blanc, valeurs multi-lignes aplaties, `footer.align` ignoré pour `PAGE`, collision de clés de notes, drapeau sticky, valeur non chaîne, marges hors page).
+- Validité OOXML des ajouts vérifiée (ordre `w:pPr`, `fldSimple` dans `hyperlink` et titres, séparateurs de notes, `tblGrid`), perf 361 ms pour 4 000 variables en mode `fields`.
+- Lot L22 lancé sur `export/` seulement, en parallèle de L21 (`docx/`, `paste/`).
+- Bilan des 5 revues de la session 2 à ce stade : 10 bloquants et 31 mineurs sur 4 lots à 95-98 % de couverture. Même constat que la session 1.
