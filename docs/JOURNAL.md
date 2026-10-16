@@ -329,3 +329,10 @@
 - Décision retenue : nom de variable invalide → nœud inerte (`variableName()` rend `''`), plutôt qu'un rejet de `setJSON`. Changement de sémantique à noter au changelog.
 - `OPEN_PANEL_SELECTORS` / `registerOpenPanelSelector` exportés par l'orchestrateur depuis `ui/src/index.ts`.
 - Horodatage : les heures notées plus haut dans la session 2 (11:50, 12:05…) étaient estimées ; l'horloge réelle est 11:15 à ce point. Les heures suivantes viennent de `date`.
+
+### 16/10 11:25 — L21 et L22 rendus et intégrés
+
+- L22 export (agent 13 min, 207k tokens, 88 outils) : 13 findings, export 119 → 138 tests, `colspan=1e6` en 58 ms, 4 codes d'avertissement additifs (`footnote-not-allowed`, `footnote-duplicate`, `table-span-clamped`, `page-margins-clamped`). Checklist Word complétée (points 13-17).
+- L21 import (agent 21 min, 224k tokens, 65 outils) : 15 findings, word 409 → 454 tests, 99 % de lignes. Décision orchestrateur sur la fixture 09 : un résultat de champ entièrement entre guillemets français est toujours le placeholder Word (jamais une valeur fusionnée), ligne corrigée dans `fieldResultInfo`.
+- L21 a choisi de scanner les `{{nom}}` tapés dans les en-têtes/pieds (regex sur le XML brut, sans parse) et d'activer le recollage inter-marques aussi au collage. Validé.
+- Changement observable à noter : une partie XML illisible **sans** marqueur ne produit plus d'avertissement (jamais parsée).
