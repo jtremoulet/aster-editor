@@ -114,6 +114,15 @@ describe('cleanInlineStyles', () => {
     );
   });
 
+  it('garde data-aster-variable et data-label sur une puce collée, jette le reste (I-12)', () => {
+    const html =
+      '<span data-aster-variable="nom" data-label="Nom" class="aster-variable" contenteditable="false"' +
+      " style='font-weight:bold;color:red'>{{nom}}</span><span data-label='orphelin' style='font-style:italic'>x</span>";
+    expect(runPass(html, cleanInlineStyles, { keepColors: true })).toBe(
+      '<span data-aster-variable="nom" data-label="Nom">{{nom}}</span><em>x</em>',
+    );
+  });
+
   it('ne garde avec keepColors qu’une valeur de couleur plausible (W-10)', () => {
     const hostile = `<span style='color:red"onmouseover="alert(1)'>x</span>`;
     expect(runPass(hostile, cleanInlineStyles, { keepColors: true })).toBe('x');

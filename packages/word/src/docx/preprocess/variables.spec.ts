@@ -3,11 +3,13 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { buildDocx, documentXml, headerXml, run, W_NS } from './minimal-docx';
 import {
+  collectBracesInXml,
   mergeFieldName,
   preprocessVariables,
   transformVariablesXml,
   type CollectedVariable,
   type PreprocessVariablesOptions,
+  type XmlCodec,
 } from './variables';
 
 const BOTH: PreprocessVariablesOptions = { mergeFields: true, contentControls: true };
@@ -50,6 +52,12 @@ describe('mergeFieldName', () => {
     expect(mergeFieldName(' HYPERLINK "https://example.com" ')).toBeNull();
     expect(mergeFieldName(' PAGE ')).toBeNull();
     expect(mergeFieldName(' MERGEFIELD "???" ')).toBeNull();
+  });
+
+  it('garde tel quel un nom entre guillemets déjà valide, normalise seulement un nom invalide (I-6)', () => {
+    expect(mergeFieldName(' MERGEFIELD "Prénom" ')).toBe('Prénom');
+    expect(mergeFieldName(' MERGEFIELD "NumeroFacture" ')).toBe('NumeroFacture');
+    expect(mergeFieldName(' MERGEFIELD "Prénom du client" ')).toBe('prenom_du_client');
   });
 });
 
@@ -206,13 +214,20 @@ describe('transformVariablesXml : contrôles de contenu', () => {
     expect(variables.get('adresse')).toEqual({ value: '12 rue\nParis' });
   });
 
-  it('traite un contrôle imbriqué avant son conteneur, collecte dans l’ordre du document', () => {
+  it('traite un contrôle imbriqué avant son conteneur ; sorti du document, il n’est plus listé (I-9)', () => {
     const inner = sdt('<w:tag w:val="inner"/>', run('x'));
     const body = `<w:p>${sdt('<w:tag w:val="outer"/>', `${run('a ')}${inner}`)}</w:p>`;
     const { body: out, variables } = transform(body);
     expect(out).toBe('<w:p><w:r><w:t xml:space="preserve">{{outer}}</w:t></w:r></w:p>');
-    expect([...variables.keys()]).toEqual(['outer', 'inner']);
-    expect(variables.get('outer')).toEqual({ value: 'a {{inner}}' });
+    expect([...variables]).toEqual([['outer', { value: 'a {{inner}}' }]]);
+  });
+
+  it('garde une variable imbriquée qui apparaît aussi ailleurs, et retire un champ englobé par un bloc (I-9)', () => {
+    const inner = sdt('<w:tag w:val="inner"/>', run('x'));
+    const twice = `<w:p>${sdt('<w:tag w:val="outer"/>', inner)}</w:p><w:p>${inner}</w:p>`;
+    expect([...transform(twice).variables.keys()]).toEqual(['outer', 'inner']);
+    const block = sdt('<w:tag w:val="bloc"/>', `<w:p>${simpleField('Interne')}</w:p>`);
+    expect([...transform(block).variables]).toEqual([['bloc', { value: '{{Interne}}' }]]);
   });
 
   it('ne touche à rien quand contentControls est désactivé', () => {
@@ -243,8 +258,10 @@ describe('transformVariablesXml : robustesse', () => {
     expect(out).toContain('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>');
   });
 
-  it('lève sur un XML illisible', () => {
-    expect(() => transformVariablesXml('<w:document><w:p>', BOTH, new Map())).toThrow(/illisible/);
+  it('lève sur un XML illisible qui porte une balise à transformer', () => {
+    expect(() => transformVariablesXml('<w:document><w:p><w:sdt>', BOTH, new Map())).toThrow(
+      /illisible/,
+    );
   });
 
   it('accepte un codec injecté', () => {
@@ -369,5 +386,216 @@ describe('preprocessVariables', () => {
 
   it('expose W_NS pour les tests qui construisent du XML', () => {
     expect(W_NS).toContain('wordprocessingml');
+  });
+});
+
+describe('I-1 : inline ou bloc décidé par le parent du contrôle', () => {
+  const table = `<w:tbl><w:tr><w:tc><w:p>${run('cellule')}</w:p></w:tc></w:tr></w:tbl>`;
+
+  it('laisse intact un sdt qui enveloppe une table, sans rien émettre sous w:body', () => {
+    const { body, variables } = transform(sdt('<w:tag w:val="tableau"/>', table));
+    expect(body).toBeNull();
+    expect(variables.size).toBe(0);
+  });
+
+  it('laisse intact un sdt de bloc sans paragraphe direct (runs orphelins)', () => {
+    expect(transform(sdt('<w:tag w:val="seul"/>', run('texte'))).body).toBeNull();
+  });
+
+  it('laisse intact un sdt de bloc qui mêle paragraphes et table : jamais jeter une table', () => {
+    const mixed = sdt('<w:tag w:val="mixte"/>', `<w:p>${run('intro')}</w:p>${table}`);
+    expect(transform(mixed).body).toBeNull();
+  });
+
+  it('reste inline sous un lien ou une marque de révision d’un paragraphe', () => {
+    const body =
+      `<w:p><w:hyperlink w:anchor="top">${sdt('<w:tag w:val="lien"/>', run('x'))}</w:hyperlink>` +
+      `<w:ins w:id="1">${sdt('<w:tag w:val="ajout"/>', run('y'))}</w:ins></w:p>`;
+    const { body: out, variables } = transform(body);
+    expect(out).toBe(
+      '<w:p><w:hyperlink w:anchor="top"><w:r><w:t xml:space="preserve">{{lien}}</w:t></w:r></w:hyperlink>' +
+        '<w:ins w:id="1"><w:r><w:t xml:space="preserve">{{ajout}}</w:t></w:r></w:ins></w:p>',
+    );
+    expect([...variables.keys()]).toEqual(['lien', 'ajout']);
+  });
+});
+
+describe('I-2 : parties localisées par les relations du paquet', () => {
+  const REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const rels = (entries: string): string =>
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    `${entries}</Relationships>`;
+
+  it('lit le corps dans _rels/.rels (document2.xml) et ses en-têtes dans ses propres relations', async () => {
+    const input = await buildDocx(`<w:p>${run('leurre')}</w:p>`, {
+      '_rels/.rels': rels(
+        `<Relationship Id="rId1" Type="${REL_TYPE}/officeDocument" Target="/word/document2.xml"/>`,
+      ),
+      'word/document2.xml': documentXml(`<w:p>${simpleField('Corps')}</w:p>`),
+      'word/_rels/document2.xml.rels': rels(
+        `<Relationship Id="rId1" Type="${REL_TYPE}/header" Target="entete.xml"/>` +
+          `<Relationship Id="rId2" Type="${REL_TYPE}/hyperlink" Target="https://x.io" TargetMode="External"/>` +
+          `<Relationship Id="rId3" Type="${REL_TYPE}/footer" Target="../word/pied.xml"/>`,
+      ),
+      'word/entete.xml': headerXml(`<w:p>${simpleField('Entete')}</w:p>`),
+      'word/pied.xml': headerXml(`<w:p>${simpleField('Pied')}</w:p>`),
+      'word/header1.xml': headerXml(`<w:p>${simpleField('Orphelin')}</w:p>`),
+    });
+    const result = await preprocessVariables(input, BOTH);
+    expect([...result.variables.keys()]).toEqual(['Corps', 'Entete', 'Pied']);
+    const zip = await JSZip.loadAsync(result.buffer);
+    expect(await zip.file('word/document2.xml')?.async('string')).toContain('{{Corps}}');
+    expect(await zip.file('word/document.xml')?.async('string')).toContain('leurre');
+    expect(await zip.file('word/entete.xml')?.async('string')).toContain('{{Entete}}');
+    expect(await zip.file('word/pied.xml')?.async('string')).toContain('{{Pied}}');
+    expect(await zip.file('word/header1.xml')?.async('string')).toContain('MERGEFIELD Orphelin');
+  });
+
+  it('se replie sur word/document.xml quand la relation officeDocument est absente ou illisible', async () => {
+    const input = await buildDocx(`<w:p>${simpleField('Corps')}</w:p>`, {
+      '_rels/.rels': '<Relationships><Relationship',
+    });
+    const result = await preprocessVariables(input, BOTH);
+    expect([...result.variables.keys()]).toEqual(['Corps']);
+  });
+});
+
+describe('valeur connue d’un champ de fusion (réimport d’un export fields)', () => {
+  it('garde le résultat du champ, sauf vide ou placeholder «nom» / « nom » / {{nom}}', () => {
+    const { variables } = transform(
+      `<w:p>${simpleField('a', 'ACME')}${simpleField('b')}${simpleField('c', '« c »')}` +
+        `${simpleField('d', '{{d}}')}${simpleField('e', '')}${complexField(' MERGEFIELD f ', 'Alice')}` +
+        `${complexField(' MERGEFIELD "Nom complet" ', '«Nom complet»')}</w:p>`,
+    );
+    expect([...variables]).toEqual([
+      ['a', { value: 'ACME' }],
+      ['b', {}],
+      ['c', {}],
+      ['d', {}],
+      ['e', {}],
+      ['f', { value: 'Alice' }],
+      ['nom_complet', {}],
+    ]);
+  });
+});
+
+describe('I-3 / I-11 : budgets', () => {
+  it('reste linéaire sur 2 000 begin jamais fermés dans un paragraphe (< 500 ms)', () => {
+    const begin =
+      '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+      '<w:r><w:instrText xml:space="preserve"> MERGEFIELD x </w:instrText></w:r>';
+    const xml = documentXml(`<w:p>${begin.repeat(2000)}</w:p>`);
+    const started = performance.now();
+    expect(transformVariablesXml(xml, BOTH, new Map())).toBeNull();
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('ne parse pas une partie sans balise à transformer', () => {
+    const parser = new DOMParser();
+    const serializer = new XMLSerializer();
+    let parsed = 0;
+    const codec: XmlCodec = {
+      parse: (xml) => {
+        parsed += 1;
+        return parser.parseFromString(xml, 'application/xml');
+      },
+      serialize: (doc) => serializer.serializeToString(doc),
+    };
+    const plain = documentXml(`<w:p>${run('{{saisi}}')}</w:p>`);
+    expect(transformVariablesXml(plain, BOTH, new Map(), codec)).toBeNull();
+    const control = documentXml(`<w:p>${sdt('<w:tag w:val="x"/>', run('x'))}</w:p>`);
+    const fieldsOnly = { ...BOTH, contentControls: false };
+    expect(transformVariablesXml(control, fieldsOnly, new Map(), codec)).toBeNull();
+    expect(parsed).toBe(0);
+    expect(transformVariablesXml(control, BOTH, new Map(), codec)).toContain('{{x}}');
+    expect(parsed).toBe(1);
+  });
+
+  it('prétraite 5 000 paragraphes sans champ en moins de 100 ms', async () => {
+    const paragraph = `<w:p>${run('Paragraphe de texte ordinaire, sans champ ni contrôle.')}</w:p>`;
+    const input = await buildDocx(paragraph.repeat(5000));
+    const started = performance.now();
+    const result = await preprocessVariables(input, BOTH);
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(result.changed).toBe(false);
+  });
+});
+
+describe('I-4 / I-5 / I-10 / I-13 : contrôles et robustesse', () => {
+  it('garde libellé et valeur de la première apparition d’un tag dupliqué (I-4)', () => {
+    const { variables } = transform(
+      `<w:p>${sdt('<w:alias w:val="Premier"/><w:tag w:val="x"/>', run('un'))}` +
+        `${sdt('<w:alias w:val="Second"/><w:tag w:val="x"/>', run('deux'))}</w:p>`,
+    );
+    expect([...variables]).toEqual([['x', { label: 'Premier', value: 'un' }]]);
+  });
+
+  it('ne reprend pas le style du texte de remplissage, seulement sdtPr > rPr (I-5)', () => {
+    const placeholder = run('Cliquez ici', '<w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr>');
+    const { body } = transform(
+      `<w:p>${sdt(`<w:tag w:val="date"/>${BOLD}<w:showingPlcHdr/>`, placeholder)}</w:p>`,
+    );
+    expect(body).toBe(`<w:p><w:r>${BOLD}<w:t xml:space="preserve">{{date}}</w:t></w:r></w:p>`);
+  });
+
+  it('laisse intacte une case à cocher ; liste, combo et date donnent la valeur affichée (I-10)', () => {
+    const w14 = 'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"';
+    const checkbox =
+      `<w:sdt ${w14}><w:sdtPr><w:tag w:val="ok"/><w14:checkbox><w14:checked w14:val="1"/></w14:checkbox></w:sdtPr>` +
+      `<w:sdtContent>${run('☒')}</w:sdtContent></w:sdt>`;
+    expect(transform(`<w:p>${checkbox}</w:p>`).body).toBeNull();
+    const body =
+      `<w:p>${sdt('<w:tag w:val="pays"/><w:dropDownList><w:listItem w:displayText="France" w:value="FR"/></w:dropDownList>', run('France'))}` +
+      `${sdt('<w:tag w:val="ville"/><w:comboBox/>', run('Lyon'))}` +
+      `${sdt('<w:tag w:val="le"/><w:date w:fullDate="2026-03-12T00:00:00Z"/>', run('12/03/2026'))}</w:p>`;
+    const { body: out, variables } = transform(body);
+    expect(out).toBe(
+      '<w:p>' +
+        ['pays', 'ville', 'le']
+          .map((name) => `<w:r><w:t xml:space="preserve">{{${name}}}</w:t></w:r>`)
+          .join('') +
+        '</w:p>',
+    );
+    expect([...variables]).toEqual([
+      ['pays', { value: 'France' }],
+      ['ville', { value: 'Lyon' }],
+      ['le', { value: '12/03/2026' }],
+    ]);
+  });
+
+  it('conserve la déclaration XML derrière une marque BOM (I-13)', () => {
+    const BOM = String.fromCharCode(0xfeff);
+    const out = transformVariablesXml(
+      `${BOM}${documentXml(`<w:p>${simpleField('Nom')}</w:p>`)}`,
+      BOTH,
+      new Map(),
+    );
+    expect(out).toMatch(/^<\?xml version="1\.0" encoding="UTF-8" standalone="yes"\?><w:document/);
+    expect(out).toContain('{{Nom}}');
+  });
+});
+
+describe('I-7 : {{nom}} tapés dans les en-têtes et pieds de page', () => {
+  it('collecte les noms sans réécrire, un {{ coupé sur deux runs compris, jamais sur deux paragraphes', async () => {
+    const input = await buildDocx(`<w:p>${run('Corps {{a}}')}</w:p>`, {
+      'word/header1.xml': headerXml(
+        `<w:p>${run('Réf. {{')}${run('dossier}} &amp; {{a}}')}</w:p>` +
+          `<w:p>${run('{{')}</w:p><w:p>${run('coupe}}')}</w:p>`,
+      ),
+      'word/footer1.xml': headerXml(`<w:p>${run('Page {{page}} / {{ nombre }}')}</w:p>`),
+    });
+    const result = await preprocessVariables(input, { ...BOTH, braces: true });
+    expect(result.changed).toBe(false);
+    expect([...result.variables.keys()]).toEqual(['dossier', 'a', 'page', 'nombre']);
+    const without = await preprocessVariables(input, BOTH);
+    expect(without.variables.size).toBe(0);
+  });
+
+  it('applique le motif personnalisé et ignore un nom invalide', () => {
+    const variables = new Map<string, CollectedVariable>();
+    const xml = headerXml(`<w:p>${run('[client] [a b] [[x]] &lt;[tag]&gt;')}</w:p>`);
+    collectBracesInXml(xml, /\[([^\]]+)\]/g, variables);
+    expect([...variables.keys()]).toEqual(['client', 'tag']);
   });
 });

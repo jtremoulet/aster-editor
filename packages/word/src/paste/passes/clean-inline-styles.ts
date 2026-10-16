@@ -23,11 +23,19 @@ const TABLE_TAGS: ReadonlySet<string> = new Set([
   'caption',
 ]);
 
-/** Attributs conservés par balise ; `style` est traité à part. Tout le reste tombe. */
+/** Attribut de la puce de variable, contrat du core ; `data-label` n'a de sens qu'avec lui. */
+const VARIABLE_ATTRIBUTE = 'data-aster-variable';
+
+/**
+ * Attributs conservés par balise ; `style` est traité à part. Tout le reste tombe. Sur
+ * `span`, seuls ceux de la puce de variable survivent : un collage d'une puce doit
+ * rester une puce avec son libellé (idempotence).
+ */
 const KEPT_ATTRIBUTES: Readonly<Record<string, readonly string[]>> = {
   a: ['href', 'title', 'target', 'rel'],
   img: ['src', 'alt', 'title', 'width', 'height'],
   ol: ['start', 'type'],
+  span: [VARIABLE_ATTRIBUTE, 'data-label'],
 };
 
 /** Balises de présentation héritées, renommées en équivalent sémantique. */
@@ -215,6 +223,11 @@ export const cleanInlineStyles: PastePass = (doc, options) => {
         element.setAttribute('style', `color:${color};${element.getAttribute('style') ?? ''}`);
       }
     }
+    // Une puce de variable est atomique pour le core : ni style ni marque interne n'ont de sens.
+    if (element.localName === 'span' && element.hasAttribute(VARIABLE_ATTRIBUTE)) {
+      cleanAttributes(element, null);
+      continue;
+    }
     const { style, hints } = filterStyle(element, options);
     cleanAttributes(element, style);
     if (element.localName === 'a' && !hasSafeHref(element)) {
@@ -226,6 +239,8 @@ export const cleanInlineStyles: PastePass = (doc, options) => {
       continue;
     }
     if (element.localName === 'span' || element.localName === 'font') {
+      // `data-label` hors d'une puce n'a pas de sens : il ne survit qu'avec `data-aster-variable`.
+      element.removeAttribute('data-label');
       applySemanticHints(doc, element, hints);
       const span = element.localName === 'font' ? renameElement(doc, element, 'span') : element;
       if (span.attributes.length === 0) {

@@ -77,6 +77,42 @@ describe('createVariablesPass', () => {
   it('ne fait rien sans motif', () => {
     expect(runPass(createVariablesPass([], new Map()), '<p>{{a}}</p>').html).toBe('<p>{{a}}</p>');
   });
+
+  it('recolle une occurrence répartie sur plusieurs éléments inline d’un même bloc (I-8)', () => {
+    const pass = createVariablesPass(
+      [{ pattern: DEFAULT_VARIABLE_PATTERN }],
+      collected([['nom', { label: 'Nom' }]]),
+    );
+    const chip = '<span data-aster-variable="nom" data-label="Nom">{{nom}}</span>';
+    expect(runPass(pass, '<p>Bonjour <strong>{{</strong>nom}} !</p>').html).toBe(
+      `<p>Bonjour <strong>${chip}</strong> !</p>`,
+    );
+    expect(runPass(pass, '<p><strong>{{</strong><em>nom</em>}} et {{<u>x</u>}}</p>').html).toBe(
+      `<p><strong>${chip}</strong> et <span data-aster-variable="x">{{x}}</span></p>`,
+    );
+    expect(runPass(pass, '<ul><li><em>{{</em>nom<strong>}}</strong></li></ul>').html).toBe(
+      `<ul><li><em>${chip}</em></li></ul>`,
+    );
+  });
+
+  it('ne recolle jamais à travers un <br>, une puce, un bloc ou un nom hors liste (I-8)', () => {
+    const pass = createVariablesPass([{ pattern: DEFAULT_VARIABLE_PATTERN }], new Map());
+    for (const html of [
+      '<p>{{<br>nom}}</p>',
+      '<p>{{</p><p>nom}}</p>',
+      '<p>{{a<span data-aster-variable="b">{{b}}</span>}}</p>',
+      '<p><strong>{{</strong>a b}}</p>',
+    ]) {
+      expect(runPass(pass, html).html).toBe(html);
+    }
+    const only = createVariablesPass(
+      [{ pattern: DEFAULT_VARIABLE_PATTERN, only: new Set(['x']) }],
+      new Map(),
+    );
+    expect(runPass(only, '<p><strong>{{</strong>y}}</p>').html).toBe(
+      '<p><strong>{{</strong>y}}</p>',
+    );
+  });
 });
 
 describe('collectResultVariables', () => {

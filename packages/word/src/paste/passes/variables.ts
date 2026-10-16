@@ -116,19 +116,13 @@ function createChip(doc: Document, name: string, labels?: ReadonlyMap<string, st
   return span;
 }
 
-/**
- * Remplace les occurrences de variables dans les nœuds texte sous `root`. Les textes
- * adjacents sont d'abord fusionnés (`normalize`) pour recoller un `{{` coupé sur deux
- * runs. Renvoie le nombre de puces posées.
- */
-export function wrapVariablePlaceholders(
+/** Premier passage : chaque occurrence contenue dans un seul nœud texte devient une puce. */
+function wrapWithinTexts(
   doc: Document,
   root: Node,
-  options: WrapVariablesOptions,
+  matchers: readonly VariableMatcher[],
+  labels: ReadonlyMap<string, string> | undefined,
 ): number {
-  if (options.patterns.length === 0) return 0;
-  const matchers = options.patterns.map(toMatcher);
-  root.normalize();
   let count = 0;
   for (const text of collectCandidateTexts(root)) {
     const data = text.data;
@@ -138,7 +132,7 @@ export function wrapVariablePlaceholders(
     let cursor = 0;
     for (const { start, end, name } of occurrences) {
       if (start > cursor) fragment.appendChild(doc.createTextNode(data.slice(cursor, start)));
-      fragment.appendChild(createChip(doc, name, options.labels));
+      fragment.appendChild(createChip(doc, name, labels));
       cursor = end;
       count += 1;
     }
@@ -146,6 +140,123 @@ export function wrapVariablePlaceholders(
     text.parentNode?.replaceChild(fragment, text);
   }
   return count;
+}
+
+/** Blocs feuilles où une occurrence peut être répartie sur plusieurs éléments inline. */
+const LEAF_BLOCK_SELECTOR =
+  'p, h1, h2, h3, h4, h5, h6, li, td, th, dd, dt, caption, figcaption, blockquote, div';
+
+/**
+ * Séparateur inséré dans le texte recollé d'un bloc là où une occurrence ne doit pas
+ * enjamber : saut de ligne, puce existante, sous-arbre ignoré. Jamais dans un nom.
+ */
+const SEGMENT_BOUNDARY = '\u0000';
+
+/** Nœud texte d'un bloc avec son décalage dans le texte recollé. */
+interface Segment {
+  readonly node: Text;
+  readonly start: number;
+  readonly end: number;
+}
+
+/** Texte recollé d'un bloc feuille et ses nœuds texte candidats, dans l'ordre. */
+function collectSegments(block: Element): { text: string; segments: Segment[] } {
+  const segments: Segment[] = [];
+  let text = '';
+  const visit = (node: Node): void => {
+    if (node.nodeType === 3) {
+      const data = (node as Text).data;
+      segments.push({ node: node as Text, start: text.length, end: text.length + data.length });
+      text += data;
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    const element = node as Element;
+    if (
+      element.localName === 'br' ||
+      SKIPPED_TAGS.has(element.localName) ||
+      element.hasAttribute(VARIABLE_ATTRIBUTE)
+    ) {
+      text += SEGMENT_BOUNDARY;
+      return;
+    }
+    for (const child of Array.from(node.childNodes)) visit(child);
+  };
+  for (const child of Array.from(block.childNodes)) visit(child);
+  return { text, segments };
+}
+
+/** Retire un nœud et les éléments inline que ce retrait a vidés, sans dépasser `block`. */
+function removeAndPrune(node: Node, block: Element): void {
+  let element: Element | null = node.parentElement;
+  node.parentNode?.removeChild(node);
+  while (element && element !== block && element.childNodes.length === 0) {
+    const parent: Element | null = element.parentElement;
+    element.parentNode?.removeChild(element);
+    element = parent;
+  }
+}
+
+/**
+ * Second passage : une occurrence répartie sur plusieurs éléments inline d'un même bloc
+ * (`<strong>{{</strong>nom}}`, après une correction dans Word) devient une puce posée à
+ * la place du premier fragment, dans ses marques ; les fragments suivants sont retirés.
+ * Les occurrences sont traitées de la dernière à la première pour garder les décalages
+ * valides, et jamais à travers un `<br>`, une puce ou un bloc.
+ */
+function wrapAcrossInlines(
+  doc: Document,
+  root: Node,
+  matchers: readonly VariableMatcher[],
+  labels: ReadonlyMap<string, string> | undefined,
+): number {
+  if (root.nodeType !== 1 && root.nodeType !== 9) return 0;
+  const scope = root as ParentNode;
+  let count = 0;
+  for (const block of Array.from(scope.querySelectorAll(LEAF_BLOCK_SELECTOR))) {
+    if (block.querySelector(LEAF_BLOCK_SELECTOR)) continue;
+    const { text, segments } = collectSegments(block);
+    if (segments.length < 2) continue;
+    const occurrences = findOccurrences(text, matchers).filter((occurrence) => {
+      const first = segments.find((segment) => segment.end > occurrence.start);
+      return first !== undefined && first.end < occurrence.end;
+    });
+    for (const occurrence of occurrences.reverse()) {
+      const covered = segments.filter(
+        (segment) => segment.end > occurrence.start && segment.start < occurrence.end,
+      );
+      const first = covered[0];
+      const last = covered[covered.length - 1];
+      if (!first || !last || first === last) continue;
+      const chip = createChip(doc, occurrence.name, labels);
+      first.node.parentNode?.insertBefore(chip, first.node.nextSibling);
+      first.node.data = first.node.data.slice(0, occurrence.start - first.start);
+      if (first.node.data === '') first.node.parentNode?.removeChild(first.node);
+      for (const segment of covered.slice(1, -1)) removeAndPrune(segment.node, block);
+      last.node.data = last.node.data.slice(occurrence.end - last.start);
+      if (last.node.data === '') removeAndPrune(last.node, block);
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/**
+ * Remplace les occurrences de variables dans les nœuds texte sous `root`. Les textes
+ * adjacents sont d'abord fusionnés (`normalize`) pour recoller un `{{` coupé sur deux
+ * runs ; une occurrence répartie sur plusieurs éléments inline d'un même bloc est
+ * recollée dans un second passage. Renvoie le nombre de puces posées.
+ */
+export function wrapVariablePlaceholders(
+  doc: Document,
+  root: Node,
+  options: WrapVariablesOptions,
+): number {
+  if (options.patterns.length === 0) return 0;
+  const matchers = options.patterns.map(toMatcher);
+  root.normalize();
+  const within = wrapWithinTexts(doc, root, matchers, options.labels);
+  return within + wrapAcrossInlines(doc, root, matchers, options.labels);
 }
 
 /**

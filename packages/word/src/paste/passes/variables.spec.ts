@@ -45,6 +45,13 @@ describe('wrapVariables (passe de collage)', () => {
     expect(doc.body.innerHTML).toBe(`<p>Date : ${chip('date')}.</p>`);
   });
 
+  it('recolle un {{ et un nom}} répartis sur deux marques du même paragraphe, jamais à travers un <br> (I-8)', () => {
+    expect(runPass('<p><strong>{{</strong>nom}}</p>', wrapVariables)).toBe(
+      `<p><strong>${chip('nom')}</strong></p>`,
+    );
+    expect(runPass('<p>{{<br>nom}}</p>', wrapVariables)).toBe('<p>{{<br>nom}}</p>');
+  });
+
   it('laisse <pre> et <code> intacts et ne ré-enveloppe pas une puce existante', () => {
     const html = `<pre>{{a}}</pre><p><code>{{b}}</code> ${chip('c')}</p>`;
     expect(runPass(html, wrapVariables)).toBe(html);
