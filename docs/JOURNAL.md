@@ -259,3 +259,15 @@
 - Magasin de variables de base et commandes stub ajoutés pour que les 4 paquets compilent contre le contrat pendant la vague.
 - Lancés : L13 core-variables (`aaaca60e`), L14 ui-variables (`af5b598d`), L15 word-import-variables (`a01c620c`), L16 word-export-fidélité (`a1cc6682`). Briefs dans `docs/briefs/`.
 - Pendant la vague : panneau « Variables » dans le playground, briefs L17/L18, REX session 2.
+
+### 16/10 10:40 — L14 ui-variables rendu et intégré (agent 15 min, 248k tokens, 98 outils)
+- 230 tests ui (+42), codé entièrement contre le contrat avec un mock enrichi, sans voir l'implémentation core. 6 attentes précises envers le core transmises à L13 en cours par message (remplacement de la sélection, sélection de la puce avant `aster:variable-edit`, libellé lu sur le nœud, sonde `allowUnknown`, export de l'événement, classes CSS).
+- Décision L14 à retenir : panneau de suggestion positionné à la main (clamp viewport) plutôt que `floating-ui`, pour rester testable sous jsdom.
+- Proposition de contrat notée pour le dégel final : `VariableStore.allowsUnknown()` à la place de la sonde.
+- `variables.css` importé, `@tiptap/suggestion`, `@tiptap/pm`, `@floating-ui/dom` déclarés dans `ui` (épinglés 3.31.4), toujours une seule copie de `@tiptap/core`.
+
+### 16/10 10:55 — L13 core-variables rendu et intégré (agent 16 min, 221k tokens, 69 outils)
+- +57 tests core (425, 95,5 %), aucun test existant modifié. `AsterVariableStore` concret avec `allowUnknown`/`canInsert`, `resolveVariablesHtml` pur avec chemin rapide sans DOM.
+- **Vérifié en navigateur (core + ui assemblés)** : puces rendues depuis `span[data-aster-variable]`, `setValues` → puces `--resolved` affichant « Nebula » et « ACME SAS », `getHTML({ variables: 'resolve' })` correct, `getText` avec valeurs, widget « Variable » dans la toolbar (37 items), menu `{{cli` avec l'option existante et « Créer {{cli}} ». Capture `08-s2-variables-playground.jpg`.
+- Propositions de contrat (dégel final) : `VariableStore.allowUnknown`/`canInsert`, `VariableEditEventDetail` dans `api/variables.ts`.
+- L13 a reçu mon message avec les attentes de L14 après son rendu : il est relancé et renotifiera ; à intégrer en delta.
