@@ -6,6 +6,29 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-16
+
+Modèles de documents et champs de fusion : variables de bout en bout (éditeur, import et export Word, Angular), fidélité Word à l'export, parité d'usage (bulles, menu `/`, sommaire, format painter), 5 revues adverses et leurs correctifs.
+
+### Added
+
+- **core** : contrat des variables (`AsterVariable`, `VariableStore`, `VariableSource`, `GetHtmlOptions`), nœud `variable` avec puce (libellé, valeur, états résolue / non résolue, double-clic → `aster:variable-edit`), règle de saisie `{{nom}}`, commandes `variable.insert` / `variable.remove`, `editor.variables` (`list`, `getNames`, `getValues`, `setValues`, `define`, `resolve`, `hasUnresolved`), `getHTML({ variables: 'resolve' })` et `resolveVariablesHtml()` pur, événement `variablesChange`, extension `Outline` (`getOutline`, `scrollToHeading`, ids de titres `aster-h-n` à la demande), commandes `formatPainter.copy` / `paste` (`Mod-Shift-c` / `Mod-Shift-v`, verrou).
+- **ui** : widget `variable` (menu des variables déclarées et présentes, création contrôlée), menu de suggestion `{{` (navigation clavier, a11y `aria-activedescendant`, flip), dialogue de puce (libellé, valeur, suppression), bulle de lien (URL, modifier inline, supprimer), bulle d'image (alignement, largeurs 25/50/100 %, modifier, supprimer), menu `/` (blocs, listes, citation, code, séparateur, table, image, lien, variable), widgets `outline` et `formatPainter`, options `createAster` `variableSuggestion` / `linkBubble` / `imageBubble` / `slashMenu`, feuilles `variables.css` et `bubbles.css`, sélecteurs de panneaux ouverts extensibles pour le plein écran.
+- **word** : import des variables depuis `{{nom}}`, champs de fusion Word (`fldSimple` et champs complexes) et contrôles de contenu (`w:sdt`), par prétraitement XML avant mammoth, `DocxImportResult.variables`, options `variables.detect` / `pattern`, passe de collage `{{nom}}` ; export `variables.mode` `placeholders` / `resolve` / `fields` (`MERGEFIELD`, valeur connue en résultat de champ), en-têtes et pieds de page avec numéros de page, sauts de page, table des matières, notes de bas de page réelles, titres numérotés, largeurs de colonnes, taille de page, orientation, marges, langue, police et styles de titres par défaut.
+- **angular** : inputs `variables`, `variableValues`, `variableResolver`, `allowUnknownVariables`, `variableSuggestion`, output `variablesChanged`, signal `variableNames`, méthodes `getHTML(options)`, `resolveVariables()`, `exportDocx(options)` ; page démo « Modèle » (import d'un modèle, formulaire généré, aperçu résolu, trois exports).
+- Fixtures `08-variables-braces`, `09-variables-mergefields`, `10-variables-content-controls` et presse-papier `word-365-variables` ; échantillon `samples/export-fidelite-complet.docx` avec checklist d'ouverture dans Word ; panneau Variables dans le playground.
+
+### Changed
+
+- **core** : `variableName()` rend `''` pour un nom invalide (nœud inerte) ; `resolve()` applique les succès avant de rejeter ; `list()` n'a plus qu'une source de valeurs.
+- **word** : `importDocx` réécrit l'archive avant mammoth dès qu'elle contient un champ ou un contrôle (coût mesuré 29 ms sur 5 Mo).
+- Dépendances : `@tiptap/suggestion` et `@floating-ui/dom` (MIT), `jszip` déclaré explicitement (MIT) ; versions Tiptap épinglées en exact.
+
+### Fixed
+
+- **ui** : Entrée dans le menu `{{` coupait le paragraphe (plugin enregistré derrière les keymaps Tiptap) ; Échap en plein écran ignorait les panneaux de variables ; focus et libellés du dialogue de puce ; sommaire dupliqué à l'ouverture ; valeur vide invisible.
+- **core** : valeur effacée ressuscitée par `define` ; `setJSON` avec un nom hostile créait une puce.
+
 ## [0.3.0] - 2026-10-13
 
 Fonctionnalités « should » et « could », export .docx, e2e Playwright, et 5 lots de correctifs issus de revues adverses (54 findings).

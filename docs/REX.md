@@ -152,3 +152,36 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 7. **Vague 4 : features bonus** tant que le temps le permet, puis une revue de chaque nouveau lot.
 8. **Gel** : check complet, build, e2e, bump, changelog, rafraîchissement de la doc sur l'état final par un agent qui typechecke, bilan en 5 minutes de lecture, REX, mémoire.
 9. **Règles pour l'orchestrateur** : ne jamais patcher du code par shell inline avec des backslashes (même un heredoc quoté a mangé un `\\` cette nuit) ; ne pas faire tourner deux agents qui exécutent des e2e en même temps ; tenir le journal après chaque lot ; archiver les briefs.
+
+---
+
+# 🔁 REX session 2 — 16 → 19 octobre 2026 (variables Word, parité CKEditor)
+
+> Même méthode que la session 1, avec les leçons appliquées : revues adverses dès qu'un lot est intégré, pièges d'outillage dans chaque brief, un serveur par port, tests d'intégration réels imposés dans les briefs de correctifs.
+
+## 📊 Métriques par lot
+
+| Lot                       | Durée agent      | Tokens             | Outils       | Tests ajoutés       | Findings revue (bloquants/mineurs)             |
+| ------------------------- | ---------------- | ------------------ | ------------ | ------------------- | ---------------------------------------------- |
+| Phase 0 (orchestrateur)   | 25 min           | —                  | —            | 0                   | —                                              |
+| L13 core-variables        | 16 min           | 221k               | 69           | +57                 | R14 : 5/9 (avec ui)                            |
+| L14 ui-variables          | 15 min           | 248k               | 98           | +42                 | idem                                           |
+| L15 word-import-variables | 23 min           | 252k               | 86           | +128                | R15 : 2/11                                     |
+| L16 word-export-fidélité  | 25 min           | 301k               | 96           | +45                 | R16 : 3/10                                     |
+| L17 angular-modèle        | 15 min           | 187k               | 80           | +12                 | —                                              |
+| L18 parité                | 27 min           | 325k               | 113          | +57                 | 1 bug trouvé en navigateur (sommaire dupliqué) |
+| L20 fix variables         | 17 min           | 261k               | 101          | +25                 | 14/14 corrigés                                 |
+| R14 / R15 / R16           | 14 / 13 / 13 min | 231k / 197k / 189k | 69 / 32 / 31 | preuves exécutables | 10 bloquants, 30 mineurs au total              |
+
+## ✅ Ce qui a mieux marché qu'en session 1
+
+- **Revues lancées dès l'intégration de chaque lot** : les 3 revues ont tourné pendant que les lots suivants se développaient, et leurs lots de correctifs ont démarré sans attendre la fin de la vague.
+- **Contrat des variables écrit en phase 0 et respecté par 5 lots en parallèle** sans aucun aller-retour ; une seule collision (nom de type `DocxVariableOptions`) résolue par les agents eux-mêmes.
+- **Tests d'intégration réels imposés** dans le brief de correctifs : c'est ce qui a masqué le bug « Entrée dans le menu `{{` » dans 42 tests sur mock.
+- Vérification en navigateur par l'orchestrateur après chaque intégration : 2 bugs trouvés (valeurs perdues à la réimportation `fields`, sommaire dupliqué).
+
+## 🧱 Frictions nouvelles
+
+- `@tiptap/suggestion@^3.31.4` résolu en 3.32.0 avec une seconde copie de `@tiptap/core` imbriquée → 100 erreurs de types. Épingler Tiptap en exact et vérifier `find … @tiptap/core/package.json` après toute installation.
+- Un agent a arrêté le serveur `ng serve` de l'orchestrateur (même port). Règle : ne jamais arrêter un serveur qu'on n'a pas lancé.
+- Horodatages du journal estimés par l'orchestrateur pendant une heure, décalés de ~1h30 par rapport à l'horloge : toujours lire `date`.
