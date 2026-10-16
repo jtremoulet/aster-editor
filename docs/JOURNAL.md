@@ -252,3 +252,10 @@
 - Vérifications phase 0 : `docx` expose `SimpleMailMergeField`, `SimpleField`, `TableOfContents`, `Header`/`Footer`, `PageBreak` ; mammoth ignore l'instruction `MERGEFIELD` (il rend le texte résultat) et traverse les `w:sdt` → prétraitement du XML avant mammoth ; `@tiptap/suggestion` installé pour le menu `{{` ; `jszip` déclaré dans `word` (MIT, déjà transitif via mammoth).
 - `npm run check` de base vert après installation. Serveurs relancés (4200, 4300).
 - Dégel **additif** du contrat : `api/variables.ts`, `AsterOptions.variables`, `AsterEditor.variables` + `getHTML(options?)`, événement `variablesChange`, commandes `variable.insert`/`variable.remove`, widget `variable`, clés i18n.
+
+### 16/10 10:21 — Phase 0 commitée, vague 1 lancée (4 agents)
+
+- Friction phase 0 : `@tiptap/suggestion@^3.31.4` s'est résolu en **3.32.0** (sortie entre-temps) avec une seconde copie de `@tiptap/core` imbriquée sous `packages/core` → 100 erreurs de types (augmentations Tiptap non fusionnées). Le `npm run check` juste après l'installation était pourtant vert : il tournait sur les sources d'avant le patch de contrat, avant que `tsc` n'inclue… non : il était vert parce que le typecheck ne touchait pas encore aux fichiers qui tiraient la copie imbriquée. Leçon REX : **épingler les versions Tiptap en exact** (lockstep) et vérifier `find node_modules packages -path "*@tiptap/core/package.json"` après toute installation. Corrigé par épinglage `3.31.4` + `npm dedupe` + `npm prune`.
+- Magasin de variables de base et commandes stub ajoutés pour que les 4 paquets compilent contre le contrat pendant la vague.
+- Lancés : L13 core-variables (`aaaca60e`), L14 ui-variables (`af5b598d`), L15 word-import-variables (`a01c620c`), L16 word-export-fidélité (`a1cc6682`). Briefs dans `docs/briefs/`.
+- Pendant la vague : panneau « Variables » dans le playground, briefs L17/L18, REX session 2.

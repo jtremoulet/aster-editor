@@ -71,6 +71,27 @@
       <span id="counts"></span>
     </div>
     <div id="host"></div>
+    <details id="vars-panel" open>
+      <summary>Variables (JSON nom → valeur)</summary>
+      <textarea
+        id="vars"
+        rows="4"
+        style="
+          width: 100%;
+          font:
+            12px ui-monospace,
+            monospace;
+        "
+      >
+{ "client.nom": "ACME SAS", "prestataire": "Nebula" }</textarea>
+      <div class="bar">
+        <button id="vars-apply" type="button">setValues()</button>
+        <button id="vars-resolve" type="button">getHTML({ variables: 'resolve' })</button>
+        <button id="vars-export-fields" type="button">Exporter .docx (champs)</button>
+        <button id="vars-export-resolved" type="button">Exporter .docx (résolu)</button>
+        <span id="vars-names"></span>
+      </div>
+    </details>
     <pre id="out"></pre>
     <script type="module" src="dist/main.js"></script>
   </body>
