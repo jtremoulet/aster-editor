@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterOptions } from '@aster-editor/core';
 import type * as Core from '@aster-editor/core';
 import { createEditor } from '@aster-editor/core';
-import { createAster } from './create-aster';
+import { createAster, openToolbarWidget } from './create-aster';
 import { createMockEditor, type MockEditor } from './testing/mock-editor';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
@@ -109,7 +109,7 @@ describe('createAster', () => {
   });
 
   it('monte la suggestion {{ et le dialogue de puce, retirés au destroy', () => {
-    const instance = createAster(host, { toolbar: false });
+    const instance = createAster(host, { toolbar: false, slashMenu: false });
     expect(editor.plugins.length).toBe(1);
     expect(vi.mocked(createEditor).mock.calls[0]?.[0]).not.toHaveProperty('variableSuggestion');
     editor.contentElement.dispatchEvent(
@@ -125,7 +125,11 @@ describe('createAster', () => {
   });
 
   it('variableSuggestion: false n’enregistre pas le plugin ; rien sans variable.insert', () => {
-    const instance = createAster(host, { toolbar: false, variableSuggestion: false });
+    const instance = createAster(host, {
+      toolbar: false,
+      variableSuggestion: false,
+      slashMenu: false,
+    });
     expect(editor.plugins.length).toBe(0);
     expect(vi.mocked(createEditor).mock.calls[0]?.[0]).not.toHaveProperty('variableSuggestion');
     expect(editor.element.querySelector('.aster-variable-dialog')).toBeNull();
@@ -136,18 +140,78 @@ describe('createAster', () => {
     instance.destroy();
 
     editor = createMockEditor({ commands: ['bold'] });
-    const bare = createAster(host, { toolbar: false });
+    const bare = createAster(host, { toolbar: false, slashMenu: false });
     expect(editor.plugins.length).toBe(0);
     expect(editor.listenerCount()).toBe(0);
     bare.destroy();
+  });
+
+  it('monte les bulles de lien et d’image et le menu /, retirés au destroy', () => {
+    const instance = createAster(host, { toolbar: false });
+    // Suggestion `{{` puis menu `/`.
+    expect(editor.plugins.length).toBe(2);
+    const passed = vi.mocked(createEditor).mock.calls[0]?.[0];
+    for (const option of ['linkBubble', 'imageBubble', 'slashMenu']) {
+      expect(passed).not.toHaveProperty(option);
+    }
+    editor.activeNodes.add('link');
+    editor.attributes.set('link', { href: 'https://a.dev/' });
+    editor.emit('selectionChange', { editor });
+    const link = editor.element.querySelector('.aster-link-bubble');
+    expect(link?.hasAttribute('hidden')).toBe(false);
+    editor.activeNodes.delete('link');
+    editor.activeNodes.add('image');
+    editor.emit('selectionChange', { editor });
+    expect(link?.hasAttribute('hidden')).toBe(true);
+    const image = editor.element.querySelector('.aster-image-bubble');
+    expect(image?.hasAttribute('hidden')).toBe(false);
+    editor.setReadOnly(true);
+    expect(image?.hasAttribute('hidden')).toBe(true);
+    instance.destroy();
+    expect(editor.plugins.length).toBe(0);
+    expect(editor.element.querySelector('.aster-bubble')).toBeNull();
+    expect(editor.listenerCount()).toBe(0);
+  });
+
+  it('linkBubble / imageBubble / slashMenu à false ne montent rien', () => {
+    const instance = createAster(host, {
+      toolbar: false,
+      linkBubble: false,
+      imageBubble: false,
+      slashMenu: false,
+    });
+    expect(editor.plugins.length).toBe(1);
+    editor.activeNodes.add('link');
+    editor.attributes.set('link', { href: 'https://a.dev/' });
+    editor.activeNodes.add('image');
+    editor.emit('selectionChange', { editor });
+    expect(editor.element.querySelector('.aster-bubble')).toBeNull();
+    instance.destroy();
+  });
+
+  it('openToolbarWidget ouvre le dialogue image ou lien de la toolbar pour le menu /', () => {
+    const instance = createAster(host, { toolbar: [[{ type: 'widget', widget: 'image' }]] });
+    expect(instance.toolbar).not.toBeNull();
+    const trigger = instance.element.querySelector<HTMLButtonElement>('.aster-dropdown__trigger');
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(openToolbarWidget(instance.toolbar!, 'link')).toBe(false);
+    expect(openToolbarWidget(instance.toolbar!, 'image')).toBe(true);
+    expect(trigger?.getAttribute('aria-expanded')).toBe('true');
+    expect(instance.element.querySelector('.aster-image-dialog')?.hasAttribute('hidden')).toBe(
+      false,
+    );
+    editor.setReadOnly(true);
+    expect(openToolbarWidget(instance.toolbar!, 'image')).toBe(false);
+    instance.destroy();
   });
 
   it('destroy détruit toolbar et éditeur, retire l’élément, idempotent', () => {
     const instance = createAster(host);
     // 3 abonnements de la toolbar (selectionChange, readOnlyChange, localeChange)
     // + 2 du menu contextuel de table (readOnlyChange, selectionChange)
-    // + 1 du widget `variable` (variablesChange) + 1 du dialogue de puce (readOnlyChange).
-    expect(editor.listenerCount()).toBe(7);
+    // + 1 du widget `variable` (variablesChange) + 1 du dialogue de puce (readOnlyChange)
+    // + 2 par bulle (lien, image : selectionChange, readOnlyChange).
+    expect(editor.listenerCount()).toBe(11);
     instance.destroy();
     expect(editor.isDestroyed()).toBe(true);
     expect(editor.listenerCount()).toBe(0);

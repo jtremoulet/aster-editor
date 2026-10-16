@@ -44,6 +44,31 @@ export {
   type SearchStorage,
 } from './extensions/search';
 
+export {
+  FORMAT_PAINTER_CHANGE_EVENT,
+  FORMAT_PAINTER_COMMANDS,
+  FORMAT_PAINTER_COMMAND_IDS,
+  applyFormat,
+  clearFormatClipboard,
+  getFormatClipboard,
+  hasFormatClipboard,
+  readFormat,
+  wordRangeAt,
+  type FormatClipboard,
+  type FormatClipboardBlock,
+  type FormatPainterCommandId,
+} from './commands/format-painter';
+export {
+  HEADING_ID_PREFIX,
+  OUTLINE_EXTENSION_NAME,
+  Outline,
+  ensureHeadingIds,
+  getOutline,
+  headingIdNumber,
+  scrollToHeading,
+  type OutlineEntry,
+} from './extensions/outline';
+
 export { createAsterExtensions, type AsterExtensionsContext } from './extensions/aster-extensions';
 export {
   DEFAULT_LINK_POLICY,

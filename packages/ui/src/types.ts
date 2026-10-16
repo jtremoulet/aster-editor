@@ -17,6 +17,21 @@ export interface AsterUiOptions extends Omit<AsterOptions, 'element'> {
    * si autorisée). Vrai par défaut, dès que le core expose `variable.insert`.
    */
   variableSuggestion?: boolean;
+  /**
+   * Bulle contextuelle sous un lien (URL, modifier, supprimer). Vrai par défaut, dès
+   * que le core expose `link.set`.
+   */
+  linkBubble?: boolean;
+  /**
+   * Bulle contextuelle au-dessus d'une image sélectionnée (alignement, largeur,
+   * modifier, supprimer). Vrai par défaut, dès que le core expose `image.setAttributes`.
+   */
+  imageBubble?: boolean;
+  /**
+   * Menu de blocs déclenché par `/` en début de bloc (titres, listes, tableau, image…).
+   * Vrai par défaut.
+   */
+  slashMenu?: boolean;
 }
 
 /** Résultat de `createAster` : éditeur + toolbar montés dans un hôte avec le thème appliqué. */

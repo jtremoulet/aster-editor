@@ -10,7 +10,7 @@ const widget = (name: string): ToolbarWidgetItem => ({ type: 'widget', widget: n
 /** Toolbar complète : tout le jeu standard, du plus fréquent au plus rare. */
 export const FULL_PRESET: readonly ToolbarGroup[] = [
   ['undo', 'redo'],
-  [widget('heading')],
+  [widget('heading'), widget('outline')],
   ['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'code', 'highlight'],
   [widget('fontFamily'), widget('fontSize')],
   [widget('textColor'), widget('backgroundColor')],
@@ -18,7 +18,7 @@ export const FULL_PRESET: readonly ToolbarGroup[] = [
   ['bulletList', 'orderedList', 'taskList', 'outdent', 'indent'],
   [widget('link'), widget('image'), widget('table'), widget('variable')],
   ['blockquote', 'codeBlock', 'horizontalRule'],
-  ['clearFormatting'],
+  ['clearFormatting', widget('formatPainter')],
   [
     widget('search'),
     widget('specialChars'),

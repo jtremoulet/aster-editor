@@ -60,6 +60,8 @@ export const en: AsterDictionary = {
   'command.search.replace': 'Replace',
   'command.search.replaceAll': 'Replace all',
   'command.search.clear': 'Clear search',
+  'command.formatPainter.copy': 'Copy formatting',
+  'command.formatPainter.paste': 'Paste formatting',
   'editor.placeholder': 'Start writing…',
   'editor.words': '{count} words',
   'editor.characters': '{count} characters',

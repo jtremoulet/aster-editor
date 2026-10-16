@@ -89,6 +89,40 @@ export {
 } from './components/variable-suggestion';
 export type { VariableDialog, VariableEditEventDetail } from './components/variable-dialog';
 export { VARIABLE_EDIT_EVENT, createVariableDialog } from './components/variable-dialog';
+// --- Lot L18 : bulles contextuelles, menu `/`, sommaire, reproduction de mise en forme
+export type { Bubble, BubbleOptions } from './components/bubble';
+export { createBubble, selectionReference, virtualReference } from './components/bubble';
+export {
+  LINK_BUBBLE_URL_MAX_LENGTH,
+  createLinkBubble,
+  truncateUrl,
+} from './components/link-bubble';
+export { IMAGE_BUBBLE_SIZES, createImageBubble, widthForRatio } from './components/image-bubble';
+export type {
+  SlashMenu,
+  SlashMenuItem,
+  SlashMenuOptions,
+  SlashMenuPanel,
+  SlashMenuPanelOptions,
+  SlashMenuPanelProps,
+  SlashWidgetName,
+} from './components/slash-menu';
+export {
+  SLASH_MENU_CHAR,
+  SLASH_MENU_PLUGIN_KEY,
+  buildSlashItems,
+  createSlashMenu,
+  createSlashMenuPanel,
+  filterSlashItems,
+  normalizeQuery,
+  runSlashItem,
+} from './components/slash-menu';
+export { createOutlinePanel } from './components/outline-panel';
+export type { FormatPainterButton } from './components/format-painter-button';
+export {
+  FORMAT_PAINTER_LOCKED_CLASS,
+  createFormatPainterButton,
+} from './components/format-painter-button';
 export type { PrintDocumentOptions, WindowOpener } from './components/print';
 export {
   PRINT_CONTENT_CLASS,

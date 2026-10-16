@@ -11,6 +11,7 @@ import { StarterKit } from '@tiptap/starter-kit';
 import type { AsterEditor, AsterOptions } from '../api';
 import { createImageExtension } from './image';
 import { createLinkExtension, type ResolvedLinkPolicy } from './link-safety';
+import { Outline } from './outline';
 import { Search } from './search';
 import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
 import { Variable } from './variable';
@@ -61,6 +62,8 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     }),
     CharacterCount,
     Search,
+    // Attribut `id` des titres (ancres, sommaire) ; aucun `id` posé sans `getOutline`.
+    Outline,
     createShortcutsExtension(context.shortcuts),
     ...(options.extensions ?? []),
   ];

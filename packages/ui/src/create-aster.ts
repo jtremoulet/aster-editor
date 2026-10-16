@@ -1,6 +1,9 @@
 import { createEditor } from '@aster-editor/core';
 import type { AsterTheme, Unsubscribe } from '@aster-editor/core';
 import { getFullscreen } from './components/fullscreen';
+import { createImageBubble } from './components/image-bubble';
+import { createLinkBubble } from './components/link-bubble';
+import { createSlashMenu, type SlashWidgetName } from './components/slash-menu';
 import { releaseSourceView, retainSourceView } from './components/source-view';
 import { createTableContextMenu } from './components/table-context-menu';
 import { createVariableDialog } from './components/variable-dialog';
@@ -8,6 +11,27 @@ import { createVariableSuggestion } from './components/variable-suggestion';
 import { createToolbar, registerUiTranslations } from './toolbar/create-toolbar';
 import type { AsterInstance, AsterUiOptions, Toolbar } from './types';
 import { el } from './utils/dom';
+
+/** Classe du panneau de chaque dialogue de la toolbar que le menu `/` sait ouvrir. */
+const WIDGET_PANEL_CLASSES: Readonly<Record<SlashWidgetName, string>> = {
+  image: 'aster-image-dialog',
+  link: 'aster-link-dialog',
+};
+
+/**
+ * Ouvre un dialogue de la toolbar depuis le menu `/` : le déclencheur du dropdown
+ * dont le panneau porte la classe attendue reçoit un clic. Faux si la toolbar n'a pas
+ * ce widget ou si son déclencheur est désactivé (commande refusée).
+ */
+export function openToolbarWidget(toolbar: Toolbar, widget: SlashWidgetName): boolean {
+  const panel = toolbar.element.querySelector(`.${WIDGET_PANEL_CLASSES[widget]}`);
+  const trigger = panel?.parentElement?.querySelector<HTMLButtonElement>(
+    '.aster-dropdown__trigger',
+  );
+  if (!trigger || trigger.disabled) return false;
+  trigger.click();
+  return true;
+}
 
 /**
  * Monte un éditeur complet (thème + toolbar + contenu) dans `host`.
@@ -27,6 +51,9 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
     toolbar: toolbarConfig = 'standard',
     theme = 'light',
     variableSuggestion = true,
+    linkBubble = true,
+    imageBubble = true,
+    slashMenu = true,
     ...editorOptions
   } = options;
 
@@ -66,6 +93,22 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
   const suggestion = hasVariables && variableSuggestion ? createVariableSuggestion(editor) : null;
   if (variableDialog)
     subscriptions.push(editor.on('readOnlyChange', () => variableDialog.update()));
+  // Bulles contextuelles (lien, image) et menu `/` : chacune s'abonne elle-même aux
+  // événements de l'éditeur et se retire avec l'instance. Le menu `/` ouvre les dialogues
+  // image et lien de la toolbar quand elle existe.
+  const bubbles = [
+    ...(linkBubble && editor.commands.has('link.set') ? [createLinkBubble(editor)] : []),
+    ...(imageBubble && editor.commands.has('image.setAttributes')
+      ? [createImageBubble(editor)]
+      : []),
+  ];
+  const mountedToolbar = toolbar;
+  const slash = slashMenu
+    ? createSlashMenu(
+        editor,
+        mountedToolbar ? { openWidget: (widget) => openToolbarWidget(mountedToolbar, widget) } : {},
+      )
+    : null;
 
   let destroyed = false;
 
@@ -87,6 +130,8 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
       releaseSourceView(sourceView);
       for (const unsubscribe of subscriptions) unsubscribe();
       subscriptions.length = 0;
+      slash?.destroy();
+      for (const bubble of bubbles) bubble.destroy();
       suggestion?.destroy();
       variableDialog?.destroy();
       tableMenu?.destroy();

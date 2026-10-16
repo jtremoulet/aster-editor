@@ -1,10 +1,12 @@
 import type { AsterEditor } from '@aster-editor/core';
 import { createColorPicker } from '../components/color-picker';
 import { createFontFamilyMenu, createFontSizeMenu } from '../components/font-menu';
+import { createFormatPainterButton } from '../components/format-painter-button';
 import { createFullscreenButton } from '../components/fullscreen';
 import { createHeadingMenu } from '../components/heading-menu';
 import { createImageDialog } from '../components/image-dialog';
 import { createLinkDialog } from '../components/link-dialog';
+import { createOutlinePanel } from '../components/outline-panel';
 import { createPrintButton } from '../components/print';
 import { createSearchPanel } from '../components/search-panel';
 import { createSourceButton } from '../components/source-view';
@@ -41,6 +43,13 @@ export const WIDGETS: Readonly<Record<string, WidgetDefinition>> = {
   fontSize: { factory: createFontSizeMenu, requires: ['fontSize'] },
   search: { factory: createSearchPanel, requires: ['search.open'] },
   variable: { factory: createVariableMenu, requires: ['variable.insert'] },
+  // Sommaire (titres) et reproduction de mise en forme (commandes `formatPainter.*`,
+  // hors contrat figé comme `search.*`).
+  outline: { factory: createOutlinePanel, requires: ['heading'] },
+  formatPainter: {
+    factory: (editor) => createFormatPainterButton(editor),
+    requires: ['formatPainter.copy'],
+  },
   // Vue source, plein écran, caractères spéciaux et impression ne dépendent d'aucune
   // commande du core.
   source: { factory: createSourceButton, requires: [] },

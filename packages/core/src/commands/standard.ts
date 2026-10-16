@@ -2,6 +2,7 @@ import type { AsterCommand, UploadHandler } from '../api';
 import type { ResolvedLinkPolicy } from '../extensions/link-safety';
 import { ALIGNMENT_COMMANDS } from './alignment';
 import { BLOCK_COMMANDS } from './blocks';
+import { FORMAT_PAINTER_COMMANDS } from './format-painter';
 import { HISTORY_COMMANDS } from './history';
 import { createImageCommands } from './images';
 import { createLinkCommands } from './links';
@@ -37,5 +38,6 @@ export function createStandardCommands(context: StandardCommandsContext): AsterC
     ...VARIABLE_COMMANDS,
     ...HISTORY_COMMANDS,
     ...SEARCH_COMMANDS,
+    ...FORMAT_PAINTER_COMMANDS,
   ];
 }

@@ -171,6 +171,21 @@ const ICONS: Readonly<Record<string, string>> = {
   variable: stroke(BRACES),
   'variable-insert': stroke(BRACES + '<path d="M10 7.5v5M7.5 10h5"/>'),
   'variable-remove': stroke(BRACES + '<path d="M8 8l4 4M12 8l-4 4"/>'),
+  // Bulles contextuelles, menu `/`, sommaire et reproduction de mise en forme.
+  edit: stroke(
+    '<path d="M4 16h3l8.5-8.5a1.5 1.5 0 0 0 0-2.1l-.9-.9a1.5 1.5 0 0 0-2.1 0L4 13v3zM11 6l3 3"/>',
+  ),
+  trash: stroke('<path d="M4 6h12M8 6V4h4v2M6 6l.8 10h6.4L14 6M8.5 9v4.5M11.5 9v4.5"/>'),
+  slash: stroke('<path d="M13 3L7 17"/>'),
+  outline: stroke(
+    '<path d="M4 5h3M9 5h7M6 10h3M11 10h5M4 15h3M9 15h7"/><circle cx="4.5" cy="10" r="0.6" fill="currentColor"/>',
+  ),
+  'format-painter': stroke(
+    '<path d="M4 4h10v3H4zM14 5.5h2.5v4.5H10v2"/><rect x="8" y="11.5" width="4" height="5.5" rx="1"/>',
+  ),
+  'page-break': stroke(
+    '<path d="M4 3h12v4H4zM4 13h12v4H4z"/><path d="M3 10h2M7 10h2M11 10h2M15 10h2" stroke-dasharray="2 2"/>',
+  ),
 };
 
 /** Icône de repli visible (point d'interrogation) pour un nom inconnu. */
