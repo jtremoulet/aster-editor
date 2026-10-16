@@ -61,6 +61,11 @@ export interface ExportContext {
    * (`1` pour `data-footnote="footnote-1"` ou `<sup data-footnote-ref="1">`).
    */
   readonly footnotes: Map<string, FootnoteDefinition>;
+  /**
+   * Clés des notes déjà appelées : Word n'accepte qu'un `w:footnoteReference` par note,
+   * un second appel est dégradé en exposant `[n]`.
+   */
+  readonly footnoteCalls: Set<string>;
 }
 
 /** Ajoute un avertissement typé au contexte. */

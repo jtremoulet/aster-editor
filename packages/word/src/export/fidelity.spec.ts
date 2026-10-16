@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { exportDocx } from './export-docx';
 import { jsonToHtml } from './json-to-html';
-import { toDocumentXml, toZipEntries } from './testing/sample';
+import { RED_PNG_DATA_URL, toDocumentXml, toZipEntries } from './testing/sample';
 import type { DocxExportOptions } from './types';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
@@ -77,6 +77,16 @@ describe('fidélité Word — en-têtes et pieds de page', () => {
     expect(footer).toContain('>ligne 2</w:t>');
   });
 
+  it('M-3 : footer.align "left" aligne aussi le paragraphe PAGE à gauche', async () => {
+    const entry = await entriesOf('<p>corps</p>', {
+      footer: { text: 'Aster', align: 'left', pageNumbers: true },
+    });
+    const footer = entry('word/footer1.xml');
+    expect(footer).toContain('PAGE</w:instrText>');
+    expect(footer).not.toContain('<w:jc w:val="center"/>');
+    expect(count(footer, '<w:jc w:val="left"/>')).toBe(1);
+  });
+
   it('n’émet ni en-tête ni pied pour une option vide', async () => {
     const entries = await toZipEntries(
       await exportDocx('<p>a</p>', { header: '   ', footer: { html: '' } }),
@@ -129,6 +139,16 @@ describe('fidélité Word — table des matières', () => {
     const document = entry('word/document.xml');
     expect(document).toContain('TOC \\h \\o &quot;1-3&quot;</w:instrText>');
     expect(document).not.toContain('TOCHeading');
+  });
+
+  it('toc sans aucun titre : champ TOC vide mais présent, fichier valide', async () => {
+    const entry = await entriesOf('<p>sans titre</p>', { toc: { title: 'Sommaire' } });
+    const document = entry('word/document.xml');
+    expect(document).toContain('TOC \\h \\o &quot;1-3&quot;</w:instrText>');
+    expect(document).toContain('<w:pStyle w:val="TOCHeading"/>');
+    expect(document).not.toContain('<w:pStyle w:val="TOC1"/>');
+    expect(document).toContain('>sans titre</w:t>');
+    expect(entry('word/settings.xml')).toContain('<w:updateFields/>');
   });
 
   it('toc: false ne change rien', async () => {
@@ -218,12 +238,43 @@ describe('fidélité Word — mise en page, langue et police', () => {
   });
 
   it('plafonne les images à la largeur utile en paysage', async () => {
-    const { xml } = await toDocumentXml('<p>a</p>', {
+    const { xml, warnings } = await toDocumentXml('<p>a</p>', {
       page: { orientation: 'landscape', margins: { top: -1 } },
     });
-    // Une marge négative garde le défaut.
+    // Une marge négative garde le défaut, et le signale (M-7).
     expect(xml).toContain('w:top="1440"');
     expect(xml).toContain('w:orient="landscape"');
+    expect(warnings).toEqual([
+      { code: 'page-margins-clamped', message: expect.stringContaining('top') },
+    ]);
+  });
+
+  it('M-7 : réduit des marges qui ne laissent pas 1 cm utile, avec avertissement', async () => {
+    const { xml, warnings } = await toDocumentXml('<p>a</p>', {
+      page: { margins: { left: 150, right: 150, top: 10, bottom: 10 } },
+    });
+    // A4 : 11906 twips de large, 567 réservés : 11339 partagés à parts égales (5669 chacun).
+    expect(xml).toContain('<w:pgMar w:top="567" w:right="5669" w:bottom="567" w:left="5669"');
+    expect(warnings).toEqual([
+      { code: 'page-margins-clamped', message: expect.stringContaining('gauche + droite') },
+    ]);
+    // Les images sont plafonnées à la largeur utile restante (1 cm ≈ 37 px).
+    const { xml: image } = await toDocumentXml(
+      `<p><img src="${RED_PNG_DATA_URL}" width="400" height="400"></p>`,
+      { page: { margins: { left: 150, right: 150 } } },
+    );
+    expect(image).toContain('<wp:extent cx="352425" cy="352425"/>');
+  });
+
+  it('M-7 : borne aussi haut + bas et accepte des marges nulles', async () => {
+    const { xml, warnings } = await toDocumentXml('<p>a</p>', {
+      page: { orientation: 'landscape', margins: { top: 200, bottom: 100, left: 0, right: 0 } },
+    });
+    // Paysage A4 : 11906 twips de haut, 567 réservés, 11339 répartis 2/3 - 1/3.
+    expect(xml).toContain('<w:pgMar w:top="7559" w:right="0" w:bottom="3779" w:left="0"');
+    expect(warnings).toEqual([
+      { code: 'page-margins-clamped', message: expect.stringContaining('haut + bas') },
+    ]);
   });
 
   it('écrit la langue, la police et la taille par défaut dans docDefaults', async () => {

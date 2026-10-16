@@ -31,6 +31,11 @@ export interface BlockScope {
   readonly alignment?: ParagraphAlignment;
   /** Style de paragraphe par défaut hors citation (`FootnoteText` dans une note). */
   readonly paragraphStyle?: string;
+  /**
+   * Faux dans un en-tête, un pied de page ou une note : Word y refuse les appels de
+   * note, qui sont alors dégradés en exposant `[n]`. Vrai (corps) par défaut.
+   */
+  readonly notesAllowed?: boolean;
 }
 
 /** Scope racine : ni citation, ni liste, aucune marque. */
@@ -108,7 +113,7 @@ async function inlineParagraph(
   numbered: boolean,
 ): Promise<Paragraph> {
   const options = paragraphOptions(element, scope, ctx, numbered);
-  options.children = await inlineChildren(nodes, ctx, scope.inline);
+  options.children = await inlineChildren(nodes, ctx, scope.inline, scope.notesAllowed ?? true);
   return new ctx.docx.Paragraph(options);
 }
 
@@ -121,7 +126,12 @@ async function heading(
 ): Promise<Paragraph> {
   const options = paragraphOptions(element, scope, ctx, numbered);
   options.heading = headingLevel(tagOf(element), ctx);
-  options.children = await inlineChildren(Array.from(element.childNodes), ctx, scope.inline);
+  options.children = await inlineChildren(
+    Array.from(element.childNodes),
+    ctx,
+    scope.inline,
+    scope.notesAllowed ?? true,
+  );
   return new ctx.docx.Paragraph(options);
 }
 

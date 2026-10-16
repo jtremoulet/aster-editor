@@ -5,7 +5,7 @@ import { BLOCK_TAGS, DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from 
 import { imageRun } from './images';
 import { sanitizeXmlText } from './sanitize';
 import { CODE_FONT, STYLE_IDS } from './styles';
-import { mergeField, resolvedText, splitVariables, variableNameOf } from './variables';
+import { mergeField, resolvedValue, splitVariables, variableNameOf } from './variables';
 
 /** Marques héritées le long de la descente dans les éléments inline. */
 export interface InlineState {
@@ -25,8 +25,18 @@ export interface InlineState {
 }
 
 type Piece =
-  | { readonly kind: 'text'; readonly text: string; readonly state: InlineState }
-  | { readonly kind: 'break'; readonly state: InlineState }
+  /**
+   * Texte ; `preserved` pour une valeur de variable résolue, dont les blancs ne suivent
+   * pas les règles du HTML : ils sont écrits tels quels.
+   */
+  | {
+      readonly kind: 'text';
+      readonly text: string;
+      readonly state: InlineState;
+      readonly preserved?: boolean;
+    }
+  /** Saut de ligne ; `preserved` quand il vient d'un `\n` d'une valeur de variable. */
+  | { readonly kind: 'break'; readonly state: InlineState; readonly preserved?: boolean }
   | { readonly kind: 'image'; readonly run: ImageRun; readonly state: InlineState }
   /** Champ de fusion Word (mode `fields`). */
   | { readonly kind: 'field'; readonly name: string; readonly state: InlineState }
@@ -155,6 +165,18 @@ function pushBreak(pieces: Piece[], state: InlineState): void {
 }
 
 /**
+ * Valeur résolue d'une variable : une ligne par morceau texte, séparées par des sauts
+ * de ligne, tous `preserved` pour que `collapseWhitespace` n'y touche pas. Une valeur
+ * est de la donnée, pas du HTML : `"a\nb"` donne deux lignes, `"a  b"` garde ses deux espaces.
+ */
+function pushResolvedValue(value: string, state: InlineState, pieces: Piece[]): void {
+  value.split(/\r?\n/).forEach((line, index) => {
+    if (index > 0) pieces.push({ kind: 'break', state, preserved: true });
+    if (line !== '') pieces.push({ kind: 'text', text: line, state, preserved: true });
+  });
+}
+
+/**
  * Morceaux d'une variable selon le mode : en `fields` un champ de fusion, en `resolve`
  * sa valeur (ou `{{nom}}`), en `placeholders` le texte d'origine.
  */
@@ -169,9 +191,12 @@ function pushVariable(
     case 'fields':
       pieces.push({ kind: 'field', name, state });
       return;
-    case 'resolve':
-      pieces.push({ kind: 'text', text: resolvedText(name, raw, ctx), state });
+    case 'resolve': {
+      const value = resolvedValue(name, ctx);
+      if (value === undefined) pieces.push({ kind: 'text', text: raw, state });
+      else pushResolvedValue(value, state, pieces);
       return;
+    }
     default:
       pieces.push({ kind: 'text', text: raw, state });
   }
@@ -204,11 +229,69 @@ function footnoteKey(element: Element): { key: string; explicit: boolean } | nul
   return call?.[1] ? { key: call[1], explicit: false } : null;
 }
 
+/** Options de descente : où l'on est, pour ce que Word y accepte. */
+interface CollectOptions {
+  /** Faux dans un en-tête, un pied ou une note : Word y refuse les appels de note. */
+  readonly notesAllowed: boolean;
+}
+
+/**
+ * Appel de note d'un `<sup>` : `true` si un morceau a été émis. Une vraie référence
+ * quand la note existe, que l'endroit l'autorise et qu'elle n'a pas déjà été appelée ;
+ * sinon un exposant `[n]` avec l'avertissement qui explique le repli. Un `<sup>` qui
+ * n'est pas un appel (ou un appel implicite `[n]` sans note) rend `false` : son
+ * contenu est converti comme tout exposant.
+ */
+function pushFootnoteCall(
+  element: Element,
+  state: InlineState,
+  ctx: ExportContext,
+  options: CollectOptions,
+  pieces: Piece[],
+): boolean {
+  const call = footnoteKey(element);
+  if (!call) return false;
+  const note = ctx.footnotes.get(call.key);
+  if (!note) {
+    if (call.explicit) {
+      warn(ctx, 'footnote-missing', `Appel de note ${call.key} sans note, laissé en exposant`);
+    }
+    return false;
+  }
+  const fallback: Piece = {
+    kind: 'text',
+    text: `[${call.key}]`,
+    state: { ...state, superScript: true, subScript: false },
+  };
+  if (!options.notesAllowed) {
+    warn(
+      ctx,
+      'footnote-not-allowed',
+      `Appel de note ${call.key} dans un en-tête, un pied ou une note : Word l'y refuse, laissé en exposant`,
+    );
+    pieces.push(fallback);
+    return true;
+  }
+  if (ctx.footnoteCalls.has(call.key)) {
+    warn(
+      ctx,
+      'footnote-duplicate',
+      `Second appel de la note ${call.key} : Word n'en accepte qu'un, laissé en exposant`,
+    );
+    pieces.push(fallback);
+    return true;
+  }
+  ctx.footnoteCalls.add(call.key);
+  pieces.push({ kind: 'footnote', id: note.id, state });
+  return true;
+}
+
 /** Descente récursive : accumule les morceaux inline avec leur state. */
 async function collectPieces(
   node: Node,
   state: InlineState,
   ctx: ExportContext,
+  options: CollectOptions,
   pieces: Piece[],
 ): Promise<void> {
   if (isText(node)) {
@@ -239,24 +322,14 @@ async function collectPieces(
     pushVariable(variable, raw, next, ctx, pieces);
     return;
   }
-  if (tag === 'sup') {
-    const call = footnoteKey(node);
-    if (call) {
-      const note = ctx.footnotes.get(call.key);
-      if (note) {
-        pieces.push({ kind: 'footnote', id: note.id, state });
-        return;
-      }
-      if (call.explicit) {
-        warn(ctx, 'footnote-missing', `Appel de note ${call.key} sans note, laissé en exposant`);
-      }
-    }
-  }
+  if (tag === 'sup' && pushFootnoteCall(node, state, ctx, options, pieces)) return;
   // Un bloc égaré en contexte inline (`<span><p>…</p></span>`) ne peut plus devenir un
   // paragraphe : on isole son texte par des sauts de ligne pour ne pas le coller au reste.
   const block = BLOCK_TAGS.includes(tag);
   if (block) pushBreak(pieces, state);
-  for (const child of Array.from(node.childNodes)) await collectPieces(child, next, ctx, pieces);
+  for (const child of Array.from(node.childNodes)) {
+    await collectPieces(child, next, ctx, options, pieces);
+  }
   if (block) pushBreak(pieces, state);
 }
 
@@ -265,15 +338,16 @@ async function collectPieces(
  * début et de fin de bloc supprimés, espace doublé à la frontière de deux morceaux
  * supprimé. Seuls les blancs HTML (espace, tabulation, LF, CR, FF) sont concernés :
  * NBSP et espaces Unicode sont du contenu. Les morceaux devenus vides disparaissent,
- * ainsi que les sauts de ligne terminaux d'un paragraphe qui contient autre chose.
+ * ainsi que les sauts de ligne terminaux d'un paragraphe qui contient autre chose. Les
+ * morceaux `preserved` (valeurs de variables) sont écrits tels quels.
  */
 function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
   const result: Piece[] = [];
   let atBoundary = true;
   for (const piece of pieces) {
-    if (piece.kind !== 'text') {
+    if (piece.kind !== 'text' || piece.preserved) {
       result.push(piece);
-      atBoundary = piece.kind === 'break';
+      atBoundary = piece.kind === 'break' || (piece.kind === 'text' && piece.text.endsWith(' '));
       continue;
     }
     let text = piece.text.replace(/[ \t\n\r\f]+/g, ' ');
@@ -285,7 +359,7 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
   // Blanc de fin de bloc : on le retire du dernier morceau texte, qui peut alors disparaître.
   for (let i = result.length - 1; i >= 0; i -= 1) {
     const last = result[i];
-    if (!last || last.kind !== 'text') break;
+    if (!last || last.kind !== 'text' || last.preserved) break;
     const trimmed = last.text.replace(/ $/, '');
     if (trimmed === '') {
       result.splice(i, 1);
@@ -297,7 +371,10 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
   // `<br>` terminal : invisible en HTML quand le bloc a d'autre contenu, il ajouterait une
   // ligne vide dans Word. `<p><br></p>` garde le sien : c'est tout ce qui donne corps au paragraphe.
   if (result.some((piece) => piece.kind !== 'break')) {
-    while (result[result.length - 1]?.kind === 'break') result.pop();
+    for (let last = result[result.length - 1]; last?.kind === 'break' && !last.preserved;) {
+      result.pop();
+      last = result[result.length - 1];
+    }
   }
   return result;
 }
@@ -323,15 +400,18 @@ function pieceToRun(piece: Piece, ctx: ExportContext): ParagraphChild {
  * Convertit une suite de nœuds inline en enfants de `Paragraph`. Les morceaux
  * consécutifs d'un même lien sont regroupés dans un `ExternalHyperlink`. Prend une
  * liste de nœuds plutôt qu'un conteneur pour que le regroupement des inline nus d'un
- * bloc n'ait pas à déplacer de nœuds dans le DOM d'entrée.
+ * bloc n'ait pas à déplacer de nœuds dans le DOM d'entrée. `notesAllowed` à `false`
+ * (en-têtes, pieds, notes) dégrade les appels de note en exposant `[n]`.
  */
 export async function inlineChildren(
   nodes: readonly Node[],
   ctx: ExportContext,
   initial: InlineState = {},
+  notesAllowed = true,
 ): Promise<ParagraphChild[]> {
   const pieces: Piece[] = [];
-  for (const node of nodes) await collectPieces(node, initial, ctx, pieces);
+  const options: CollectOptions = { notesAllowed };
+  for (const node of nodes) await collectPieces(node, initial, ctx, options, pieces);
   const children: ParagraphChild[] = [];
   let linkRuns: ParagraphChild[] = [];
   let linkHref: string | undefined;

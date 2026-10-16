@@ -35,15 +35,17 @@ export async function buildDocx(
   docx: DocxModule,
   options: DocxExportOptions,
 ): Promise<BuiltDocx> {
-  const layout = resolvePageLayout(options);
+  const warnings: DocxExportWarning[] = [];
+  const layout = resolvePageLayout(options, warnings);
   const ctx: ExportContext = {
     docx,
     fetchImage: options.fetchImage,
     maxImageWidth: layout.contentWidthPx,
-    warnings: [],
+    warnings,
     lists: [],
     variables: resolveVariableSettings(options.variables),
     footnotes: new Map(),
+    footnoteCalls: new Set(),
   };
   await collectFootnotes(dom.body, ctx);
   let children = await convertChildren(dom.body, ROOT_SCOPE, ctx);

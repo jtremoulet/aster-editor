@@ -11,9 +11,24 @@ import type { HtmlParser } from '../docx/types';
  *   en `{{nom}}`.
  * - `footnote-missing` : appel de note sans note correspondante dans `data-footnotes`,
  *   laissé en exposant.
+ * - `footnote-not-allowed` : appel de note dans un en-tête, un pied de page ou une autre
+ *   note, où Word n'en accepte pas ; laissé en exposant `[n]`.
+ * - `footnote-duplicate` : seconde note déclarée sous une clé déjà prise (ignorée), ou
+ *   second appel vers une note déjà référencée (laissé en exposant `[n]`).
+ * - `table-span-clamped` : `colspan`/`span` borné à 63 colonnes ou `rowspan` à 65 534
+ *   lignes, plafonds de Word.
+ * - `page-margins-clamped` : marge de page négative (défaut appliqué) ou somme des marges
+ *   qui ne laisse pas 1 cm utile (marges réduites).
  */
 export type DocxExportWarningCode =
-  'image-skipped' | 'unsupported-element' | 'variable-unresolved' | 'footnote-missing';
+  | 'image-skipped'
+  | 'unsupported-element'
+  | 'variable-unresolved'
+  | 'footnote-missing'
+  | 'footnote-not-allowed'
+  | 'footnote-duplicate'
+  | 'table-span-clamped'
+  | 'page-margins-clamped';
 
 /**
  * Avertissement générique de la passerelle .docx, paramétré par le code. Les
@@ -87,6 +102,8 @@ export interface DocxExportVariableOptions {
    * Motif des variables en texte brut, en modes `fields` et `resolve`. Le premier groupe
    * de capture est le nom. Par défaut `{{nom}}` (lettres, chiffres, `_`, `.`, `-`, blancs
    * tolérés autour du nom). Les blocs `<pre>` et marques `<code>` ne sont jamais analysés.
+   * Le motif est appliqué tel quel à tout le texte du document : sa complexité (risque
+   * ReDoS) relève de l'intégrateur, l'export ne la borne pas.
    */
   readonly pattern?: RegExp;
 }
@@ -184,7 +201,8 @@ export interface DocxExportOptions {
   /**
    * Reçoit chaque avertissement au fil de la conversion. `exportDocx` rend un `Blob`
    * nu pour rester simple à brancher sur un bouton : c'est ici que remontent les
-   * images ignorées et les éléments non supportés.
+   * images ignorées et les éléments non supportés. Une exception levée par ce hook
+   * n'est pas rattrapée : elle fait rejeter la promesse d'`exportDocx`.
    */
   onWarning?: (warning: DocxExportWarning) => void;
 }

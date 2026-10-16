@@ -25,7 +25,8 @@ function normalize(option: string | DocxHeaderOptions): DocxHeaderOptions {
  * Paragraphes d'un en-tête ou d'un pied : le fragment `html`, ou le `text` brut
  * (échappé, sauts de ligne → `<br>`), passés au convertisseur du corps. Les paragraphes
  * sans alignement propre prennent celui de l'option. Variables, marques et liens y
- * sont traités comme dans le corps.
+ * sont traités comme dans le corps ; les appels de note non (`notesAllowed: false`) :
+ * Word refuse un `w:footnoteReference` hors du corps et répare le fichier.
  */
 async function blocksOf(
   options: DocxHeaderOptions,
@@ -36,7 +37,7 @@ async function blocksOf(
     options.html ??
     (options.text === undefined ? '' : escapeHtml(options.text).replace(/\r?\n/g, '<br>'));
   if (html.trim() === '') return [];
-  const scope: BlockScope = { quote: false, list: null, inline: {} };
+  const scope: BlockScope = { quote: false, list: null, inline: {}, notesAllowed: false };
   const alignment = alignmentOf(options.align);
   const body = parseFragment(html, resolveParser(parse));
   const children = await convertChildren(body, alignment ? { ...scope, alignment } : scope, ctx);
@@ -46,7 +47,10 @@ async function blocksOf(
   );
 }
 
-/** Paragraphe de numérotation : champ `PAGE`, suivi de ` / NUMPAGES` en `x-of-y`. */
+/**
+ * Paragraphe de numérotation : champ `PAGE`, suivi de ` / NUMPAGES` en `x-of-y`. Centré
+ * sans `align` ; `align: 'left'` est honoré, pas confondu avec l'absence d'option.
+ */
 function pageNumberParagraph(
   mode: true | 'x-of-y',
   align: DocxHeaderAlign | undefined,
@@ -60,7 +64,9 @@ function pageNumberParagraph(
       new TextRun({ children: [PageNumber.TOTAL_PAGES] }),
     );
   }
-  return new Paragraph({ alignment: alignmentOf(align) ?? AlignmentType.CENTER, children });
+  const alignment =
+    align === undefined ? AlignmentType.CENTER : (alignmentOf(align) ?? AlignmentType.LEFT);
+  return new Paragraph({ alignment, children });
 }
 
 /** `options.header` → `Header`, `undefined` si rien à afficher. */

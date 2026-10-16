@@ -93,12 +93,20 @@ export function hasBlockChild(element: Element): boolean {
   return childElements(element).some((child) => BLOCK_TAGS.includes(tagOf(child)));
 }
 
-/** Attribut entier strictement positif (`colspan`, `rowspan`), `null` sinon. */
-export function positiveIntAttribute(element: Element, name: string): number | null {
+/**
+ * Attribut entier strictement positif (`colspan`, `rowspan`, `start`), `null` sinon.
+ * Borné à `max` quand il est donné : un `colspan="1000000"` ferait allouer autant de
+ * colonnes (export interminable), et Word n'en accepte de toute façon que 63.
+ */
+export function positiveIntAttribute(
+  element: Element,
+  name: string,
+  max = Number.MAX_SAFE_INTEGER,
+): number | null {
   const raw = element.getAttribute(name);
   if (raw === null) return null;
   const value = Number.parseInt(raw, 10);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return Number.isFinite(value) && value > 0 ? Math.min(value, max) : null;
 }
 
 /** `DOMParser` injecté ou global : jamais `document`, pour rester compatible SSR et tests. */

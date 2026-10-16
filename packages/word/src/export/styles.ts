@@ -11,6 +11,7 @@ import type { DocxModule } from './docx-module';
 import { sanitizeXmlText } from './sanitize';
 import type {
   DocxExportOptions,
+  DocxExportWarning,
   DocxHeadingStyle,
   DocxNumberedHeadingsOptions,
   DocxPageOrientation,
@@ -325,28 +326,85 @@ export interface PageLayout extends PageDimensions {
   readonly contentWidthPx: number;
 }
 
-/** Marge en twips depuis une valeur en mm, défaut si absente ou invalide. */
-function marginTwips(mm: number | undefined): number {
-  if (mm === undefined || !Number.isFinite(mm) || mm < 0) return PAGE_MARGIN;
+/** Zone utile minimale laissée par les marges, en twips (1 cm), dans chaque sens. */
+export const MIN_CONTENT_EXTENT = mmToTwips(10);
+
+/**
+ * Marge en twips depuis une valeur en mm, défaut si absente. Une valeur négative ou
+ * non finie prend aussi le défaut, avec avertissement `page-margins-clamped` : Word
+ * refuse un `w:pgMar` négatif.
+ */
+function marginTwips(
+  name: keyof PageMargins,
+  mm: number | undefined,
+  warnings: DocxExportWarning[],
+): number {
+  if (mm === undefined) return PAGE_MARGIN;
+  if (!Number.isFinite(mm) || mm < 0) {
+    warnings.push({
+      code: 'page-margins-clamped',
+      message: `Marge ${name} invalide (${String(mm)} mm), défaut de 25,4 mm appliqué`,
+    });
+    return PAGE_MARGIN;
+  }
   return mmToTwips(mm);
+}
+
+/**
+ * Réduit deux marges opposées, à proportion, pour laisser au moins `MIN_CONTENT_EXTENT`
+ * sur `extent` (largeur ou hauteur de page), avec avertissement : des marges qui se
+ * recouvrent donnent une zone de texte négative que Word refuse d'afficher.
+ */
+function clampMargins(
+  first: number,
+  second: number,
+  extent: number,
+  axis: string,
+  warnings: DocxExportWarning[],
+): [number, number] {
+  const available = extent - MIN_CONTENT_EXTENT;
+  const total = first + second;
+  if (total <= available) return [first, second];
+  const scale = available / total;
+  warnings.push({
+    code: 'page-margins-clamped',
+    message: `Marges ${axis} (${String(total)} twips) plus grandes que la page : réduites pour laisser 1 cm utile`,
+  });
+  return [Math.floor(first * scale), Math.floor(second * scale)];
 }
 
 /**
  * `options.page` (et `pageSize` en repli) → mise en page. En paysage, la largeur utile
  * est celle du grand côté : `docx` inverse `w:w`/`w:h` quand `w:orient="landscape"`,
- * on lui donne donc toujours les dimensions portrait.
+ * on lui donne donc toujours les dimensions portrait. Les marges invalides ou qui ne
+ * laissent pas 1 cm utile sont corrigées et signalées dans `warnings`.
  */
-export function resolvePageLayout(options: DocxExportOptions): PageLayout {
+export function resolvePageLayout(
+  options: DocxExportOptions,
+  warnings: DocxExportWarning[] = [],
+): PageLayout {
   const size = options.page?.size ?? options.pageSize ?? 'A4';
   const orientation = options.page?.orientation ?? 'portrait';
   const { width, height } = pageDimensions(size);
-  const margins: PageMargins = {
-    top: marginTwips(options.page?.margins?.top),
-    right: marginTwips(options.page?.margins?.right),
-    bottom: marginTwips(options.page?.margins?.bottom),
-    left: marginTwips(options.page?.margins?.left),
-  };
-  const usable = (orientation === 'landscape' ? height : width) - margins.left - margins.right;
+  const horizontal = orientation === 'landscape' ? height : width;
+  const vertical = orientation === 'landscape' ? width : height;
+  const requested = options.page?.margins;
+  const [left, right] = clampMargins(
+    marginTwips('left', requested?.left, warnings),
+    marginTwips('right', requested?.right, warnings),
+    horizontal,
+    'gauche + droite',
+    warnings,
+  );
+  const [top, bottom] = clampMargins(
+    marginTwips('top', requested?.top, warnings),
+    marginTwips('bottom', requested?.bottom, warnings),
+    vertical,
+    'haut + bas',
+    warnings,
+  );
+  const margins: PageMargins = { top, right, bottom, left };
+  const usable = horizontal - margins.left - margins.right;
   return {
     size,
     orientation,

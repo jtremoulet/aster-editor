@@ -7,9 +7,32 @@ import type {
   TableCell,
 } from 'docx';
 import type { BlockScope } from './blocks';
-import type { ExportContext } from './context';
+import { warn, type ExportContext } from './context';
 import { parsePixels, parseStyle } from './css';
 import { childElements, positiveIntAttribute, tagOf } from './dom';
+
+/** Nombre maximal de colonnes d'une table Word : plafond de `colspan` et de `<col span>`. */
+export const MAX_TABLE_COLUMNS = 63;
+
+/** Nombre maximal de lignes qu'une fusion verticale peut couvrir (`rowspan`). */
+export const MAX_ROW_SPAN = 65_534;
+
+/**
+ * Fusion lue sur `colspan`, `rowspan` ou `span`, 1 par défaut, bornée au plafond de
+ * Word avec avertissement `table-span-clamped` : un `colspan="1000000"` ne doit ni
+ * produire un fichier que Word refuse, ni faire allouer un million de colonnes.
+ */
+function spanAttribute(element: Element, name: string, max: number, ctx: ExportContext): number {
+  const value = positiveIntAttribute(element, name);
+  if (value === null) return 1;
+  if (value <= max) return value;
+  warn(
+    ctx,
+    'table-span-clamped',
+    `${name}="${String(value)}" borné à ${String(max)}, plafond de Word`,
+  );
+  return max;
+}
 
 /** Convertisseur de blocs injecté pour casser le cycle `blocks` ↔ `tables`. */
 export type ChildrenConverter = (
@@ -58,25 +81,23 @@ function isAllHeaderCells(cells: readonly Element[]): boolean {
  * `width` pour une cellule simple. `null` pour une colonne inconnue.
  */
 function cellColumnWidths(cell: Element, span: number): Array<number | null> {
-  const unknown = Array.from({ length: span }, (): number | null => null);
   const colwidth = cell.getAttribute('colwidth');
   if (colwidth !== null) {
     const parts = colwidth.split(',').map((part) => parsePixels(part.trim()));
-    if (parts.length === span) return parts;
-    return unknown;
+    return parts.length === span ? parts : [];
   }
-  if (span !== 1) return unknown;
+  if (span !== 1) return [];
   const style = parseStyle(cell.getAttribute('style'));
   return [parsePixels(style.get('width') ?? cell.getAttribute('width'))];
 }
 
 /** Largeurs déclarées par `<colgroup><col style="width">` (ou `width`), par colonne. */
-function colgroupWidths(table: Element): Array<number | null> {
+function colgroupWidths(table: Element, ctx: ExportContext): Array<number | null> {
   const widths: Array<number | null> = [];
   const pushCol = (col: Element): void => {
     const style = parseStyle(col.getAttribute('style'));
     const width = parsePixels(style.get('width') ?? col.getAttribute('width'));
-    const span = positiveIntAttribute(col, 'span') ?? 1;
+    const span = spanAttribute(col, 'span', MAX_TABLE_COLUMNS, ctx);
     for (let i = 0; i < span; i += 1) widths.push(width);
   };
   for (const child of childElements(table)) {
@@ -103,9 +124,10 @@ interface TableGrid {
 /**
  * Place chaque cellule dans la grille en tenant compte des fusions (`colspan`, `rowspan`)
  * et relève la largeur de chaque colonne : première valeur rencontrée dans les cellules,
- * puis `<colgroup>` en repli.
+ * puis `<colgroup>` en repli. Les fusions sont bornées ici (avec avertissement) et la
+ * grille ne marque que les lignes qui existent : un `rowspan` démesuré ne coûte rien.
  */
-function analyzeGrid(table: Element, rows: readonly TableRowInfo[]): TableGrid {
+function analyzeGrid(table: Element, rows: readonly TableRowInfo[], ctx: ExportContext): TableGrid {
   const columns: Array<number | null> = [];
   const positions = new Map<Element, CellPosition>();
   const occupied = new Map<number, Set<number>>();
@@ -114,22 +136,26 @@ function analyzeGrid(table: Element, rows: readonly TableRowInfo[]): TableGrid {
     let column = 0;
     for (const cell of cells) {
       while (taken.has(column)) column += 1;
-      const span = positiveIntAttribute(cell, 'colspan') ?? 1;
-      const rowSpan = positiveIntAttribute(cell, 'rowspan') ?? 1;
+      const span = spanAttribute(cell, 'colspan', MAX_TABLE_COLUMNS, ctx);
+      const rowSpan = spanAttribute(cell, 'rowspan', MAX_ROW_SPAN, ctx);
       cellColumnWidths(cell, span).forEach((width, offset) => {
         const index = column + offset;
         if (columns[index] === undefined || columns[index] === null) columns[index] = width;
       });
-      for (let below = 1; below < rowSpan; below += 1) {
-        const set = occupied.get(rowIndex + below) ?? new Set<number>();
+      for (let offset = 0; offset < span; offset += 1) {
+        if (columns[column + offset] === undefined) columns[column + offset] = null;
+      }
+      const lastRow = Math.min(rowIndex + rowSpan, rows.length);
+      for (let below = rowIndex + 1; below < lastRow; below += 1) {
+        const set = occupied.get(below) ?? new Set<number>();
         for (let offset = 0; offset < span; offset += 1) set.add(column + offset);
-        occupied.set(rowIndex + below, set);
+        occupied.set(below, set);
       }
       positions.set(cell, { column, span });
       column += span;
     }
   });
-  colgroupWidths(table).forEach((width, index) => {
+  colgroupWidths(table, ctx).forEach((width, index) => {
     if (index < columns.length && columns[index] === null) columns[index] = width;
   });
   return { columns, positions };
@@ -159,6 +185,7 @@ function columnWidthsTwips(
  */
 async function convertCell(
   cell: Element,
+  position: CellPosition | undefined,
   width: number | null,
   scope: BlockScope,
   ctx: ExportContext,
@@ -176,12 +203,13 @@ async function convertCell(
       child instanceof ctx.docx.Paragraph || child instanceof ctx.docx.Table,
   );
   if (blocks.length === 0) blocks.push(new ctx.docx.Paragraph({ children: [] }));
-  const columnSpan = positiveIntAttribute(cell, 'colspan');
-  const rowSpan = positiveIntAttribute(cell, 'rowspan');
+  // Fusions déjà bornées (et signalées) par `analyzeGrid` : on les relit sans avertir deux fois.
+  const columnSpan = position?.span ?? 1;
+  const rowSpan = positiveIntAttribute(cell, 'rowspan', MAX_ROW_SPAN) ?? 1;
   const options: ITableCellOptions = {
     children: blocks,
-    ...(columnSpan && columnSpan > 1 ? { columnSpan } : {}),
-    ...(rowSpan && rowSpan > 1 ? { rowSpan } : {}),
+    ...(columnSpan > 1 ? { columnSpan } : {}),
+    ...(rowSpan > 1 ? { rowSpan } : {}),
     ...(width !== null ? { width: { size: width, type: ctx.docx.WidthType.DXA } } : {}),
   };
   return new ctx.docx.TableCell(options);
@@ -220,14 +248,15 @@ export async function convertTable(
 ): Promise<Table> {
   const { Table, TableLayoutType, TableRow, WidthType } = ctx.docx;
   const rowInfos = collectRows(table);
-  const grid = analyzeGrid(table, rowInfos);
+  const grid = analyzeGrid(table, rowInfos, ctx);
   const twips = columnWidthsTwips(grid.columns, ctx);
   const rows = [];
   for (const { header, cells: cellElements } of rowInfos) {
     const cells = [];
     for (const cell of cellElements) {
-      const width = cellWidthTwips(grid.positions.get(cell), grid.columns, twips, ctx);
-      cells.push(await convertCell(cell, width, scope, ctx, convert));
+      const position = grid.positions.get(cell);
+      const width = cellWidthTwips(position, grid.columns, twips, ctx);
+      cells.push(await convertCell(cell, position, width, scope, ctx, convert));
     }
     // `tableHeader` seulement quand vrai : mammoth lit la présence de `w:tblHeader`, pas sa valeur.
     const isHeader = header || isAllHeaderCells(cellElements);

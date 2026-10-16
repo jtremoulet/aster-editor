@@ -3,7 +3,12 @@ import { exportDocx } from './export-docx';
 import { jsonToHtml } from './json-to-html';
 import { toDocumentXml, toZipEntries } from './testing/sample';
 import type { DocxExportOptions } from './types';
-import { DEFAULT_VARIABLE_PATTERN, resolveVariableSettings, splitVariables } from './variables';
+import {
+  DEFAULT_VARIABLE_PATTERN,
+  quoteFieldName,
+  resolveVariableSettings,
+  splitVariables,
+} from './variables';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
 function count(haystack: string, needle: string): number {
@@ -93,6 +98,47 @@ describe('variables à l’export', () => {
       });
       expect(mergeRuns(xml)).toContain('>Bonjour AB !</w:t>');
     });
+
+    it('M-2 : garde les sauts de ligne et les blancs d’une valeur (donnée, pas HTML)', async () => {
+      const { xml, warnings } = await toDocumentXml(
+        '<p>Adresse : <span data-aster-variable="adresse">{{adresse}}</span> fin</p><p>{{adresse}}</p>',
+        {
+          variables: {
+            mode: 'resolve',
+            values: { adresse: ' 12 rue  Haute\r\n34000 Montpellier\n' },
+          },
+        },
+      );
+      expect(warnings).toEqual([]);
+      // Avant : `\r\n` devenait un espace et les doubles blancs étaient réduits.
+      expect(xml).toContain('>Adresse : </w:t>');
+      expect(xml).toContain('> 12 rue  Haute</w:t>');
+      expect(xml).toContain('>34000 Montpellier</w:t>');
+      // Le texte HTML qui suit un saut suit les règles du HTML : son blanc de tête disparaît.
+      expect(xml).toContain('>fin</w:t>');
+      // Deux sauts dans la valeur, donc deux `<w:br/>` par occurrence, y compris le terminal.
+      expect(count(xml, '<w:br/>')).toBe(4);
+    });
+
+    it('M-6 : accepte une valeur non chaîne (nombre, booléen) et ignore null', async () => {
+      const values = { n: 42, ok: true, rien: null } as unknown as Record<string, string>;
+      const { xml, warnings } = await toDocumentXml('<p>{{n}} {{ok}} {{rien}}</p>', {
+        variables: { mode: 'resolve', values },
+      });
+      expect(mergeRuns(xml)).toContain('>42 true {{rien}}</w:t>');
+      expect(warnings).toEqual([
+        { code: 'variable-unresolved', message: expect.stringContaining('rien') },
+      ]);
+    });
+
+    it('M-5 : ignore le drapeau sticky d’un motif personnalisé', async () => {
+      const { xml, warnings } = await toDocumentXml('<p>Cher [nom], bonjour [nom]</p>', {
+        variables: { mode: 'resolve', values: { nom: 'Bob' }, pattern: /\[([a-z]+)\]/y },
+      });
+      expect(mergeRuns(xml)).toContain('>Cher Bob, bonjour Bob</w:t>');
+      expect(warnings).toEqual([]);
+      expect(resolveVariableSettings({ pattern: /x/y }).pattern.flags).toBe('g');
+    });
   });
 
   describe('mode fields', () => {
@@ -132,6 +178,47 @@ describe('variables à l’export', () => {
     it('aller-retour exportDocx → zip : le champ est dans document.xml', async () => {
       const entries = await toZipEntries(await exportDocx(SPAN, { variables: { mode: 'fields' } }));
       expect(entries.get('word/document.xml')).toContain('w:instr=" MERGEFIELD nom "');
+    });
+
+    it('M-1 : cite un nom de champ avec blanc, guillemet ou backslash', async () => {
+      const { xml } = await toDocumentXml(
+        '<p><span data-aster-variable="Nom du client">x</span>' +
+          '<span data-aster-variable=\'a"b\'>x</span><span data-aster-variable="c\\d">x</span>' +
+          '<span data-aster-variable="simple">x</span></p>',
+        { variables: { mode: 'fields', values: { 'Nom du client': 'ACME' } } },
+      );
+      expect(xml).toContain('w:instr=" MERGEFIELD &quot;Nom du client&quot; "');
+      expect(xml).toContain('>ACME</w:t>');
+      expect(xml).toContain('w:instr=" MERGEFIELD &quot;a\\&quot;b&quot; "');
+      expect(xml).toContain('w:instr=" MERGEFIELD &quot;c\\\\d&quot; "');
+      expect(xml).toContain('>«a&quot;b»</w:t>');
+      expect(xml).toContain('w:instr=" MERGEFIELD simple "');
+      expect(quoteFieldName('simple.name-1')).toBe('simple.name-1');
+      expect(quoteFieldName('a b')).toBe('"a b"');
+    });
+
+    it('M-2 / M-6 : le résultat du champ tient sur une ligne et accepte un nombre', async () => {
+      const values = { multi: 'ligne 1\r\nligne 2', n: 7 } as unknown as Record<string, string>;
+      const { xml } = await toDocumentXml('<p>{{multi}} {{n}}</p>', {
+        variables: { mode: 'fields', values },
+      });
+      expect(xml).toContain('>ligne 1 ligne 2</w:t>');
+      expect(xml).toContain(
+        '<w:fldSimple w:instr=" MERGEFIELD n "><w:r><w:t xml:space="preserve">7</w:t>',
+      );
+    });
+
+    it('émet aussi un champ dans header.html', async () => {
+      const entries = await toZipEntries(
+        await exportDocx('<p>corps</p>', {
+          header: { html: 'Client : {{client}}', align: 'right' },
+          variables: { mode: 'fields', values: { client: 'ACME' } },
+        }),
+      );
+      const header = entries.get('word/header1.xml') ?? '';
+      expect(header).toContain('<w:fldSimple w:instr=" MERGEFIELD client ">');
+      expect(header).toContain('>ACME</w:t>');
+      expect(header).toContain('<w:jc w:val="right"/>');
     });
   });
 
