@@ -1,7 +1,7 @@
 import type { AsterEditor, OutlineEntry } from '@aster-editor/core';
 import { getOutline, scrollToHeading } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
+import { clear, el } from '../utils/dom';
 import { createDropdown, createMenuItem } from './dropdown';
 
 /** Sommaire de l'éditeur, tolérant si la vue manque (éditeur de test sans Tiptap). */
@@ -29,6 +29,9 @@ export function createOutlinePanel(editor: AsterEditor): ToolbarWidget {
     isEnabled: () => !editor.isDestroyed(),
     renderPanel: (panel, dropdown) => {
       const entries = readOutline(editor);
+      // readOutline peut dispatcher une transaction (ids de titres) qui déclenche un
+      // re-rendu imbriqué via selectionChange : on repart d'un panneau vide.
+      clear(panel);
       panel.setAttribute('aria-label', editor.i18n.t('ui.outline.label'));
       if (entries.length === 0) {
         panel.append(

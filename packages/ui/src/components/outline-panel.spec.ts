@@ -81,4 +81,15 @@ describe('createOutlinePanel', () => {
     trigger()?.click();
     expect(widget.element.querySelector('.aster-outline__empty')).not.toBeNull();
   });
+
+  it('ne duplique pas les entrées quand getOutline provoque un selectionChange pendant le rendu', () => {
+    vi.mocked(getOutline).mockImplementation(() => {
+      // ensureHeadingIds dispatche une transaction hors historique : l'éditeur émet
+      // selectionChange pendant le rendu, ce qui re-rend le panneau ouvert.
+      editor.emit('selectionChange', { editor });
+      return ENTRIES;
+    });
+    trigger()?.click();
+    expect(items().map((item) => item.textContent)).toEqual(['Intro', 'Partie A', '—']);
+  });
 });
