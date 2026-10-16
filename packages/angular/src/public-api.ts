@@ -15,11 +15,24 @@ export type {
   AsterEditor,
   AsterLocale,
   AsterTheme,
+  AsterVariable,
+  GetHtmlOptions,
   LinkPolicy,
   PasteTransformer,
   ToolbarConfig,
   ToolbarPreset,
   UploadHandler,
+  VariableRenderMode,
+  VariableResolver,
+  VariableSource,
+  VariableValues,
 } from '@aster-editor/core';
 export type { AsterUiOptions } from '@aster-editor/ui';
-export type { DocxImportResult, DocxImportWarning } from '@aster-editor/word';
+export type {
+  DocxExportOptions,
+  DocxExportVariableOptions,
+  DocxExportWarning,
+  DocxImportResult,
+  DocxImportWarning,
+  DocxVariableMode,
+} from '@aster-editor/word';

@@ -92,17 +92,22 @@ export class ArticleFormComponent {
 
 ## 🎛️ Inputs et outputs
 
-| Input            | Type                      | Défaut effectif | À chaud                                                     |
-| ---------------- | ------------------------- | --------------- | ----------------------------------------------------------- |
-| `toolbar`        | `ToolbarConfig`           | `'standard'`    | Remonte l'éditeur : contenu conservé, historique perdu      |
-| `theme`          | `AsterTheme`              | `'light'`       | Oui                                                         |
-| `locale`         | `AsterLocale`             | `'fr'`          | Oui, toolbar comprise                                       |
-| `placeholder`    | `string \| undefined`     | chaîne i18n     | Oui                                                         |
-| `readonly`       | `boolean`                 | `false`         | Oui, cumulé avec le `disabled` du formulaire                |
-| `config`         | `Partial<AsterUiOptions>` | `{}`            | Seules les clés ci-dessus sont relues ; le reste au montage |
-| `wordPaste`      | `boolean`                 | `true`          | Oui                                                         |
-| `ariaLabel`      | `string \| undefined`     | aucun           | Oui : `aria-label` sur le contenteditable                   |
-| `ariaLabelledBy` | `string \| undefined`     | aucun           | Oui : `aria-labelledby` sur le contenteditable              |
+| Input                   | Type                       | Défaut effectif | À chaud                                                     |
+| ----------------------- | -------------------------- | --------------- | ----------------------------------------------------------- |
+| `toolbar`               | `ToolbarConfig`            | `'standard'`    | Remonte l'éditeur : contenu conservé, historique perdu      |
+| `theme`                 | `AsterTheme`               | `'light'`       | Oui                                                         |
+| `locale`                | `AsterLocale`              | `'fr'`          | Oui, toolbar comprise                                       |
+| `placeholder`           | `string \| undefined`      | chaîne i18n     | Oui                                                         |
+| `readonly`              | `boolean`                  | `false`         | Oui, cumulé avec le `disabled` du formulaire                |
+| `config`                | `Partial<AsterUiOptions>`  | `{}`            | Seules les clés ci-dessus sont relues ; le reste au montage |
+| `wordPaste`             | `boolean`                  | `true`          | Oui                                                         |
+| `ariaLabel`             | `string \| undefined`      | aucun           | Oui : `aria-label` sur le contenteditable                   |
+| `ariaLabelledBy`        | `string \| undefined`      | aucun           | Oui : `aria-labelledby` sur le contenteditable              |
+| `variables`             | `readonly AsterVariable[]` | aucune          | Oui : `editor.variables.define(...)`, fusion par nom        |
+| `variableValues`        | `VariableValues`           | aucune          | Oui : `editor.variables.setValues(...)`, fusion par nom     |
+| `variableResolver`      | `VariableResolver`         | aucun           | Non, lu au montage                                          |
+| `allowUnknownVariables` | `boolean`                  | `true`          | Non, lu au montage                                          |
+| `variableSuggestion`    | `boolean`                  | `true`          | Non, lu au montage                                          |
 
 Un contenteditable ne s'associe pas à un `<label for>` : nomme la zone de saisie avec
 `ariaLabel`, ou `ariaLabelledBy` pointant sur l'`id` de ton libellé visible. Les deux sont
@@ -115,18 +120,24 @@ document s'il était dans l'éditeur, `ready` est réémis avec la nouvelle inst
 `importDocx` en cours pendant un remontage ou une destruction rend son résultat sans écrire
 dans l'éditeur.
 
-| Output    | Payload       | Quand                                                                                          |
-| --------- | ------------- | ---------------------------------------------------------------------------------------------- |
-| `ready`   | `AsterEditor` | Éditeur monté. Réémis après un remontage (`toolbar`)                                           |
-| `changed` | `string`      | Document modifié, HTML de `getHTML()`. Pas sur `writeValue`                                    |
-| `focused` | `void`        | Focus du contenu                                                                               |
-| `blurred` | `void`        | Focus perdu vers l'extérieur de l'éditeur (pas vers la toolbar) ; marque le contrôle `touched` |
+| Output             | Payload          | Quand                                                                                          |
+| ------------------ | ---------------- | ---------------------------------------------------------------------------------------------- |
+| `ready`            | `AsterEditor`    | Éditeur monté. Réémis après un remontage (`toolbar`)                                           |
+| `changed`          | `string`         | Document modifié, HTML de `getHTML()`. Pas sur `writeValue`                                    |
+| `focused`          | `void`           | Focus du contenu                                                                               |
+| `blurred`          | `void`           | Focus perdu vers l'extérieur de l'éditeur (pas vers la toolbar) ; marque le contrôle `touched` |
+| `variablesChanged` | `VariableValues` | Valeurs ou déclarations de variables changées (`setValues`, `define`, `resolve`, import)       |
 
 API publique du composant :
 
 - `editor` : `Signal<AsterEditor | null>`, l'éditeur du core (`getHTML`, `getJSON`, `getCounts`,
   `commands.run(...)`, `tiptap`…), `null` avant le montage et après la destruction.
+- `variableNames` : `Signal<readonly string[]>`, noms des variables présentes dans le document,
+  relus sur `change` et `variablesChange`.
+- `getHTML(options?)` : HTML du document, `{ variables: 'resolve' }` substitue les valeurs.
+- `resolveVariables()` : appelle le résolveur pour les variables sans valeur, rend les valeurs.
 - `importDocx(file: File): Promise<DocxImportResult>` : voir plus bas.
+- `exportDocx(options?: DocxExportOptions): Promise<Blob>` : voir « Variables et modèles ».
 
 La vue source, le plein écran et le menu contextuel de table de `@aster-editor/ui` sont montés
 par `createAster` et donc disponibles dans le composant : via les widgets `source` /
@@ -137,8 +148,10 @@ piloter ces fonctions par code, passe par les contrôleurs partagés de `ui`
 
 Types réexportés pour ne pas dépendre de `core`, `ui` ou `word` : `AsterEditor`,
 `AsterDocument`, `AsterCounts`, `AsterLocale`, `AsterTheme`, `LinkPolicy`,
-`PasteTransformer`, `ToolbarConfig`, `ToolbarPreset`, `UploadHandler`, `AsterUiOptions`,
-`DocxImportResult`, `DocxImportWarning`.
+`PasteTransformer`, `ToolbarConfig`, `ToolbarPreset`, `UploadHandler`, `AsterVariable`,
+`VariableValues`, `VariableResolver`, `VariableSource`, `VariableRenderMode`, `GetHtmlOptions`,
+`AsterUiOptions`, `DocxImportResult`, `DocxImportWarning`, `DocxExportOptions`,
+`DocxExportVariableOptions`, `DocxExportWarning`, `DocxVariableMode`.
 
 Un input dédié laissé à `undefined` n'écrase pas la valeur venue de `config` ou de
 `provideAster`. Passe des objets **stables** dans `config` (champ de classe, pas un littéral dans
@@ -260,6 +273,100 @@ export class ExportComponent {
 
 Options, mapping HTML → Word et limites dans le [README word](../word/README.md).
 
+## 🧩 Variables et modèles
+
+Les variables (champs de fusion `{{client.nom}}`) sont des puces du document, gérées par
+`editor.variables` du core. Le composant les expose sans toucher à `config` :
+
+| Input / output          | Rôle                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `variables`             | Déclarations (`name`, `label`, `description`, `value`) proposées dans le menu d'insertion                                 |
+| `variableValues`        | Valeurs par nom. À chaud, fusionnées dans le magasin (`setValues`)                                                        |
+| `variableResolver`      | `(name, editor) => string \| undefined \| Promise<…>`, appelé par `resolveVariables()`                                    |
+| `allowUnknownVariables` | `false` pour refuser l'insertion d'un nom non déclaré (vrai par défaut : un `.docx` importé peut contenir n'importe quoi) |
+| `variableSuggestion`    | Menu déclenché par `{{` dans le contenu (vrai par défaut)                                                                 |
+| `variablesChanged`      | Output `VariableValues`, émis sur `variablesChange` du core                                                               |
+| `variableNames`         | `Signal<readonly string[]>`, noms présents dans le document                                                               |
+
+Ces inputs priment sur `config.variables` clé par clé ; un input laissé à `undefined` ne masque
+rien. Un remontage (`toolbar`) conserve déclarations et valeurs.
+
+`importDocx` déclare les variables trouvées dans le `.docx` (`{{nom}}`, champs `MERGEFIELD`,
+contrôles de contenu avec leur libellé et leur valeur) via `editor.variables.define`, puis
+réapplique `variableValues` sur les noms que Word avait valorisés : ton état reste la source de
+vérité. `exportDocx` charge `@aster-editor/word` à la demande, exporte `getHTML()` et transmet les
+valeurs du magasin quand `options.variables.values` n'est pas fourni :
+
+- `variables.mode: 'resolve'` : valeurs substituées, `{{nom}}` conservé (et avertissement
+  `variable-unresolved` via `onWarning`) pour une variable sans valeur ;
+- `'fields'` : champs de fusion Word, la valeur connue comme résultat de champ ;
+- `'placeholders'` (défaut) : le modèle tel quel.
+
+Exemple complet, formulaire généré depuis `variableNames` et export :
+
+```ts
+@Component({
+  imports: [AsterEditorComponent],
+  template: `
+    <input type="file" accept=".docx" (change)="onFile($event)" />
+    <aster-editor
+      [variables]="declared"
+      [variableValues]="values()"
+      (variablesChanged)="store.set($event)"
+    />
+    <form (submit)="apply($event)">
+      @for (name of editor().variableNames(); track name) {
+        <label>
+          {{ name }}
+          <input [name]="name" [value]="store()[name] ?? ''" (input)="edit(name, $event)" />
+        </label>
+      }
+      <button type="submit">Appliquer</button>
+    </form>
+    <p>{{ unresolved() }} variable(s) sans valeur</p>
+    <button type="button" (click)="download('resolve')">Télécharger résolu</button>
+    <button type="button" (click)="download('fields')">Avec champs Word</button>
+  `,
+})
+export class TemplateComponent {
+  protected readonly editor = viewChild.required(AsterEditorComponent);
+  protected readonly declared: readonly AsterVariable[] = [{ name: 'client.nom', label: 'Client' }];
+  protected readonly values = signal<VariableValues | undefined>(undefined);
+  protected readonly store = signal<VariableValues>({});
+  protected readonly unresolved = computed(
+    () =>
+      this.editor()
+        .variableNames()
+        .filter((name) => !this.store()[name]).length,
+  );
+  private draft: Record<string, string> = {};
+
+  async onFile(event: Event): Promise<void> {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file) await this.editor().importDocx(file); // déclare les variables trouvées
+  }
+
+  edit(name: string, event: Event): void {
+    this.draft = { ...this.draft, [name]: (event.target as HTMLInputElement).value };
+  }
+
+  apply(event: Event): void {
+    event.preventDefault();
+    this.values.set({ ...this.draft }); // → editor.variables.setValues, puis variablesChanged
+  }
+
+  async download(mode: DocxVariableMode): Promise<void> {
+    const blob = await this.editor().exportDocx({ variables: { mode } });
+    const { downloadDocx } = await import('@aster-editor/word');
+    downloadDocx(blob, mode === 'resolve' ? 'contrat' : 'modele');
+  }
+}
+```
+
+Pour un aperçu résolu sans export, `editor().getHTML({ variables: 'resolve' })` rend le HTML
+avec les valeurs substituées en texte brut ; `resolveVariables()` appelle d'abord le résolveur
+pour les variables manquantes.
+
 ## 📋 Collage depuis Word
 
 Avec `wordPaste` (vrai par défaut), le composant charge `@aster-editor/word` au montage (jamais
@@ -270,16 +377,18 @@ et le collage reste brut. Passer `wordPaste` à `false` laisse le module chargé
 
 ## 🧭 App démo
 
-`apps/demo` (`npm run demo`, http://localhost:4200) montre quatre pages chargées à la demande,
+`apps/demo` (`npm run demo`, http://localhost:4200) montre cinq pages chargées à la demande,
 chacune avec son titre de document : `/` playground (preset, thème, langue, lecture seule,
 compteurs, sortie HTML / JSON), `/form` reactive form avec validateur « requis » sur le contenu
-riche, `/import` dépôt de `.docx` avec avertissements, `/readonly` rendu figé en thème `night`.
+riche, `/import` dépôt de `.docx` avec avertissements, `/readonly` rendu figé en thème `night`,
+`/template` modèle à variables (exemple `08-variables-braces.docx` servi depuis
+`public/samples/`, formulaire généré, aperçu puces / résolu, export dans les trois modes).
 
 ## 🧪 Tests
 
 ```bash
-npx ng test aster-angular --watch=false   # 30 tests du composant et de provideAster
-npx ng test demo --watch=false            # 20 tests des pages de la démo
+npx ng test aster-angular --watch=false   # 39 tests du composant et de provideAster
+npx ng test demo --watch=false            # 23 tests des pages de la démo
 npm run e2e -- --project=demo             # 5 tests Playwright sur la démo (ng serve lancé par Playwright)
 ```
 

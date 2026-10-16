@@ -14,5 +14,6 @@ export class App {
     { path: '/form', label: 'Reactive form', exact: false },
     { path: '/import', label: 'Import Word', exact: false },
     { path: '/readonly', label: 'Lecture seule', exact: false },
+    { path: '/template', label: 'Modèle', exact: false },
   ] as const;
 }

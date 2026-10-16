@@ -23,5 +23,10 @@ export const routes: Routes = [
     title: 'Lecture seule · Aster',
     loadComponent: () => import('./pages/readonly.page').then((m) => m.ReadonlyPage),
   },
+  {
+    path: 'template',
+    title: 'Modèle · Aster',
+    loadComponent: () => import('./pages/template.page').then((m) => m.TemplatePage),
+  },
   { path: '**', redirectTo: '' },
 ];

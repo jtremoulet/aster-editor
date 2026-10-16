@@ -12,17 +12,18 @@ describe('App', () => {
     }).compileComponents();
   });
 
-  it('affiche la navigation vers les quatre pages', async () => {
+  it('affiche la navigation vers les cinq pages', async () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     await fixture.whenStable();
     const links = (fixture.nativeElement as HTMLElement).querySelectorAll('nav a');
-    expect(links.length).toBe(4);
+    expect(links.length).toBe(5);
     expect(Array.from(links).map((a) => a.getAttribute('href'))).toEqual([
       '/',
       '/form',
       '/import',
       '/readonly',
+      '/template',
     ]);
   });
 
@@ -33,6 +34,7 @@ describe('App', () => {
       'Reactive form · Aster',
       'Import Word · Aster',
       'Lecture seule · Aster',
+      'Modèle · Aster',
     ]);
   });
 });

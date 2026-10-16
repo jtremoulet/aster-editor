@@ -20,7 +20,12 @@ type Inputs = Partial<
     | 'config'
     | 'wordPaste'
     | 'ariaLabel'
-    | 'ariaLabelledBy',
+    | 'ariaLabelledBy'
+    | 'variables'
+    | 'variableValues'
+    | 'variableResolver'
+    | 'allowUnknownVariables'
+    | 'variableSuggestion',
     unknown
   >
 >;
@@ -435,6 +440,147 @@ describe('AsterEditorComponent', () => {
     await expect(fixture.componentInstance.importDocx(new File([], 'x.docx'))).rejects.toThrow(
       /not mounted/,
     );
+  });
+
+  describe('variables', () => {
+    const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    it('fusionne les inputs de variables dans les options au montage', async () => {
+      const resolver = vi.fn(async (name: string) => `résolu:${name}`);
+      const { editor } = await mount({
+        variables: [{ name: 'client', label: 'Client' }],
+        variableValues: { ville: 'Montpellier' },
+        variableResolver: resolver,
+        allowUnknownVariables: false,
+        config: { variables: { values: { pays: 'France' } } },
+      });
+      expect(editor.variables.list()).toEqual([{ name: 'client', label: 'Client' }]);
+      expect(editor.variables.getValues()).toEqual({ ville: 'Montpellier' });
+      expect(editor.variables.insert('inconnue')).toBe(false);
+      expect(editor.variables.insert('client')).toBe(true);
+      editor.variables.setValues({ client: undefined });
+      await expect(editor.variables.resolve()).resolves.toEqual({
+        ville: 'Montpellier',
+        client: 'résolu:client',
+      });
+      expect(resolver).toHaveBeenCalledWith('client', editor);
+    });
+
+    it('un input laissé à undefined ne masque pas config.variables', async () => {
+      const { editor } = await mount({
+        variableValues: { ville: 'Sète' },
+        config: {
+          variables: { variables: [{ name: 'pays', label: 'Pays' }], allowUnknown: false },
+        },
+      });
+      expect(editor.variables.list()).toEqual([{ name: 'pays', label: 'Pays' }]);
+      expect(editor.variables.getValues()).toEqual({ ville: 'Sète' });
+      expect(editor.variables.insert('inconnue')).toBe(false);
+    });
+
+    it('applique variables et variableValues à chaud et émet variablesChanged', async () => {
+      const { fixture, component, editor } = await mount({ variableValues: { a: '1' } });
+      const changed = vi.fn();
+      component.variablesChanged.subscribe(changed);
+
+      fixture.componentRef.setInput('variableValues', { b: '2' });
+      fixture.detectChanges();
+      expect(editor.variables.getValues()).toEqual({ a: '1', b: '2' });
+      expect(changed).toHaveBeenCalledWith({ a: '1', b: '2' });
+
+      fixture.componentRef.setInput('variables', [{ name: 'c', label: 'Trois', value: '3' }]);
+      fixture.detectChanges();
+      expect(editor.variables.list()).toContainEqual({ name: 'c', label: 'Trois', value: '3' });
+      expect(changed).toHaveBeenLastCalledWith({ a: '1', b: '2', c: '3' });
+    });
+
+    it('variableNames suit les puces du document sur change et variablesChange', async () => {
+      const { component, editor } = await mount();
+      expect(component.variableNames()).toEqual([]);
+      editor.variables.insert('client');
+      expect(component.variableNames()).toEqual(['client']);
+      component.writeValue('<p><span data-aster-variable="a">{{a}}</span></p>');
+      editor.variables.setValues({ a: 'x' });
+      expect(component.variableNames()).toEqual(['a']);
+    });
+
+    it('getHTML délègue avec les options et resolveVariables applique le résolveur', async () => {
+      const { component, editor } = await mount({
+        variableResolver: async (name: string) => (name === 'ville' ? 'Nîmes' : undefined),
+      });
+      editor.setHTML('<p>À <span data-aster-variable="ville">{{ville}}</span></p>', false);
+      expect(component.getHTML()).toContain('data-aster-variable="ville"');
+      expect(component.getHTML({ variables: 'resolve' })).toContain('{{ville}}');
+      await expect(component.resolveVariables()).resolves.toEqual({ ville: 'Nîmes' });
+      expect(component.getHTML({ variables: 'resolve' })).toBe('<p>À Nîmes</p>');
+    });
+
+    it('getHTML avant le montage rend la valeur en attente, les autres méthodes rejettent', async () => {
+      TestBed.configureTestingModule({ imports: [AsterEditorComponent] });
+      const fixture = TestBed.createComponent(AsterEditorComponent);
+      const component = fixture.componentInstance;
+      expect(component.getHTML()).toBe('');
+      component.writeValue('<p>Attente</p>');
+      expect(component.getHTML()).toBe('<p>Attente</p>');
+      expect(() => component.resolveVariables()).toThrow(/not mounted/);
+      await expect(component.exportDocx()).rejects.toThrow(/not mounted/);
+    });
+
+    it('exportDocx transmet les valeurs du magasin sauf si options.variables.values est fourni', async () => {
+      const { component, editor } = await mount({ variableValues: { ville: 'Montpellier' } });
+      editor.setHTML('<p>À <span data-aster-variable="ville">{{ville}}</span></p>', false);
+
+      const quiet = vi.fn();
+      const blob = await component.exportDocx({
+        variables: { mode: 'resolve' },
+        onWarning: quiet,
+      });
+      expect(blob).toBeInstanceOf(Blob);
+      expect(blob.type).toBe(DOCX_MIME);
+      expect(blob.size).toBeGreaterThan(0);
+      expect(quiet).not.toHaveBeenCalled();
+
+      const warned = vi.fn();
+      await component.exportDocx({ variables: { mode: 'resolve', values: {} }, onWarning: warned });
+      expect(warned).toHaveBeenCalledWith(expect.objectContaining({ code: 'variable-unresolved' }));
+    });
+
+    it('importDocx déclare les variables trouvées et garde la priorité à variableValues', async () => {
+      const { component, editor } = await mount({ variableValues: { lieu: 'Montpellier' } });
+      const changed = vi.fn();
+      component.variablesChanged.subscribe(changed);
+      const bytes = await readFixture('fixtures/docx/08-variables-braces.docx');
+      const file = new File([bytes], '08.docx', { type: DOCX_MIME });
+      const result = await component.importDocx(file);
+      expect(result.variables.map((variable) => variable.name)).toContain('client.nom');
+      expect(component.variableNames()).toEqual(
+        expect.arrayContaining(['client.nom', 'prestataire', 'lieu', 'date_signature']),
+      );
+      expect(editor.variables.list().map((variable) => variable.name)).toContain('client.nom');
+      expect(editor.variables.getValues()).toEqual({ lieu: 'Montpellier' });
+      expect(changed).toHaveBeenCalled();
+      expect(component.getHTML({ variables: 'resolve' })).toContain('Fait à Montpellier');
+    });
+
+    it('conserve déclarations et valeurs de variables au remontage', async () => {
+      const { fixture, component, editor } = await mount({
+        toolbar: 'minimal',
+        variables: [{ name: 'client', label: 'Client' }],
+      });
+      editor.variables.insert('client');
+      editor.variables.setValues({ client: 'ACME', ville: 'Sète' });
+      fixture.componentRef.setInput('toolbar', false);
+      fixture.detectChanges();
+      const next = component.editor();
+      expect(next).not.toBe(editor);
+      expect(next?.variables.getValues()).toEqual({ client: 'ACME', ville: 'Sète' });
+      expect(next?.variables.list()).toContainEqual({
+        name: 'client',
+        label: 'Client',
+        value: 'ACME',
+      });
+      expect(component.variableNames()).toEqual(['client']);
+    });
   });
 });
 

@@ -21,13 +21,18 @@ import type {
   AsterEditor,
   AsterLocale,
   AsterTheme,
+  AsterVariable,
+  GetHtmlOptions,
   PasteTransformer,
   ToolbarConfig,
   Unsubscribe,
+  VariableResolver,
+  VariableSource,
+  VariableValues,
 } from '@aster-editor/core';
 import { createAster } from '@aster-editor/ui';
 import type { AsterInstance, AsterUiOptions } from '@aster-editor/ui';
-import type { DocxImportResult } from '@aster-editor/word';
+import type { DocxExportOptions, DocxImportResult } from '@aster-editor/word';
 import { ASTER_CONFIG } from './provide-aster';
 import { ASTER_UPLOAD_HANDLER } from './tokens';
 
@@ -58,6 +63,17 @@ function setOrRemoveAttribute(element: HTMLElement, name: string, value: string 
   }
 }
 
+/** Égalité de deux listes de noms, pour ne pas notifier `variableNames` sans changement réel. */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, index) => name === b[index]);
+}
+
+/** État du magasin de variables à conserver au travers d'un remontage. */
+interface VariableSnapshot {
+  readonly declared: readonly AsterVariable[];
+  readonly values: VariableValues;
+}
+
 /**
  * Composant Angular standalone autour de `createAster` (`@aster-editor/ui`).
  *
@@ -72,11 +88,18 @@ function setOrRemoveAttribute(element: HTMLElement, name: string, value: string 
  * inputs dédiés (`toolbar`, `theme`, `locale`, `placeholder`, `readonly`). Un input dédié
  * laissé à `undefined` n'écrase donc pas la valeur venue de la configuration.
  *
- * Changements à chaud : `theme`, `locale`, `readonly`, `placeholder`, `ariaLabel` et
- * `ariaLabelledBy` sont appliqués sur l'instance vivante. `toolbar` remonte l'éditeur (le
- * contenu est conservé, l'historique d'annulation est perdu, `ready` est réémis avec la
- * nouvelle instance). Les autres clés de `config` (`extensions`, `commands`, `upload`…) ne
- * sont lues qu'au montage.
+ * Changements à chaud : `theme`, `locale`, `readonly`, `placeholder`, `ariaLabel`,
+ * `ariaLabelledBy`, `variables` et `variableValues` sont appliqués sur l'instance vivante.
+ * `toolbar` remonte l'éditeur (le contenu, les déclarations et les valeurs de variables sont
+ * conservés, l'historique d'annulation est perdu, `ready` est réémis avec la nouvelle
+ * instance). Les autres clés de `config` (`extensions`, `commands`, `upload`…) ne sont lues
+ * qu'au montage.
+ *
+ * Variables (champs de fusion) : les inputs `variables`, `variableValues`, `variableResolver`,
+ * `allowUnknownVariables` et `variableSuggestion` se fusionnent dans `options.variables` et
+ * `variableSuggestion` de `createAster`. `variableNames` expose les noms présents dans le
+ * document, `variablesChanged` relaie `variablesChange`, `exportDocx` produit le `.docx` avec
+ * les valeurs du magasin.
  */
 @Component({
   selector: 'aster-editor',
@@ -116,6 +139,22 @@ export class AsterEditorComponent implements ControlValueAccessor {
   readonly ariaLabel = input<string | undefined>(undefined);
   /** `id` (ou liste d'ids) de l'élément qui sert de libellé (`aria-labelledby` sur le contenteditable). */
   readonly ariaLabelledBy = input<string | undefined>(undefined);
+  /**
+   * Variables déclarées (libellé, description, valeur), proposées dans le menu d'insertion
+   * même si absentes du document. À chaud : `editor.variables.define(...)`, fusion par nom.
+   */
+  readonly variables = input<readonly AsterVariable[] | undefined>(undefined);
+  /**
+   * Valeurs par nom. À chaud : `editor.variables.setValues(...)`, fusion avec les valeurs
+   * connues (une clé absente n'efface rien, `undefined` efface).
+   */
+  readonly variableValues = input<VariableValues | undefined>(undefined);
+  /** Résolveur asynchrone appelé par `resolveVariables()` pour les variables sans valeur. Lu au montage. */
+  readonly variableResolver = input<VariableResolver | undefined>(undefined);
+  /** Autoriser l'insertion d'une variable non déclarée. Défaut effectif : `true`. Lu au montage. */
+  readonly allowUnknownVariables = input<boolean | undefined>(undefined);
+  /** Menu de suggestion déclenché par `{{` dans le contenu. Défaut effectif : `true`. Lu au montage. */
+  readonly variableSuggestion = input<boolean | undefined>(undefined);
 
   /** L'éditeur est monté et prêt. Réémis après un remontage (changement de `toolbar`). */
   readonly ready = output<AsterEditor>();
@@ -129,10 +168,19 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * « dans » l'éditeur. C'est aussi ce qui marque le contrôle de formulaire `touched`.
    */
   readonly blurred = output<void>();
+  /** Les valeurs ou déclarations de variables ont changé (`setValues`, `define`, `resolve`, import). */
+  readonly variablesChanged = output<VariableValues>();
 
   private readonly editorState = signal<AsterEditor | null>(null);
   /** Éditeur courant, `null` avant le montage et après la destruction. */
   readonly editor: Signal<AsterEditor | null> = this.editorState.asReadonly();
+
+  private readonly variableNamesState = signal<readonly string[]>([], { equal: sameNames });
+  /**
+   * Noms des variables réellement présentes dans le document (`editor.variables.getNames()`),
+   * relus sur `change` et `variablesChange`. Vide avant le montage et après la destruction.
+   */
+  readonly variableNames: Signal<readonly string[]> = this.variableNamesState.asReadonly();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
   private readonly globalConfig = inject(ASTER_CONFIG, { optional: true });
@@ -158,6 +206,23 @@ export class AsterEditorComponent implements ControlValueAccessor {
   );
   private readonly resolvedReadOnly = computed<boolean>(
     () => (this.readonly() ?? this.mergedConfig().readOnly ?? false) || this.formDisabled(),
+  );
+  /** `config.variables` < inputs dédiés, clé par clé ; un input `undefined` ne masque rien. */
+  private readonly resolvedVariableSource = computed<VariableSource | undefined>(() => {
+    const base = this.mergedConfig().variables;
+    const source: VariableSource = {
+      ...base,
+      ...(this.variables() !== undefined ? { variables: this.variables() } : {}),
+      ...(this.variableValues() !== undefined ? { values: this.variableValues() } : {}),
+      ...(this.variableResolver() !== undefined ? { resolve: this.variableResolver() } : {}),
+      ...(this.allowUnknownVariables() !== undefined
+        ? { allowUnknown: this.allowUnknownVariables() }
+        : {}),
+    };
+    return Object.keys(source).length > 0 ? source : undefined;
+  });
+  private readonly resolvedVariableSuggestion = computed<boolean | undefined>(
+    () => this.variableSuggestion() ?? this.mergedConfig().variableSuggestion,
   );
 
   private instance: AsterInstance | null = null;
@@ -237,6 +302,24 @@ export class AsterEditorComponent implements ControlValueAccessor {
         });
       }
     });
+    // Au montage, déclarations et valeurs passent par `options.variables` ; ces deux effets
+    // ne couvrent que les changements d'input sur un éditeur déjà monté.
+    effect(() => {
+      const declared = this.variables();
+      untracked(() => {
+        if (declared && this.instance) {
+          this.instance.editor.variables.define(declared);
+        }
+      });
+    });
+    effect(() => {
+      const values = this.variableValues();
+      untracked(() => {
+        if (values && this.instance) {
+          this.instance.editor.variables.setValues(values);
+        }
+      });
+    });
   }
 
   // --- API publique --------------------------------------------------------
@@ -250,17 +333,49 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * contenu n'est écrit : l'instance vivante est relue après chaque `await`.
    */
   async importDocx(file: File): Promise<DocxImportResult> {
-    if (!this.instance) {
-      throw new Error('[aster-editor/angular] importDocx: editor is not mounted yet');
-    }
+    this.requireEditor('importDocx');
     const upload = untracked(() => this.resolvedOptions().upload);
     const { importDocx } = await import('@aster-editor/word');
     const result = await importDocx(file, upload ? { upload } : {});
     const editor = this.instance?.editor;
     if (editor && !editor.isDestroyed()) {
       editor.setHTML(result.html, true);
+      this.declareImportedVariables(editor, result.variables);
     }
     return result;
+  }
+
+  /**
+   * Convertit le document en `.docx` via `exportDocx` de `@aster-editor/word` (chargé à la
+   * demande, la lib `docx` reste dans son chunk). Les valeurs du magasin de variables sont
+   * transmises quand `options.variables.values` n'est pas fourni : `mode: 'resolve'` substitue
+   * donc ce que l'utilisateur a saisi, `'fields'` produit des champs de fusion Word avec ces
+   * valeurs comme résultat. Rend le `Blob`, à passer à `downloadDocx` ou à un upload.
+   */
+  async exportDocx(options: DocxExportOptions = {}): Promise<Blob> {
+    const editor = this.requireEditor('exportDocx');
+    const { exportDocx } = await import('@aster-editor/word');
+    const variables = {
+      ...options.variables,
+      values: options.variables?.values ?? editor.variables.getValues(),
+    };
+    return exportDocx(editor.getHTML(), { ...options, variables });
+  }
+
+  /**
+   * HTML du document, `{ variables: 'resolve' }` substitue les valeurs connues. Avant le
+   * montage, rend la valeur reçue par `writeValue` (puces conservées) ou une chaîne vide.
+   */
+  getHTML(options?: GetHtmlOptions): string {
+    return this.instance?.editor.getHTML(options) ?? this.pendingValue ?? '';
+  }
+
+  /**
+   * Appelle le résolveur (`variableResolver` ou `config.variables.resolve`) pour les
+   * variables présentes sans valeur, applique les valeurs obtenues et les rend toutes.
+   */
+  resolveVariables(): Promise<VariableValues> {
+    return this.requireEditor('resolveVariables').variables.resolve();
   }
 
   // --- ControlValueAccessor ------------------------------------------------
@@ -306,11 +421,11 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * Monte l'éditeur. `content` force le contenu initial (remontage) et, dans ce cas,
    * `autofocus` est neutralisé : le focus est restauré explicitement par `remount()`.
    */
-  private mount(content?: string): void {
+  private mount(content?: string, variables?: VariableSnapshot): void {
     if (this.instance) {
       return;
     }
-    const options = untracked(() => this.resolvedOptions(content));
+    const options = untracked(() => this.resolvedOptions(content, variables));
     const instance = createAster(this.host().nativeElement, options);
     const editor = instance.editor;
     this.instance = instance;
@@ -322,6 +437,11 @@ export class AsterEditorComponent implements ControlValueAccessor {
         const html = changed.getHTML();
         this.onChange?.(html);
         this.changed.emit(html);
+        this.refreshVariableNames(changed);
+      }),
+      editor.on('variablesChange', ({ editor: source, values }) => {
+        this.refreshVariableNames(source);
+        this.variablesChanged.emit(values);
       }),
       editor.on('focus', () => this.focused.emit()),
       editor.on('blur', ({ event }) => {
@@ -338,6 +458,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
     if (untracked(() => this.wordPaste())) {
       this.loadWordPaste();
     }
+    this.refreshVariableNames(editor);
     this.editorState.set(editor);
   }
 
@@ -350,9 +471,13 @@ export class AsterEditorComponent implements ControlValueAccessor {
     this.instance = null;
     this.mountedToolbar = null;
     this.editorState.set(null);
+    this.variableNamesState.set([]);
   }
 
-  /** Remonte l'éditeur en conservant le contenu et le focus ; l'historique est perdu. */
+  /**
+   * Remonte l'éditeur en conservant le contenu, le focus, les déclarations et les valeurs
+   * de variables ; l'historique est perdu.
+   */
   private remount(): void {
     const current = this.instance;
     if (!current) {
@@ -360,8 +485,12 @@ export class AsterEditorComponent implements ControlValueAccessor {
     }
     const html = current.editor.getHTML();
     const focused = current.editor.isFocused();
+    const variables: VariableSnapshot = {
+      declared: current.editor.variables.list(),
+      values: current.editor.variables.getValues(),
+    };
     this.unmount();
-    this.mount(html);
+    this.mount(html, variables);
     if (focused) {
       this.instance?.editor.focus('end');
     }
@@ -370,12 +499,21 @@ export class AsterEditorComponent implements ControlValueAccessor {
   /**
    * Fusionne `ASTER_CONFIG` < `config` < inputs dédiés. Le transformateur Word est placé
    * en tête pour que les transformateurs de l'intégrateur reçoivent du HTML déjà nettoyé.
-   * Avec `content` (remontage), `autofocus` est désactivé pour ne pas reprendre le focus.
+   * Avec `content` (remontage), `autofocus` est désactivé pour ne pas reprendre le focus et
+   * `variables` réinjecte l'état du magasin précédent par-dessus la configuration.
    */
-  private resolvedOptions(content?: string): AsterUiOptions {
+  private resolvedOptions(content?: string, variables?: VariableSnapshot): AsterUiOptions {
     const merged = this.mergedConfig();
     const initial: string | AsterDocument | undefined =
       content ?? this.pendingValue ?? merged.content;
+    const source = this.resolvedVariableSource();
+    const variableSource: VariableSource | undefined = variables
+      ? {
+          ...source,
+          variables: [...(source?.variables ?? []), ...variables.declared],
+          values: { ...source?.values, ...variables.values },
+        }
+      : source;
     return {
       ...merged,
       content: initial,
@@ -387,7 +525,49 @@ export class AsterEditorComponent implements ControlValueAccessor {
       readOnly: this.resolvedReadOnly(),
       pasteTransformers: [this.lazyWordTransformer, ...(merged.pasteTransformers ?? [])],
       upload: merged.upload ?? this.uploadHandler ?? undefined,
+      variables: variableSource,
+      variableSuggestion: this.resolvedVariableSuggestion(),
     };
+  }
+
+  /** Éditeur monté, sinon erreur explicite nommant la méthode appelée trop tôt. */
+  private requireEditor(method: string): AsterEditor {
+    const editor = this.instance?.editor;
+    if (!editor) {
+      throw new Error(`[aster-editor/angular] ${method}: editor is not mounted yet`);
+    }
+    return editor;
+  }
+
+  /** Relit `getNames()` ; le signal n'est notifié que si la liste change réellement. */
+  private refreshVariableNames(editor: AsterEditor): void {
+    this.variableNamesState.set(editor.variables.getNames());
+  }
+
+  /**
+   * Après un import : déclare les variables trouvées dans le `.docx` (libellé et valeur des
+   * contrôles de contenu compris), puis réapplique l'input `variableValues` pour les noms que
+   * Word a lui-même valorisés, l'application restant la source de vérité des valeurs.
+   */
+  private declareImportedVariables(editor: AsterEditor, found: readonly AsterVariable[]): void {
+    if (found.length === 0) {
+      return;
+    }
+    editor.variables.define(found);
+    const known = untracked(() => this.variableValues());
+    if (!known) {
+      return;
+    }
+    const overrides: Record<string, string> = {};
+    for (const variable of found) {
+      const value = known[variable.name];
+      if (variable.value !== undefined && value !== undefined && value !== variable.value) {
+        overrides[variable.name] = value;
+      }
+    }
+    if (Object.keys(overrides).length > 0) {
+      editor.variables.setValues(overrides);
+    }
   }
 
   private loadWordPaste(): void {
