@@ -308,3 +308,10 @@
 - Validité OOXML des ajouts vérifiée (ordre `w:pPr`, `fldSimple` dans `hyperlink` et titres, séparateurs de notes, `tblGrid`), perf 361 ms pour 4 000 variables en mode `fields`.
 - Lot L22 lancé sur `export/` seulement, en parallèle de L21 (`docx/`, `paste/`).
 - Bilan des 5 revues de la session 2 à ce stade : 10 bloquants et 31 mineurs sur 4 lots à 95-98 % de couverture. Même constat que la session 1.
+
+### 16/10 12:30 — L17 angular-modèle rendu et intégré (agent 15 min, 187k tokens, 80 outils)
+
+- angular 30 → 39 tests, démo 20 → 23, bundle initial 283 kB. `exportDocx` testé avec le vrai module (preuve par `onWarning`) plutôt qu'un `vi.mock` incertain sous le builder Angular : bonne décision.
+- Page `/template` : exemple, formulaire généré depuis `variableNames()`, onglet résolu, 3 exports. Vérifiée par l'agent dans le navigateur (9 champs, « Fait à Montpellier »).
+- Friction : l'agent a lancé son propre `ng serve` et l'a arrêté, ce qui a tué celui de l'orchestrateur sur 4200 (même port). À mettre dans les briefs : ne pas arrêter un serveur qu'on n'a pas lancé, ou utiliser un autre port.
+- Point à surveiller : `aster-editor.component.ts` passe à 636 lignes → extraction `lib/variables.ts` en fin de session si le temps le permet.
