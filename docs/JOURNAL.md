@@ -261,13 +261,22 @@
 - Pendant la vague : panneau « Variables » dans le playground, briefs L17/L18, REX session 2.
 
 ### 16/10 10:40 — L14 ui-variables rendu et intégré (agent 15 min, 248k tokens, 98 outils)
+
 - 230 tests ui (+42), codé entièrement contre le contrat avec un mock enrichi, sans voir l'implémentation core. 6 attentes précises envers le core transmises à L13 en cours par message (remplacement de la sélection, sélection de la puce avant `aster:variable-edit`, libellé lu sur le nœud, sonde `allowUnknown`, export de l'événement, classes CSS).
 - Décision L14 à retenir : panneau de suggestion positionné à la main (clamp viewport) plutôt que `floating-ui`, pour rester testable sous jsdom.
 - Proposition de contrat notée pour le dégel final : `VariableStore.allowsUnknown()` à la place de la sonde.
 - `variables.css` importé, `@tiptap/suggestion`, `@tiptap/pm`, `@floating-ui/dom` déclarés dans `ui` (épinglés 3.31.4), toujours une seule copie de `@tiptap/core`.
 
 ### 16/10 10:55 — L13 core-variables rendu et intégré (agent 16 min, 221k tokens, 69 outils)
+
 - +57 tests core (425, 95,5 %), aucun test existant modifié. `AsterVariableStore` concret avec `allowUnknown`/`canInsert`, `resolveVariablesHtml` pur avec chemin rapide sans DOM.
 - **Vérifié en navigateur (core + ui assemblés)** : puces rendues depuis `span[data-aster-variable]`, `setValues` → puces `--resolved` affichant « Nebula » et « ACME SAS », `getHTML({ variables: 'resolve' })` correct, `getText` avec valeurs, widget « Variable » dans la toolbar (37 items), menu `{{cli` avec l'option existante et « Créer {{cli}} ». Capture `08-s2-variables-playground.jpg`.
 - Propositions de contrat (dégel final) : `VariableStore.allowUnknown`/`canInsert`, `VariableEditEventDetail` dans `api/variables.ts`.
 - L13 a reçu mon message avec les attentes de L14 après son rendu : il est relancé et renotifiera ; à intégrer en delta.
+
+### 16/10 11:20 — L15 word-import-variables rendu et intégré (agent 23 min, 252k tokens, 86 outils)
+
+- 128 tests, paquet word à 409 (avec L16 en cours), 98,4 %. Prétraitement en DOM XML (pas de regex sur le XML), champs imbriqués dans `IF` gérés, contrôles de bloc, en-têtes/pieds/notes.
+- **Vérifié en navigateur** sur les 3 fixtures : 08 → 9 variables et 11 puces (le `{{` coupé sur deux runs est recollé), 09 → 5 champs de fusion simples et complexe en puces, 10 → 3 contrôles de contenu avec libellés et valeurs (« Jean Dupont », placeholder ignoré). Zéro avertissement.
+- Décision L15 à retenir : avec un `pattern` custom ou `braces` désactivé, les `{{nom}}` produits par le prétraitement ne sont reconnus que pour les noms collectés (jamais de conversion contre la volonté de l'intégrateur). Les variables d'en-tête/pied sont remontées dans `result.variables` bien qu'absentes du HTML.
+- Inventaires des fixtures mis à jour, `npm run fixtures` enchaîne les trois générateurs. Revue R15 lancée.
