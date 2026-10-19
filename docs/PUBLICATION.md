@@ -40,6 +40,8 @@ npm run release
 
 `release:dry` simule (`npm publish --dry-run`) et affiche le contenu exact de chaque tarball. `release` publie les quatre paquets dans l'ordre, avec `--access public`, et saute ceux déjà présents dans cette version (reprise possible après un échec au milieu). Le script refuse un arbre git non commité et des versions divergentes.
 
+> **Revue npm à la première publication.** Pour un paquet tout neuf, npm ne met pas la version en ligne tout de suite : la page affiche une version de garde `0.0.0-stage` (« Temporary Holding Version ») et la vraie version est « submitted for review and awaiting a staged release ». Pendant ce délai, `npm view` et `npm install` répondent 404, et il ne faut **pas** relancer `npm run release` (la version est déjà soumise). Attends que la page affiche la version réelle avant de poser le tag et de configurer la publication de confiance. Constaté le 19 octobre 2026 sur les quatre paquets.
+
 Ensuite, pose le tag de la version publiée pour que l'historique et le registre coïncident :
 
 ```bash
