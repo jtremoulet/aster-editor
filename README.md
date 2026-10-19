@@ -121,6 +121,7 @@ Inputs : `toolbar`, `theme`, `locale`, `placeholder`, `readonly`, `config` (le r
 ## 📚 Documentation
 
 - [Guide d'intégration](./docs/GUIDE_INTEGRATION.md) : de zéro à la prod, stockage, autosave, Markdown, upload, export Word, modèles de documents, impression, sécurité, i18n, lecture seule, bundle, e2e.
+- [Publication npm](./docs/PUBLICATION.md) : première publication manuelle, releases par tag avec provenance, test d'installation à blanc.
 - [Référence de l'API core](./docs/API_CORE.md) : chaque type du contrat, champ par champ, variables comprises.
 - [Théming](./docs/THEMING.md) : anatomie DOM, variables `--aster-*`, feuilles CSS, puces et panneaux, thème custom.
 - [Cahier des charges](./docs/CAHIER_DES_CHARGES.md), [Architecture](./docs/ARCHITECTURE.md), [Stratégie de tests](./docs/STRATEGIE_TESTS.md).

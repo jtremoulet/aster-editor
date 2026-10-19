@@ -6,15 +6,16 @@
 
 ## 📚 Documents de référence
 
-| Doc                                                          | Rôle                                                               |
-| ------------------------------------------------------------ | ------------------------------------------------------------------ |
-| [`docs/CAHIER_DES_CHARGES.md`](./docs/CAHIER_DES_CHARGES.md) | Périmètre, MoSCoW, critères d'acceptation                          |
-| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)             | Paquets, contrats d'API, pipeline Word, théming, build             |
-| [`docs/STRATEGIE_TESTS.md`](./docs/STRATEGIE_TESTS.md)       | Pyramide de tests, fixtures, seuils de couverture                  |
-| [`docs/ROADMAP_NUIT.md`](./docs/ROADMAP_NUIT.md)             | Phases, vagues d'agents, lots, rituel d'intégration, règle d'arrêt |
-| [`docs/BRIEF_AGENT.md`](./docs/BRIEF_AGENT.md)               | Template de brief pour les sous-agents                             |
-| [`docs/JOURNAL.md`](./docs/JOURNAL.md)                       | Journal de bord horodaté (tenu pendant la nuit)                    |
-| [`docs/REX.md`](./docs/REX.md)                               | Retour d'expérience process : bons points, blocages, métriques     |
+| Doc                                                          | Rôle                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| [`docs/CAHIER_DES_CHARGES.md`](./docs/CAHIER_DES_CHARGES.md) | Périmètre, MoSCoW, critères d'acceptation                              |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)             | Paquets, contrats d'API, pipeline Word, théming, build                 |
+| [`docs/STRATEGIE_TESTS.md`](./docs/STRATEGIE_TESTS.md)       | Pyramide de tests, fixtures, seuils de couverture                      |
+| [`docs/ROADMAP_NUIT.md`](./docs/ROADMAP_NUIT.md)             | Phases, vagues d'agents, lots, rituel d'intégration, règle d'arrêt     |
+| [`docs/BRIEF_AGENT.md`](./docs/BRIEF_AGENT.md)               | Template de brief pour les sous-agents                                 |
+| [`docs/JOURNAL.md`](./docs/JOURNAL.md)                       | Journal de bord horodaté (tenu pendant la nuit)                        |
+| [`docs/REX.md`](./docs/REX.md)                               | Retour d'expérience process : bons points, blocages, métriques         |
+| [`docs/PUBLICATION.md`](./docs/PUBLICATION.md)               | Publication npm : compte, release, workflow de confiance, test à blanc |
 
 ## 🧱 Stack
 

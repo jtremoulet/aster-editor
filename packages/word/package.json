@@ -1,9 +1,33 @@
 {
   "name": "@aster-editor/word",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Import .docx et nettoyage du collage depuis Word et Google Docs pour Aster Editor",
   "license": "MIT",
   "author": "Joris Tremoulet",
+  "keywords": [
+    "aster-editor",
+    "docx",
+    "word",
+    "import",
+    "export",
+    "mammoth",
+    "merge-fields"
+  ],
+  "homepage": "https://github.com/jtremoulet/aster-editor/tree/main/packages/word#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtremoulet/aster-editor.git",
+    "directory": "packages/word"
+  },
+  "bugs": {
+    "url": "https://github.com/jtremoulet/aster-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,7 +54,7 @@
     "jszip": "^3.10.2"
   },
   "peerDependencies": {
-    "@aster-editor/core": ">=0.0.1",
+    "@aster-editor/core": "^0.4.1",
     "@tiptap/core": "^3.31.4"
   }
 }

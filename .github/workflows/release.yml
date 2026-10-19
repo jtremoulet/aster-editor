@@ -1,0 +1,46 @@
+name: Release npm
+
+# Publie les quatre paquets sur npm quand un tag `vX.Y.Z` est poussé.
+# Authentification par publication de confiance npm (OIDC GitHub) : aucun token
+# stocké, provenance signée. À configurer une fois sur npmjs.com pour chaque
+# paquet (voir docs/PUBLICATION.md). Le script refuse un tag ≠ version.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Simulation (npm publish --dry-run)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    name: Check, build, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: >
+          node scripts/release.mjs --skip-build --provenance
+          ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}

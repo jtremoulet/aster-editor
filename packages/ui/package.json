@@ -1,9 +1,31 @@
 {
   "name": "@aster-editor/ui",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Toolbar vanilla et thèmes CSS pour Aster Editor",
   "license": "MIT",
   "author": "Joris Tremoulet",
+  "keywords": [
+    "aster-editor",
+    "toolbar",
+    "themes",
+    "vanilla",
+    "editor-ui"
+  ],
+  "homepage": "https://github.com/jtremoulet/aster-editor/tree/main/packages/ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtremoulet/aster-editor.git",
+    "directory": "packages/ui"
+  },
+  "bugs": {
+    "url": "https://github.com/jtremoulet/aster-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,7 +51,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "@aster-editor/core": ">=0.0.1"
+    "@aster-editor/core": "^0.4.1"
   },
   "dependencies": {
     "@tiptap/suggestion": "3.31.4",

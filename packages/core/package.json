@@ -1,9 +1,32 @@
 {
   "name": "@aster-editor/core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Moteur d'édition riche Aster sur Tiptap 3 / ProseMirror : commandes, extensions, i18n, événements",
   "license": "MIT",
   "author": "Joris Tremoulet",
+  "keywords": [
+    "aster-editor",
+    "rich-text-editor",
+    "wysiwyg",
+    "tiptap",
+    "prosemirror",
+    "editor"
+  ],
+  "homepage": "https://github.com/jtremoulet/aster-editor/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtremoulet/aster-editor.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/jtremoulet/aster-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,20 +48,20 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tiptap/core": "^3.31.4",
-    "@tiptap/extension-highlight": "^3.31.4",
-    "@tiptap/extension-image": "^3.31.4",
-    "@tiptap/extension-link": "^3.31.4",
-    "@tiptap/extension-list": "^3.31.4",
-    "@tiptap/extension-subscript": "^3.31.4",
-    "@tiptap/extension-superscript": "^3.31.4",
-    "@tiptap/extension-table": "^3.31.4",
-    "@tiptap/extension-text-align": "^3.31.4",
-    "@tiptap/extension-text-style": "^3.31.4",
-    "@tiptap/extension-underline": "^3.31.4",
-    "@tiptap/extensions": "^3.31.4",
-    "@tiptap/pm": "^3.31.4",
-    "@tiptap/starter-kit": "^3.31.4",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-highlight": "3.31.4",
+    "@tiptap/extension-image": "3.31.4",
+    "@tiptap/extension-link": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extension-subscript": "3.31.4",
+    "@tiptap/extension-superscript": "3.31.4",
+    "@tiptap/extension-table": "3.31.4",
+    "@tiptap/extension-text-align": "3.31.4",
+    "@tiptap/extension-text-style": "3.31.4",
+    "@tiptap/extension-underline": "3.31.4",
+    "@tiptap/extensions": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
     "@tiptap/suggestion": "3.31.4"
   }
 }

@@ -6,6 +6,24 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-19
+
+Préparation de la publication npm sous le scope `@aster-editor`.
+
+### Added
+
+- Métadonnées de publication dans les quatre paquets (`publishConfig.access: public`, `repository`, `homepage`, `bugs`, `keywords`, `engines`, `LICENSE` embarqué), `@aster-editor/word` déclaré peer optionnel d'`angular`.
+- `scripts/release.mjs` (`npm run release` / `release:dry`) : publication dans l'ordre des dépendances, Angular depuis sa sortie ng-packagr, garde-fous version unique / peers / tag, reprise après échec partiel.
+- `scripts/set-version.mjs` (`npm run version:set`) : version unique et peers `^<version>` réécrits.
+- `scripts/smoke-install.mjs` (`npm run smoke:install`) : installation à blanc des tarballs dans un projet vierge, résolution des `exports`, typecheck et bundle vanilla, composant Angular compilé par `ngc`.
+- Workflow `release.yml` : publication sur tag `v*` par publication de confiance npm (OIDC, provenance), mode simulation manuel.
+- `docs/PUBLICATION.md` : compte, organisation, première publication manuelle, rituel de release, dépannage.
+
+### Changed
+
+- **core** : dépendances Tiptap épinglées en version exacte (`3.31.4`), comme `ui`, pour garantir le lockstep chez les consommateurs.
+- Peer dependencies `@aster-editor/*` passées de `>=0.0.1` à `^0.4.1`.
+
 ## [0.4.0] - 2026-10-16
 
 Modèles de documents et champs de fusion : variables de bout en bout (éditeur, import et export Word, Angular), fidélité Word à l'export, parité d'usage (bulles, menu `/`, sommaire, format painter), 5 revues adverses et leurs correctifs.
