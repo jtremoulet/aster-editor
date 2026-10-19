@@ -190,7 +190,7 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 2. **Imposer des tests d'intégration réels dans les briefs de correctifs** (vrai core, vrai `keydown`) : les deux bugs « Entrée coupe le paragraphe » (menu `{{`, menu `/`) étaient invisibles dans 60 tests sur mock.
 3. **Un même bug dans deux composants jumeaux** (`registerPlugin` sans ordre) : quand un correctif touche un pattern, grep les autres usages du pattern avant de clore (fait a posteriori ici par l'agent e2e).
 4. **Chaque relecteur reçoit la liste des fichiers qu'un autre agent modifie en ce moment** et un périmètre de lecture : aucune revue n'a été polluée par du code en cours.
-5. **Épingler les dépendances d'un écosystème en lockstep** (Tiptap) en version exacte, et vérifier l'absence de copies imbriquées après chaque `npm install`.
+5. **Garantir le lockstep d'un écosystème** (Tiptap) par le lockfile, et vérifier l'absence de copies imbriquées après chaque `npm install`. Correction du 19/10 : l'épinglage **exact** dans les paquets publiés (0.4.1) était une erreur, il multipliait les copies de `@tiptap/core` chez les consommateurs ; les intervalles publiés restent en caret, c'est le test d'installation à blanc qui garde le compte des copies.
 
 ## 🧱 Frictions nouvelles
 

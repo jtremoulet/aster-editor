@@ -1,6 +1,6 @@
 {
   "name": "aster-editor",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "Éditeur de texte riche MIT, framework-agnostic, avec wrapper Angular et import Word",
   "license": "MIT",

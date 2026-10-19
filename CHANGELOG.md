@@ -6,6 +6,13 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-19
+
+### Fixed
+
+- **core, ui** : les dépendances Tiptap repassent en intervalles caret (`^3.31.4`). L'épinglage exact de la 0.4.1 faisait installer jusqu'à quatre copies de `@tiptap/core` chez un consommateur (Tiptap résout ses propres dépendances en caret vers 3.32), donc des plugins ProseMirror dupliqués. Le lockstep se garantit par le lockfile du monorepo, pas par les intervalles publiés.
+- `smoke:install` vérifie désormais qu'une seule copie physique de `@tiptap/core` est installée.
+
 ## [0.4.1] - 2026-10-19
 
 Préparation de la publication npm sous le scope `@aster-editor`.

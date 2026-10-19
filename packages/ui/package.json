@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/ui",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Toolbar vanilla et thèmes CSS pour Aster Editor",
   "license": "MIT",
   "author": "Joris Tremoulet",
@@ -51,11 +51,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "peerDependencies": {
-    "@aster-editor/core": "^0.4.1"
+    "@aster-editor/core": "^0.4.2"
   },
   "dependencies": {
-    "@tiptap/suggestion": "3.31.4",
-    "@tiptap/pm": "3.31.4",
+    "@tiptap/suggestion": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
     "@floating-ui/dom": "^1.8.0"
   }
 }

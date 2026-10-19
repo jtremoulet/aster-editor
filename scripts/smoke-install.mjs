@@ -87,6 +87,33 @@ run(
   app,
 );
 
+// 2b. Une seule copie physique de @tiptap/core : un épinglage trop strict dans nos paquets
+// en ferait installer plusieurs (plugins ProseMirror dupliqués chez le client).
+writeFileSync(
+  join(app, 'tiptap-copies.mjs'),
+  `import { readdirSync } from 'node:fs';
+const walk = (dir, out) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === '.bin') continue;
+    const path = dir + '/' + entry.name;
+    if (path.endsWith('@tiptap/core')) out.push(path);
+    else walk(path, out);
+  }
+  return out;
+};
+console.log(JSON.stringify(walk('node_modules', [])));
+`,
+);
+const tiptapCopies = JSON.parse(capture('node tiptap-copies.mjs', app));
+if (tiptapCopies.length !== 1) {
+  console.error(
+    `✖ ${tiptapCopies.length} copies de @tiptap/core installées au lieu de 1 (intervalles trop stricts ?) :`,
+    tiptapCopies,
+  );
+  process.exit(1);
+}
+console.log('✔ une seule copie de @tiptap/core');
+
 // 3. Résolution des sous-chemins (exports) depuis Node.
 const probe = `
 import { createRequire } from 'node:module';
