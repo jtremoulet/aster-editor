@@ -54,16 +54,21 @@ git tag v0.4.1 && git push origin v0.4.1
 
 ### Configurer la publication de confiance (une fois par paquet)
 
-Sur npmjs.com, pour chacun des quatre paquets : page du paquet → _Settings_ → _Trusted Publisher_ → _GitHub Actions_ :
+À faire **juste avant la première release par la CI** : une configuration qui n'a pas servi à une publication réussie dans les **2 jours** expire et doit être recréée. Sur npmjs.com, pour chacun des quatre paquets : page du paquet → onglet _Settings_ → section _Trusted Publisher_ → _Select your publisher_ → **GitHub Actions**, puis :
 
-| Champ             | Valeur         |
-| ----------------- | -------------- |
-| Organization      | `jtremoulet`   |
-| Repository        | `aster-editor` |
-| Workflow filename | `release.yml`  |
-| Environment       | _(vide)_       |
+| Champ                | Valeur                                           |
+| -------------------- | ------------------------------------------------ |
+| Organization or user |                                                  |
+| Repository           |                                                  |
+| Workflow filename    | (le nom seul, le fichier est dans )              |
+| Environment name     | _(vide)_                                         |
+| Allowed actions      | cocher **npm publish** (sinon seul est autorisé) |
 
-À partir de là, le workflow s'authentifie par OIDC (`id-token: write`) : aucun `NPM_TOKEN` à stocker dans les secrets du dépôt, et chaque version porte une **attestation de provenance** visible sur sa page npm. En attendant que ce soit configuré, le job `Publish` échouera avec `ENEEDAUTH` : c'est le signal que l'étape ci-dessus manque.
+Enregistre. npm ne vérifie rien à la sauvegarde : une erreur de saisie n'apparaît qu'à la publication suivante, et une connexion existante ne se modifie pas, elle se supprime et se recrée. Le des doit correspondre exactement au dépôt : c'est déjà le cas.
+
+Dans la foulée, onglet _Settings_ → _Publishing access_ → choisir l'option qui **exige la 2FA et interdit les tokens**, puis _Update Package Settings_ : plus personne ne peut publier avec un token volé, seule la CI (OIDC) et toi avec ta 2FA.
+
+À partir de là, le workflow s'authentifie par OIDC () : aucun à stocker dans les secrets du dépôt, et chaque version publiée depuis le dépôt public porte une **attestation de provenance** générée automatiquement. Prérequis déjà remplis par : npm ≥ 11.5.1 et Node ≥ 22.14 (Node 24), runner hébergé par GitHub. En attendant que ce soit configuré, le job échoue avec : c'est le signal que l'étape ci-dessus manque.
 
 ### Rituel de release
 
