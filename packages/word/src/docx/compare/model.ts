@@ -52,14 +52,29 @@ export interface NoteModel {
   readonly text: string;
 }
 
+/**
+ * Champ de fusion d'un paragraphe : vrai `MERGEFIELD` ou `{{nom}}` écrit en clair. Le nom
+ * brut distingue `MERGEFIELD "Nom Client"`, `nom_client` et `"NOM CLIENT"`, trois colonnes
+ * de source de données (R30-04) ; le nom normalisé ne sert que face à un `{{}}` littéral,
+ * celui qu'Aster écrit à l'import.
+ */
+export interface FieldModel {
+  /** Nom brut : celui de l'instruction (guillemets retirés) ou l'intérieur du `{{}}`, blancs rognés. */
+  readonly raw: string;
+  /** Nom de variable normalisé comme à l'import (`Nom Client` → `nom_client`). */
+  readonly name: string;
+  /** Vrai pour un `{{nom}}` en clair, faux pour un champ `MERGEFIELD` (simple ou complexe). */
+  readonly literal: boolean;
+}
+
 export interface ParagraphModel {
   readonly kind: 'paragraph';
   /** Texte tel que Word l'affiche : résultat des champs, tabulations et sauts de ligne compris. */
   readonly text: string;
-  /** Texte canonique : chaque champ de fusion remplacé par `{{nom}}`, pour l'alignement et l'équivalence. */
+  /** Texte canonique : chaque champ de fusion remplacé par `{{nom}}` normalisé, pour l'alignement et l'équivalence. */
   readonly placeholderText: string;
-  /** Noms des champs de fusion dans l'ordre, `MERGEFIELD` et `{{nom}}` en clair confondus. */
-  readonly fields: readonly string[];
+  /** Champs de fusion dans l'ordre, `MERGEFIELD` et `{{nom}}` en clair distingués par `literal`. */
+  readonly fields: readonly FieldModel[];
   readonly props: ResolvedParagraphProps;
   /** Format résolu du niveau de liste (`decimal|%1.|1`), `undefined` sans numérotation connue. */
   readonly listFormat?: string;
@@ -216,9 +231,26 @@ function readCell(tc: Element, ctx: ModelContext, cell: CellContext): CellModel 
   };
 }
 
+/**
+ * Enfants nommés d'un conteneur de tableau, `w:sdt`/`w:sdtContent` et `w:customXml`
+ * aplatis (R30-08) : une ligne ou une cellule sous un contrôle de contenu (section
+ * répétée, cellule contrôlée) est une ligne ou une cellule comme les autres pour Word.
+ */
+function tableChildren(parent: Element, name: 'tr' | 'tc'): Element[] {
+  const out: Element[] = [];
+  for (const child of Array.from(parent.children)) {
+    if (child.localName === name) out.push(child);
+    else if (child.localName === 'sdt') {
+      const content = childNamed(child, 'sdtContent');
+      if (content) out.push(...tableChildren(content, name));
+    } else if (child.localName === 'customXml') out.push(...tableChildren(child, name));
+  }
+  return out;
+}
+
 /** Nombre de colonnes de grille d'une ligne : somme des `gridSpan`. */
 function rowSpan(tr: Element): number {
-  return childrenNamed(tr, 'tc').reduce((sum, tc) => {
+  return tableChildren(tr, 'tc').reduce((sum, tc) => {
     const tcPr = childNamed(tc, 'tcPr');
     return (
       sum + Math.max(1, numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1)
@@ -241,11 +273,12 @@ function readTable(tbl: Element, ctx: ModelContext): TableModel {
         .map((col) => numericAttribute(col, 'w'))
         .filter((w): w is number => w !== undefined)
     : [];
-  const trs = childrenNamed(tbl, 'tr');
-  const columns = Math.max(gridTwips.length, ...trs.map(rowSpan));
+  const trs = tableChildren(tbl, 'tr');
+  // Boucle plutôt que `Math.max(...spread)` : au-delà de ≈ 125 000 lignes, la pile d'appels débordait (R30-07).
+  const columns = trs.reduce((max, tr) => Math.max(max, rowSpan(tr)), gridTwips.length);
   const rows = trs.map((tr, r) => {
     let gridStart = 0;
-    return childrenNamed(tr, 'tc').map((tc) => {
+    return tableChildren(tr, 'tc').map((tc) => {
       const tcPr = childNamed(tc, 'tcPr');
       const colspan = Math.max(
         1,

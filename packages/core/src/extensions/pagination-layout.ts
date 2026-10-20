@@ -86,9 +86,12 @@ function sanitizeHeight(value: number | undefined): number {
  *   page existe toujours, une coupure forcée en tête ne crée pas de page vide avant elle.
  *
  * Règles : un bloc qui dépasserait la page passe entier à la suivante, sauf s'il est le
- * premier de sa page (il la déborde alors, seul). Une coupure forcée remet le compteur
- * à zéro même si la page courante est vide (deux sauts consécutifs = une page vide,
- * comme Word). `pageHeight` nulle, négative ou infinie : une seule page, aucune coupure.
+ * premier de sa page (il la déborde alors, seul). Un bloc de hauteur nulle (saut de page
+ * explicite, remplacé visuellement par la coupure, R30-01) n'ouvre jamais de page à lui
+ * seul, même après un bloc qui déborde : il reste sur la page courante et la coupure
+ * forcée qui le suit fait le travail. Une coupure forcée remet le compteur à zéro même
+ * si la page courante est vide (deux sauts consécutifs = une page vide, comme Word).
+ * `pageHeight` nulle, négative ou infinie : une seule page, aucune coupure.
  */
 export function paginate(
   heights: readonly number[],
@@ -105,7 +108,7 @@ export function paginate(
   for (let index = 0; index < heights.length; index += 1) {
     const height = sanitizeHeight(heights[index]);
     const forcedHere = index > 0 && forced.has(index);
-    const overflows = used > 0 && used + height > pageHeight + HEIGHT_EPSILON;
+    const overflows = used > 0 && height > 0 && used + height > pageHeight + HEIGHT_EPSILON;
     if (forcedHere || overflows) {
       page += 1;
       gaps.push({ index, page, fill: Math.max(0, pageHeight - used) });

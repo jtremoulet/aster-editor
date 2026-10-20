@@ -325,6 +325,16 @@
 
 /* Impression de la page hôte : la coupure devient un vrai saut de page, sans bande ni libellé. */
 @media print {
+  /*
+   * La feuille n'est plus étirée à N pages (R30-02) : la règle écran ci-dessus (0,3,0, sans
+   * média) vient après le `min-height: 0` de `print.css`, même sélecteur, même spécificité,
+   * et l'emportait à l'impression : N pages pleines en plus des `break-before` des coupures,
+   * d'où une page blanche finale. Répétée ici, après elle, pour gagner la cascade.
+   */
+  .aster--page-view .aster-content .ProseMirror {
+    min-height: 0;
+  }
+
   .aster--page-view .aster-content .ProseMirror .aster-page-gap {
     height: 0;
     margin: 0;

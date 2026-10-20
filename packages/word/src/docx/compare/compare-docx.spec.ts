@@ -1,7 +1,11 @@
+import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { buildDocx, run, W_NS } from '../preprocess/minimal-docx';
 import { relsXml, stylesXml } from '../reader/test-support';
 import { compareDocx } from './compare-docx';
+import { compareTable } from './compare-tables';
+import type { TableModel } from './model';
+import { Tally } from './tally';
 import type { FidelityProperty, FidelityReport } from './types';
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -633,5 +637,155 @@ describe('compareDocx — score pondéré', () => {
   it('rejette une entrée qui n’est ni tampon ni fichier', async () => {
     const buffer = await buildDocx(p('x'));
     await expect(compareDocx(buffer, 'nope' as unknown as ArrayBuffer)).rejects.toThrow(/résultat/);
+  });
+});
+
+describe('compareDocx — findings R30 (F30)', () => {
+  const field = (name: string, result: string): string =>
+    '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+    `<w:r><w:instrText xml:space="preserve"> MERGEFIELD ${name} </w:instrText></w:r>` +
+    '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+    `<w:r><w:t>${result}</w:t></w:r>` +
+    '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+
+  it('R30-04 : « Nom Client », nom_client et « NOM CLIENT » sont trois champs distincts', async () => {
+    const a = await buildDocx(
+      `<w:p>${run('Bonjour ')}${field('"Nom Client"', '«Nom Client»')}</w:p>`,
+    );
+    const b = await buildDocx(
+      `<w:p>${run('Bonjour ')}${field('nom_client', '«nom_client»')}</w:p>`,
+    );
+    const c = await buildDocx(
+      `<w:p>${run('Bonjour ')}${field('"NOM CLIENT"', '«NOM CLIENT»')}</w:p>`,
+    );
+    for (const [other, actual] of [
+      [b, 'nom_client'],
+      [c, 'NOM CLIENT'],
+    ] as const) {
+      const report = await compareDocx(a, other);
+      expect(report.score).toBeLessThan(1);
+      expect(property(report, 'field.mergeField')).toMatchObject({ total: 1, kept: 0 });
+      expect(property(report, 'field.mergeField').examples).toEqual([
+        { where: 'paragraphe 1', expected: '["Nom Client"]', actual: `["${actual}"]` },
+      ]);
+      expect(property(report, 'paragraph.text')).toMatchObject({ total: 1, kept: 0 });
+      expect(property(report, 'paragraph.text').examples[0]).toEqual({
+        where: 'paragraphe 1',
+        expected: 'Bonjour «Nom Client»',
+        actual: `Bonjour «${actual}»`,
+      });
+    }
+    // Le même champ, même nom brut : rien de perdu. Un `{{nom_client}}` en clair (ce
+    // qu'Aster écrit à l'import) vaut toujours le champ : nom normalisé face au littéral.
+    expect((await compareDocx(a, a.slice(0))).score).toBe(1);
+    const literal = await compareDocx(a, await buildDocx(p('Bonjour {{nom_client}}')));
+    expect(literal.score).toBe(1);
+    expect(property(literal, 'field.mergeField')).toMatchObject({ total: 1, kept: 1 });
+    expect(property(literal, 'paragraph.text')).toMatchObject({ total: 1, kept: 1 });
+    // Deux littéraux aux noms bruts différents : perte, comme deux vrais champs.
+    const literals = await compareDocx(
+      await buildDocx(p('Bonjour {{Nom Client}}')),
+      await buildDocx(p('Bonjour {{nom_client}}')),
+    );
+    expect(property(literals, 'field.mergeField')).toMatchObject({ total: 1, kept: 0 });
+    expect(property(literals, 'paragraph.text')).toMatchObject({ total: 1, kept: 0 });
+  });
+
+  it('R30-04 : en-tête, un champ renommé est une perte, un {{nom}} en clair de même nom non', async () => {
+    const header = (body: string): Record<string, string> => ({
+      'word/header1.xml': `<w:hdr xmlns:w="${W_NS}"><w:p>${body}</w:p></w:hdr>`,
+      'word/_rels/document.xml.rels': relsXml({ rId1: [`${REL}/header`, 'header1.xml'] }),
+    });
+    const section = `${p('corps')}<w:sectPr><w:headerReference w:type="default" r:id="rId1" xmlns:r="${R_NS}"/></w:sectPr>`;
+    const a = await buildDocx(
+      section,
+      header(run('Client ') + field('"Nom Client"', '«Nom Client»')),
+    );
+    const renamed = await compareDocx(
+      a,
+      await buildDocx(section, header(run('Client ') + field('nom_client', '«nom_client»'))),
+    );
+    expect(property(renamed, 'header.default.text')).toMatchObject({ total: 1, kept: 0 });
+    const literal = await compareDocx(
+      a,
+      await buildDocx(section, header(run('Client {{nom_client}}'))),
+    );
+    expect(property(literal, 'header.default.text')).toMatchObject({ total: 1, kept: 1 });
+  });
+
+  it('R30-08 : ligne et cellule sous w:sdt comparées comme les autres, gras compris', async () => {
+    const cell = (text: string, rPr = ''): string =>
+      `<w:tc><w:p><w:r>${rPr}<w:t>${text}</w:t></w:r></w:p></w:tc>`;
+    const grid = '<w:tblGrid><w:gridCol w:w="100"/></w:tblGrid>';
+    const sdtRow = await buildDocx(
+      `<w:tbl>${grid}<w:tr>${cell('un')}</w:tr><w:sdt><w:sdtContent><w:tr>${cell('deux', '<w:rPr><w:b/></w:rPr>')}</w:tr></w:sdtContent></w:sdt></w:tbl>`,
+    );
+    const plain = await buildDocx(
+      `<w:tbl>${grid}<w:tr>${cell('un')}</w:tr><w:tr>${cell('deux')}</w:tr></w:tbl>`,
+    );
+    const report = await compareDocx(sdtRow, plain);
+    expect(property(report, 'table.rows')).toMatchObject({ total: 1, kept: 1 });
+    expect(property(report, 'run.bold')).toMatchObject({ total: 1, kept: 0 });
+    expect(property(report, 'run.bold').examples[0]?.where).toBe(
+      'tableau 1 cellule (2,1) paragraphe 1 run « deux »',
+    );
+
+    const sdtCell = await buildDocx(
+      `<w:tbl>${grid}<w:tr>${cell('un')}<w:sdt><w:sdtContent>${cell('deux')}</w:sdtContent></w:sdt></w:tr></w:tbl>`,
+    );
+    const twoCells = await buildDocx(
+      `<w:tbl>${grid}<w:tr>${cell('un')}${cell('deux')}</w:tr></w:tbl>`,
+    );
+    const cells = await compareDocx(sdtCell, twoCells);
+    expect(cells.score).toBe(1);
+    expect(property(cells, 'table.columns')).toMatchObject({ total: 1, kept: 1 });
+  });
+
+  it('R30-09 : comptes égaux mais un bloc retiré et un ajouté, les trois communs restent appariés', async () => {
+    const a = await buildDocx(p('A') + p('B') + p('C') + p('D'));
+    const shifted = await compareDocx(a, await buildDocx(p('B') + p('C') + p('D') + p('E')));
+    expect(property(shifted, 'paragraph.text')).toMatchObject({ total: 5, kept: 3 });
+    expect(property(shifted, 'paragraph.style')).toMatchObject({ total: 4, kept: 3 });
+    // (3 × 3/5 + 2 × 3/4 + 2 + 2) / 9 — contre 0,667 avec l'alignement par position.
+    expect(shifted.score).toBe(0.811);
+    const removed = await compareDocx(a, await buildDocx(p('B') + p('C') + p('D')));
+    expect(removed.score).toBe(0.861);
+    expect(shifted.score).toBeLessThan(removed.score);
+    // Un paragraphe modifié à compte égal reste apparié par position (trou de même taille).
+    const modified = await compareDocx(a, await buildDocx(p('A') + p('B2') + p('C') + p('D')));
+    expect(property(modified, 'paragraph.text')).toMatchObject({ total: 4, kept: 3 });
+    expect(property(modified, 'paragraph.style')).toMatchObject({ total: 4, kept: 4 });
+  });
+
+  it('R30-07 : compareTable sur 130 000 lignes ne fait pas déborder la pile', () => {
+    const rows = Array.from({ length: 130_000 }, () => [{ colspan: 1, blocks: [] }]);
+    const table: TableModel = {
+      kind: 'table',
+      text: '',
+      placeholderText: '',
+      columnWidthsPt: [],
+      rows,
+    };
+    const tally = new Tally();
+    compareTable(table, table, 't', { tally, ignoreRevisionIds: true }, () => {});
+    const columns = tally.properties().find((item) => item.name === 'table.columns');
+    expect(columns).toMatchObject({ total: 1, kept: 1 });
+    expect(columns?.examples).toEqual([]);
+  });
+
+  it('R30-12 : zip sans document.xml et octets aléatoires rejettent en DocxImportError invalid-docx', async () => {
+    const good = await buildDocx(p('x'));
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', '<Types/>');
+    zip.file('_rels/.rels', '<Relationships/>');
+    const noMain = await zip.generateAsync({ type: 'uint8array' });
+    const rejection = expect(compareDocx(good, noMain)).rejects;
+    await rejection.toHaveProperty('name', 'DocxImportError');
+    await rejection.toThrow(/^invalid-docx: le résultat : /);
+
+    const random = new Uint8Array(2000).fill(7);
+    const original = expect(compareDocx(random, good)).rejects;
+    await original.toHaveProperty('name', 'DocxImportError');
+    await original.toThrow(/^invalid-docx: l'original : /);
   });
 });

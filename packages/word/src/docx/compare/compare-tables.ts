@@ -78,8 +78,16 @@ export function compareTable(
   ctx: CompareContext,
   compareBlocks: BlockComparer,
 ): void {
+  // Boucle plutôt que `Math.max(...spread)` : au-delà de ≈ 125 000 lignes, la pile d'appels débordait (R30-07).
   const columns = (table: TableModel): number =>
-    Math.max(0, ...table.rows.map((row) => row.reduce((sum, cell) => sum + cell.colspan, 0)));
+    table.rows.reduce(
+      (max, row) =>
+        Math.max(
+          max,
+          row.reduce((sum, cell) => sum + cell.colspan, 0),
+        ),
+      0,
+    );
   const present = b !== undefined;
   ctx.tally.record(
     'table',

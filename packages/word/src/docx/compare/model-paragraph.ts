@@ -1,9 +1,15 @@
 import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { mergeFieldName } from '../preprocess/fields';
 import { toVariableName } from '../preprocess/names';
 import type { ResolvedRunProps } from '../reader/types';
 import { emuToPx } from '../reader/units';
-import type { ImageModel, ModelContext, NoteModel, ParagraphModel, RunModel } from './model';
+import type {
+  FieldModel,
+  ImageModel,
+  ModelContext,
+  NoteModel,
+  ParagraphModel,
+  RunModel,
+} from './model';
 
 /**
  * Lecture d'un `w:p` en paragraphes comparables. Trois choix de modélisation, décidés en
@@ -14,7 +20,9 @@ import type { ImageModel, ModelContext, NoteModel, ParagraphModel, RunModel } fr
  * - un champ `MERGEFIELD` (simple ou complexe) est modélisé par son nom et son résultat :
  *   le texte du paragraphe inclut le résultat tel que Word l'affiche (`«Nom»`), le texte
  *   canonique (`placeholderText`) et les runs portent `{{Nom}}`, de sorte qu'un `{{Nom}}`
- *   écrit en clair (représentation d'Aster en mode placeholders) vaille le champ ;
+ *   écrit en clair (représentation d'Aster en mode placeholders) vaille le champ ; le nom
+ *   **brut** de l'instruction est conservé dans `fields` (R30-04) : deux vrais champs ne
+ *   sont égaux que par leur nom brut, la normalisation ne vaut que face à un `{{}}` en clair ;
  * - les runs voisins de mêmes propriétés résolues sont fusionnés ; le run `{{nom}}` d'un
  *   champ prend les propriétés du premier run de son résultat et fusionne comme les autres.
  */
@@ -26,9 +34,15 @@ interface OpenField {
   capturing: boolean;
 }
 
+/** Nom brut et nom normalisé d'une instruction `MERGEFIELD`. */
+interface MergeFieldName {
+  readonly raw: string;
+  readonly name: string;
+}
+
 /** Capture en cours du résultat d'un champ de fusion : bornes dans le segment courant. */
 interface MergeCapture {
-  readonly name: string;
+  readonly field: MergeFieldName;
   readonly runStart: number;
   readonly textStart: number;
   readonly props: ResolvedRunProps;
@@ -48,13 +62,38 @@ interface Segment {
   readonly runs: MutableRun[];
   readonly images: ImageModel[];
   readonly notes: NoteModel[];
+  /** Vrais champs `MERGEFIELD`, par position de leur `{{nom}}` dans `placeholderText`. */
+  readonly mergeFields: Map<number, MergeFieldName>;
 }
 
 /** `{{nom}}`, blancs intérieurs tolérés, pour lister les champs du texte canonique. */
 const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/g;
 
+/**
+ * Instruction `MERGEFIELD nom` ou `MERGEFIELD "nom composé"`, options (`\* MERGEFORMAT`)
+ * ignorées : même lecture que `preprocess/fields.ts` (`parseMergeField`, non exporté).
+ */
+const MERGEFIELD_INSTR = /^\s*MERGEFIELD\s+(?:"([^"]*)"|(\S+))/iu;
+
+/** Nom brut et normalisé d'une instruction `MERGEFIELD`, `null` pour toute autre instruction. */
+function parseMergeField(instruction: string): MergeFieldName | null {
+  const match = MERGEFIELD_INSTR.exec(instruction);
+  if (!match) return null;
+  const raw = (match[1] ?? match[2] ?? '').trim();
+  const name = toVariableName(raw);
+  return name === null ? null : { raw, name };
+}
+
 function newSegment(): Segment {
-  return { text: '', placeholderText: '', pageBreakAfter: false, runs: [], images: [], notes: [] };
+  return {
+    text: '',
+    placeholderText: '',
+    pageBreakAfter: false,
+    runs: [],
+    images: [],
+    notes: [],
+    mergeFields: new Map(),
+  };
 }
 
 function readImage(element: Element): ImageModel | null {
@@ -79,18 +118,28 @@ function runKey(props: ResolvedRunProps): string {
 }
 
 /**
- * Noms des champs de fusion d'un texte canonique, dans l'ordre (`{{a}} … {{b}}` → `[a, b]`),
- * normalisés comme les noms de variables de l'import (`Numero Facture` → `numero_facture`),
- * pour qu'un `MERGEFIELD` et le `{{nom}}` qu'Aster en écrit portent le même nom.
+ * Champs de fusion d'un texte canonique, dans l'ordre (`{{a}} … {{b}}` → `[a, b]`). Un
+ * `{{nom}}` qui commence à une position enregistrée dans `mergeFields` est un vrai champ
+ * (nom brut de l'instruction) ; tout autre est un `{{}}` en clair, dont le nom brut est
+ * l'intérieur des accolades et le nom normalisé celui des variables de l'import
+ * (`Numero Facture` → `numero_facture`), pour qu'il vaille le `MERGEFIELD` dont Aster l'a écrit.
  */
-export function placeholderNames(placeholderText: string): string[] {
-  const names: string[] = [];
+export function placeholderFields(
+  placeholderText: string,
+  mergeFields: ReadonlyMap<number, MergeFieldName> = new Map(),
+): FieldModel[] {
+  const fields: FieldModel[] = [];
   for (const match of placeholderText.matchAll(PLACEHOLDER)) {
+    const field = mergeFields.get(match.index);
+    if (field) {
+      fields.push({ raw: field.raw, name: field.name, literal: false });
+      continue;
+    }
     const raw = match[1] ?? '';
     if (raw === '') continue;
-    names.push(toVariableName(raw) ?? raw);
+    fields.push({ raw, name: toVariableName(raw) ?? raw, literal: true });
   }
-  return names;
+  return fields;
 }
 
 /** Vrai pour un segment sans contenu visible (texte, image, note). */
@@ -126,9 +175,9 @@ export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] 
     breakRun = false;
   };
 
-  const startCapture = (name: string, runProps: ResolvedRunProps): void => {
+  const startCapture = (field: MergeFieldName, runProps: ResolvedRunProps): void => {
     capture = {
-      name,
+      field,
       runStart: current.runs.length,
       textStart: current.text.length,
       props: runProps,
@@ -146,11 +195,12 @@ export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] 
     const first = current.runs[capture.runStart];
     const runProps = first?.props ?? capture.props;
     current.runs.splice(capture.runStart);
-    const placeholder = `{{${capture.name}}}`;
+    const placeholder = `{{${capture.field.name}}}`;
     const key = runKey(runProps);
     const last = current.runs[current.runs.length - 1];
     if (last && last.key === key) last.text += placeholder;
     else current.runs.push({ text: placeholder, props: runProps, key });
+    current.mergeFields.set(current.placeholderText.length, capture.field);
     current.placeholderText += placeholder;
     capture = undefined;
     breakRun = false;
@@ -170,10 +220,10 @@ export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] 
       openFields.push({ instruction: '', inResult: false, capturing: false });
     } else if (type === 'separate' && top) {
       top.inResult = true;
-      const name = mergeFieldName(top.instruction);
-      if (name !== null && !capture) {
+      const field = parseMergeField(top.instruction);
+      if (field !== null && !capture) {
         top.capturing = true;
-        startCapture(name, runProps);
+        startCapture(field, runProps);
       }
     } else if (type === 'end' && top) {
       openFields.pop();
@@ -181,9 +231,9 @@ export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] 
         endCapture();
       } else if (!top.inResult) {
         // Champ sans `separate` (jamais mis à jour) : Word n'affiche rien, le nom compte.
-        const name = mergeFieldName(top.instruction);
-        if (name !== null && !capture) {
-          startCapture(name, runProps);
+        const field = parseMergeField(top.instruction);
+        if (field !== null && !capture) {
+          startCapture(field, runProps);
           endCapture();
         }
       }
@@ -269,9 +319,9 @@ export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] 
           break;
         }
         case 'fldSimple': {
-          const name = mergeFieldName(wordAttribute(child, 'instr'));
-          if (name !== null && !capture && !inInstruction()) {
-            startCapture(name, ctx.styles.run(null, props));
+          const field = parseMergeField(wordAttribute(child, 'instr'));
+          if (field !== null && !capture && !inInstruction()) {
+            startCapture(field, ctx.styles.run(null, props));
             walk(child);
             endCapture();
           } else {
@@ -303,7 +353,7 @@ export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] 
     kind: 'paragraph',
     text: segment.text,
     placeholderText: segment.placeholderText,
-    fields: placeholderNames(segment.placeholderText),
+    fields: placeholderFields(segment.placeholderText, segment.mergeFields),
     props,
     ...(level ? { listFormat: `${level.format}|${level.text}|${String(level.start)}` } : {}),
     ...(segment.pageBreakAfter ? { pageBreakAfter: true as const } : {}),

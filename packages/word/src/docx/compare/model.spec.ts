@@ -10,7 +10,7 @@ import {
   type ParagraphModel,
   type TableModel,
 } from './model';
-import { placeholderNames } from './model-paragraph';
+import { placeholderFields } from './model-paragraph';
 
 /** Modèle comparable d'un corps `document.xml` (fragments XML Word), styles facultatifs. */
 async function modelOf(body: string, styles?: string): Promise<DocumentModel> {
@@ -90,9 +90,13 @@ describe('model — champs de fusion', () => {
   it('fldSimple : texte affiché avec le résultat, texte canonique et noms en {{nom}}', async () => {
     const [p] = paragraphs(await modelOf(simple));
     expect(p?.text).toBe('Bonjour «Nom», facture «Numero Facture»');
-    // Le nom composé est normalisé comme le fait l'import (`{{numero_facture}}`).
+    // Le nom composé est normalisé comme le fait l'import (`{{numero_facture}}`)…
     expect(p?.placeholderText).toBe('Bonjour {{Nom}}, facture {{numero_facture}}');
-    expect(p?.fields).toEqual(['Nom', 'numero_facture']);
+    // … mais le champ garde son nom brut (R30-04).
+    expect(p?.fields).toEqual([
+      { raw: 'Nom', name: 'Nom', literal: false },
+      { raw: 'Numero Facture', name: 'numero_facture', literal: false },
+    ]);
   });
 
   it('les runs d’un champ sont repliés en {{nom}} et fusionnent avec leurs voisins de mêmes propriétés', async () => {
@@ -124,7 +128,7 @@ describe('model — champs de fusion', () => {
     const [p] = paragraphs(await modelOf(complex));
     expect(p?.text).toBe('Échéance : «DateEcheance».');
     expect(p?.placeholderText).toBe('Échéance : {{DateEcheance}}.');
-    expect(p?.fields).toEqual(['DateEcheance']);
+    expect(p?.fields).toEqual([{ raw: 'DateEcheance', name: 'DateEcheance', literal: false }]);
     expect(p?.runs.map((r) => r.text)).toEqual(['Échéance : ', '{{DateEcheance}}', '.']);
     expect(p?.runs[1]?.props).toMatchObject({ fontSizePt: 8 });
     expect(p?.runs[1]?.props.highlight).toBeUndefined();
@@ -138,19 +142,40 @@ describe('model — champs de fusion', () => {
     const [p] = paragraphs(await modelOf(body));
     expect(p?.text).toBe('');
     expect(p?.placeholderText).toBe('{{Signataire}}');
-    expect(p?.fields).toEqual(['Signataire']);
+    expect(p?.fields).toEqual([{ raw: 'Signataire', name: 'Signataire', literal: false }]);
   });
 
-  it('un {{nom}} en clair est un champ de même nom ; les autres champs ne comptent pas', async () => {
+  it('un {{nom}} en clair est un champ littéral de même nom normalisé ; les autres champs ne comptent pas', async () => {
     const body = `<w:p>${run('Page ')}<w:fldSimple w:instr=" PAGE "><w:r><w:t>3</w:t></w:r></w:fldSimple>${run(' pour {{ client }}')}</w:p>`;
     const [p] = paragraphs(await modelOf(body));
     expect(p?.text).toBe('Page 3 pour {{ client }}');
-    expect(p?.fields).toEqual(['client']);
-    expect(placeholderNames('{{a}} x {{ b }} {{}} {{Nom Client}}')).toEqual([
-      'a',
-      'b',
-      'nom_client',
+    expect(p?.fields).toEqual([{ raw: 'client', name: 'client', literal: true }]);
+    expect(placeholderFields('{{a}} x {{ b }} {{}} {{Nom Client}}')).toEqual([
+      { raw: 'a', name: 'a', literal: true },
+      { raw: 'b', name: 'b', literal: true },
+      { raw: 'Nom Client', name: 'nom_client', literal: true },
     ]);
+  });
+
+  it('R30-04 : trois MERGEFIELD aux noms bruts distincts restent distincts, même nom normalisé', async () => {
+    const field = (name: string, result: string): string =>
+      '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+      `<w:r><w:instrText xml:space="preserve"> MERGEFIELD ${name} </w:instrText></w:r>` +
+      '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+      `<w:r><w:t>${result}</w:t></w:r>` +
+      '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+    const raws: string[] = [];
+    for (const [name, result] of [
+      ['"Nom Client"', '«Nom Client»'],
+      ['nom_client', '«nom_client»'],
+      ['"NOM CLIENT"', '«NOM CLIENT»'],
+    ] as const) {
+      const [p] = paragraphs(await modelOf(`<w:p>${run('Bonjour ')}${field(name, result)}</w:p>`));
+      expect(p?.placeholderText).toBe('Bonjour {{nom_client}}');
+      expect(p?.fields.map((f) => [f.name, f.literal])).toEqual([['nom_client', false]]);
+      raws.push(p?.fields[0]?.raw ?? '');
+    }
+    expect(raws).toEqual(['Nom Client', 'nom_client', 'NOM CLIENT']);
   });
 
   it('le texte d’un tableau porte aussi sa forme canonique', async () => {
@@ -252,4 +277,37 @@ describe('model — bordures et largeurs effectives', () => {
     expect(tbl.rows[2]?.map((c) => c.widthPt)).toEqual([undefined, 240]);
     expect(tbl.columnWidthsPt).toEqual([120, 240]);
   });
+});
+
+describe('model — tableaux sous contrôle de contenu et tableaux énormes', () => {
+  const cell = (content: string, rPr = ''): string =>
+    `<w:tc><w:p><w:r>${rPr}<w:t>${content}</w:t></w:r></w:p></w:tc>`;
+  const grid = '<w:tblGrid><w:gridCol w:w="100"/></w:tblGrid>';
+
+  it('R30-08 : une ligne sous w:sdt et une cellule sous w:sdt sont lues comme les autres', async () => {
+    const sdtRow =
+      `<w:tbl>${grid}<w:tr>${cell('un')}</w:tr>` +
+      `<w:sdt><w:sdtPr><w:tag w:val="repeat"/></w:sdtPr><w:sdtContent><w:tr>${cell('deux', '<w:rPr><w:b/></w:rPr>')}</w:tr></w:sdtContent></w:sdt></w:tbl>`;
+    const rows = table(await modelOf(sdtRow));
+    expect(rows.rows).toHaveLength(2);
+    expect(rows.text).toBe('un\ndeux');
+    const second = rows.rows[1]?.[0]?.blocks[0];
+    expect(second?.kind === 'paragraph' && second.runs[0]?.props.bold).toBe(true);
+
+    const sdtCell =
+      `<w:tbl>${grid}<w:tr>${cell('un')}` +
+      `<w:sdt><w:sdtContent>${cell('deux')}</w:sdtContent></w:sdt>` +
+      `<w:customXml w:element="x">${cell('trois')}</w:customXml></w:tr></w:tbl>`;
+    const cells = table(await modelOf(sdtCell));
+    expect(cells.rows[0]).toHaveLength(3);
+    expect(cells.text).toBe('un\tdeux\ttrois');
+  });
+
+  it('R30-07 : 130 000 lignes ne font pas déborder la pile (Math.max sans spread)', async () => {
+    const rows = '<w:tr><w:tc><w:p/></w:tc></w:tr>'.repeat(130_000);
+    const started = performance.now();
+    const tbl = table(await modelOf(`<w:tbl>${rows}</w:tbl>`));
+    expect(tbl.rows).toHaveLength(130_000);
+    expect(performance.now() - started).toBeLessThan(15_000);
+  }, 30_000);
 });

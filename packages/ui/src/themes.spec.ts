@@ -255,5 +255,29 @@ describe('thèmes CSS', () => {
       const aster = readFileSync(join(THEMES_DIR, 'aster.css'), 'utf8');
       expect(aster.indexOf("'./page.css'")).toBeGreaterThan(aster.indexOf("'./print.css'"));
     });
+
+    it('R30-02 : à l’impression, la feuille étirée à N pages retombe à min-height: 0 dans page.css', () => {
+      const selector = '.aster--page-view .aster-content .ProseMirror';
+      const rule = new RegExp(`${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, 'g');
+      const printAt = page.indexOf('@media print');
+      expect(printAt).toBeGreaterThan(-1);
+      // Règle écran (sans média, avant le bloc print) : la feuille mesure N pages.
+      const screen = [...page.slice(0, printAt).matchAll(rule)].map((match) => match[1] ?? '');
+      expect(
+        screen.some((body) => /min-height:\s*calc\(\s*var\(--aster-page-count/.test(body)),
+      ).toBe(true);
+      // Même sélecteur dans le bloc print, après : `min-height: 0` gagne la cascade sur
+      // la règle écran, qui elle-même venait après celle de `print.css` (même spécificité).
+      const print = [...page.slice(printAt).matchAll(rule)].map((match) => match[1] ?? '');
+      expect(print.some((body) => /min-height:\s*0;/.test(body))).toBe(true);
+      const printCss = readFileSync(join(THEMES_DIR, 'print.css'), 'utf8');
+      const printCssAt = printCss.indexOf('@media print');
+      expect(printCssAt).toBeGreaterThan(-1);
+      expect(
+        [...printCss.slice(printCssAt).matchAll(rule)].some((match) =>
+          /min-height:\s*0;/.test(match[1] ?? ''),
+        ),
+      ).toBe(true);
+    });
   });
 });

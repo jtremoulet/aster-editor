@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AsterEditor, DocumentLayout, PageViewOptions } from '../api';
 import { AsterEditorImpl } from '../editor/aster-editor';
+import * as sanitizeModule from './header-footer-sanitize';
 import {
   MAX_PAGE_MM,
   MAX_SANITIZE_DEPTH,
@@ -155,6 +156,11 @@ describe('vue page', () => {
   });
 
   describe('sanitizeHeaderFooterHtml', () => {
+    it('R30-13 : vit dans header-footer-sanitize.ts, réexporté à l’identique par page-view.ts', () => {
+      expect(sanitizeHeaderFooterHtml).toBe(sanitizeModule.sanitizeHeaderFooterHtml);
+      expect(MAX_SANITIZE_DEPTH).toBe(sanitizeModule.MAX_SANITIZE_DEPTH);
+    });
+
     it('garde texte et balises simples, retire script, style, iframe et on*', () => {
       expect(
         sanitizeHeaderFooterHtml(

@@ -4,7 +4,12 @@ import { defaultXmlParse, openPackage, relsPathOf } from '../reader/package';
 import { createStyleResolver } from '../reader/styles';
 import type { DocxPackage, NumberingResolver, StyleResolver } from '../reader/types';
 import type { DocxInput, DocxLostObject } from '../types';
-import { compareBlocks, headerFooterSummary, type CompareContext } from './compare-blocks';
+import {
+  compareBlocks,
+  headerFooterSummary,
+  sameFields,
+  type CompareContext,
+} from './compare-blocks';
 import { readDocumentModel, type DocumentModel, type HeaderFooterType } from './model';
 import { compareParts, listParts } from './parts';
 import { computeScore, Tally } from './tally';
@@ -27,7 +32,7 @@ const NOTES: readonly string[] = [
   'Images : nombre et dimensions (±1 px) seulement ; habillage, position des images ancrées et octets des médias (couverts par les parties du paquet) ne sont pas comparés.',
   'Tableaux : bordures effectives telles que Word les rend (style de tableau, puis `w:tblBorders` selon la position de la cellule dans la grille, puis `w:tcBorders`, `nil` efface) ; côté tableau seules les bordures extérieures sont comparées. Largeur de cellule effective (`w:tcW`, sinon les colonnes de grille couvertes) ; largeurs de colonnes et de cellules à ±0,5 pt.',
   'Saut de page explicite (`w:br w:type="page"`) : frontière de bloc, pas un caractère ; le paragraphe qui le précède porte `paragraph.pageBreakAfter`, un paragraphe réduit au saut se replie sur le précédent.',
-  'Champs de fusion (`MERGEFIELD` simple ou complexe) : modélisés par leur nom et leur résultat ; le texte du paragraphe inclut le résultat affiché par Word, `field.mergeField` compare la liste ordonnée des noms, et un `{{nom}}` en clair vaut un champ de même nom. Autres champs (page, date…) : seul le texte de résultat est comparé. Tabulations comparées comme caractère, taquets ignorés.',
+  'Champs de fusion (`MERGEFIELD` simple ou complexe) : modélisés par leur nom brut et leur résultat ; le texte du paragraphe inclut le résultat affiché par Word, `field.mergeField` compare la liste ordonnée des noms bruts (`"Nom Client"`, `nom_client` et `"NOM CLIENT"` sont trois champs distincts), et un `{{nom}}` en clair vaut un champ dont le nom normalisé est le même. Autres champs (page, date…) : seul le texte de résultat est comparé. Tabulations comparées comme caractère, taquets ignorés.',
   'Révisions : le texte inséré est lu, le texte supprimé ignoré ; commentaires, signets, `w:proofErr` et `w:lastRenderedPageBreak` ne sont jamais comparés.',
 ];
 
@@ -55,14 +60,34 @@ interface OpenedDocument {
   readonly model: DocumentModel;
 }
 
-async function open(buffer: ArrayBuffer): Promise<OpenedDocument> {
-  const pkg = await openPackage(buffer, defaultXmlParse());
-  const [styles, numbering] = await Promise.all([
-    createStyleResolver(pkg),
-    createNumberingResolver(pkg),
-  ]);
-  const model = await readDocumentModel(pkg, styles, numbering);
-  return { buffer, pkg, styles, numbering, model };
+/**
+ * Erreur typée pour les entrées illisibles, même nom et même préfixe de message que
+ * l'import (`DocxImportError`, `invalid-docx: …`, non exportés par `import-docx.ts`) : un
+ * intégrateur distingue un document hostile d'un bug du comparateur (R30-12).
+ */
+function invalidDocx(label: string, detail: string): Error {
+  const error = new Error(`invalid-docx: ${label} : ${detail}`);
+  error.name = 'DocxImportError';
+  return error;
+}
+
+/**
+ * Ouvre un paquet et lit son modèle. Un zip sans partie principale, des octets qui ne sont
+ * pas un zip ou un XML illisible rejettent en `DocxImportError`, jamais une erreur JSZip
+ * ou `Error` nue.
+ */
+async function open(buffer: ArrayBuffer, label: string): Promise<OpenedDocument> {
+  try {
+    const pkg = await openPackage(buffer, defaultXmlParse());
+    const [styles, numbering] = await Promise.all([
+      createStyleResolver(pkg),
+      createNumberingResolver(pkg),
+    ]);
+    const model = await readDocumentModel(pkg, styles, numbering);
+    return { buffer, pkg, styles, numbering, model };
+  } catch (error: unknown) {
+    throw invalidDocx(label, error instanceof Error ? error.message : String(error));
+  }
 }
 
 function compareSections(a: DocumentModel, b: DocumentModel, ctx: CompareContext): void {
@@ -105,11 +130,13 @@ function compareSections(a: DocumentModel, b: DocumentModel, ctx: CompareContext
         const partWhere = `${where} ${kind === 'header' ? 'en-tête' : 'pied'} ${type}`;
         const expected = part ? headerFooterSummary(part) : undefined;
         const actual = otherPart ? headerFooterSummary(otherPart) : undefined;
-        // Même tolérance que pour le corps : `{{nom}}` en clair vaut un champ de fusion.
+        // Même tolérance que pour le corps : `{{nom}}` en clair vaut un champ de fusion de
+        // même nom normalisé ; deux vrais champs ne valent que par leur nom brut.
         const sameText =
           expected !== undefined &&
           actual !== undefined &&
-          expected.placeholderText === actual.placeholderText;
+          expected.placeholderText === actual.placeholderText &&
+          sameFields(expected.fields, actual.fields);
         tally.record(
           'header-footer',
           `${kind}.${type}.text`,
@@ -156,8 +183,8 @@ export const compareDocx: CompareDocx = async (
 ): Promise<FidelityReport> => {
   const ignoreRevisionIds = options.ignoreRevisionIds !== false;
   const [a, b] = await Promise.all([
-    toArrayBuffer(original, "l'original").then(open),
-    toArrayBuffer(result, 'le résultat').then(open),
+    toArrayBuffer(original, "l'original").then((buffer) => open(buffer, "l'original")),
+    toArrayBuffer(result, 'le résultat').then((buffer) => open(buffer, 'le résultat')),
   ]);
 
   const tally = new Tally();

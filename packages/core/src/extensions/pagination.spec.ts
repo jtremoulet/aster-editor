@@ -1,3 +1,4 @@
+import { DecorationSet, type Decoration } from '@tiptap/pm/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterEditor, AsterOptions, DocumentLayout, PageViewOptions } from '../api';
 import { AsterEditorImpl } from '../editor/aster-editor';
@@ -18,6 +19,7 @@ import {
   measureBlocks,
   measurePagination,
   paginateNow,
+  paginationPluginKey,
   usablePageHeightPx,
   type PaginatedPageViewOptions,
 } from './pagination';
@@ -298,6 +300,67 @@ describe('pagination (plugin)', () => {
     expect(editor.getHTML()).toContain('<hr data-page-break="">');
   });
 
+  it('R30-01 : un hr rendu haut près du bas de page ne crée pas de page vide, et le fill est stable', () => {
+    // P1 : `page.css` rend le hr à 216 px en A4 (24 px + 2 × 96 px) tant qu'aucune coupure
+    // ne le suit ; il mesure 0, la coupure est posée après lui dès le premier rendu.
+    const { editor } = mount({
+      content: '<p>a</p><p>b</p><hr data-page-break><p>c</p>',
+      pageView: { layout: SMALL_PAGE },
+    });
+    setHeights([40, 40, 60, 10]);
+    const first = paginateNow(editor);
+    expect(first.pageCount).toBe(2);
+    expect(first.gaps.map((gap) => [gap.index, gap.page])).toEqual([[3, 2]]);
+    expect(first.gaps[0]?.fill).toBeCloseTo(SMALL_PAGE_PX - 80, 6);
+    expect(gapIndexes(editor)).toEqual([3]);
+    // Après le repli CSS (`hr:has(+ .aster-page-gap)` → hauteur 0), rien ne bouge.
+    setHeights([40, 40, 0, 10]);
+    expect(paginateNow(editor)).toEqual(first);
+    expect(gapIndexes(editor)).toEqual([3]);
+
+    // P2 : le remplissage ne dépend pas de la hauteur rendue du hr (plus de saut à la frappe).
+    editor.setHTML('<p>a</p><hr data-page-break><p>c</p>', false);
+    setHeights([20, 60, 10]);
+    expect(paginateNow(editor).gaps[0]?.fill).toBeCloseTo(SMALL_PAGE_PX - 20, 6);
+    setHeights([20, 0, 10]);
+    expect(paginateNow(editor).gaps[0]?.fill).toBeCloseTo(SMALL_PAGE_PX - 20, 6);
+    expect(measureBlocks(editor.tiptap.view).heights).toEqual([20, 0, 10]);
+  });
+
+  it('R30-05 : une transaction de frappe mappe le jeu de décorations sans le reconstruire', () => {
+    const { editor } = mount({ content: paragraphs(6), pageView: { layout: SMALL_PAGE } });
+    paginateNow(editor);
+    const view = editor.tiptap.view;
+    const plugin = paginationPluginKey.get(view.state);
+    expect(plugin).toBeDefined();
+    const decorations = (): Decoration[] => {
+      const set = plugin?.props.decorations?.call(plugin, view.state);
+      return set instanceof DecorationSet ? set.find() : [];
+    };
+    const before = decorations();
+    expect(before).toHaveLength(2);
+    const specs = before.map((decoration) => decoration.spec);
+
+    // Une frappe dans le premier bloc : mêmes widgets (même `spec`), positions décalées d'un.
+    editor.tiptap.commands.insertContentAt(1, 'x');
+    const after = decorations();
+    expect(after.map((decoration) => decoration.spec)).toEqual(specs);
+    after.forEach((decoration, index) => {
+      expect(decoration.spec).toBe(specs[index]);
+      expect(decoration.from).toBe((before[index]?.from ?? 0) + 1);
+    });
+    expect(gapIndexes(editor)).toEqual([2, 4]);
+    // Même état relu deux fois : le jeu n'est pas reconstruit entre deux lectures.
+    expect(decorations()[0]?.spec).toBe(specs[0]);
+
+    // Après une mesure, le jeu est reconstruit (nouveaux `spec`), même si les coupures sont égales.
+    paginateNow(editor);
+    const rebuilt = decorations();
+    expect(rebuilt).toHaveLength(2);
+    expect(rebuilt[0]?.spec).not.toBe(specs[0]);
+    expect(gapIndexes(editor)).toEqual([2, 4]);
+  });
+
   it('un tableau qui déborde passe entier à la page suivante', () => {
     const { editor } = mount({
       content: '<p>a</p><table><tr><td>x</td></tr></table><p>b</p>',
@@ -440,14 +503,17 @@ describe('pagination (plugin)', () => {
     expect(label()).toBe('Page 2 sur 2');
   });
 
-  it('les coupures survivent à une frappe (positions recalculées par index) et à un plugin ajouté', () => {
+  it('les coupures survivent à une frappe (mappées, elles suivent leur bloc) et à un plugin ajouté', () => {
     const { editor } = mount({ content: paragraphs(6), pageView: { layout: SMALL_PAGE } });
     paginateNow(editor);
     expect(gapIndexes(editor)).toEqual([2, 4]);
-    // Un paragraphe inséré en tête : les coupures gardent leur index jusqu'à la remesure.
+    // Un paragraphe inséré en tête : les coupures suivent leur bloc (R30-05) jusqu'à la remesure.
     editor.tiptap.commands.insertContentAt(0, '<p>nouveau</p>');
     expect(editor.tiptap.state.doc.childCount).toBe(7);
-    expect(gapIndexes(editor)).toEqual([2, 4]);
+    expect(gapIndexes(editor)).toEqual([3, 5]);
+    // La remesure (7 blocs de 40 px) reconstruit le jeu aux index mesurés.
+    expect(paginateNow(editor).gaps.map((gap) => gap.index)).toEqual([2, 4, 6]);
+    expect(gapIndexes(editor)).toEqual([2, 4, 6]);
     // `setHTML` silencieux recrée le plugin d'historique : la vue du plugin est recréée.
     editor.setHTML(paragraphs(8), false);
     const result = paginateNow(editor);

@@ -2,7 +2,7 @@ import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
 import { alignSequences } from './align';
 import { MISSING, recordIfAny, type CompareContext } from './compare-context';
 import { compareTable } from './compare-tables';
-import type { BlockModel, HeaderFooterModel, ParagraphModel, RunModel } from './model';
+import type { BlockModel, FieldModel, HeaderFooterModel, ParagraphModel, RunModel } from './model';
 import { ABSENT, fmt } from './values';
 
 /**
@@ -64,6 +64,25 @@ function alignmentKey(text: string): string {
 /** Liste vide ramenée à `undefined` : un paragraphe sans champ ne crée pas d'occurrence. */
 function nonEmptyList(list: readonly string[] | undefined): readonly string[] | undefined {
   return list && list.length > 0 ? list : undefined;
+}
+
+/**
+ * Deux champs de fusion sont égaux par leur nom **brut** quand ils sont de même nature
+ * (deux vrais `MERGEFIELD`, ou deux `{{}}` en clair) ; face à un `{{}}` en clair, un vrai
+ * champ vaut par son nom normalisé, celui qu'Aster écrit à l'import (R30-04).
+ */
+function sameField(a: FieldModel, b: FieldModel): boolean {
+  return a.literal === b.literal ? a.raw === b.raw : a.name === b.name;
+}
+
+/** Listes de champs égales deux à deux, dans l'ordre. */
+export function sameFields(a: readonly FieldModel[], b: readonly FieldModel[]): boolean {
+  return a.length === b.length && a.every((field, index) => sameField(field, b[index] ?? field));
+}
+
+/** Noms bruts des champs, pour le rapport. */
+function fieldNames(fields: readonly FieldModel[]): readonly string[] | undefined {
+  return nonEmptyList(fields.map((field) => field.raw));
 }
 
 /**
@@ -165,9 +184,12 @@ export function compareParagraph(
   ctx: CompareContext,
 ): void {
   const present = b !== undefined;
-  // Un `{{nom}}` en clair face au résultat d'un `MERGEFIELD` de même nom : texte conservé.
+  const fieldsKept = b !== undefined && sameFields(a.fields, b.fields);
+  // Un `{{nom}}` en clair face au résultat d'un `MERGEFIELD` de même nom : texte conservé ;
+  // un champ renommé (nom brut) change le texte que Word affiche, donc le texte est perdu.
   const sameText =
-    b !== undefined && (a.text === b.text || a.placeholderText === b.placeholderText);
+    b !== undefined &&
+    (a.text === b.text || (a.placeholderText === b.placeholderText && fieldsKept));
   ctx.tally.record(
     'text',
     'paragraph.text',
@@ -175,13 +197,14 @@ export function compareParagraph(
     a.text,
     sameText ? a.text : (b?.text ?? MISSING),
   );
+  const expectedFields = fieldNames(a.fields);
   recordIfAny(
     ctx,
     'text',
     'field.mergeField',
     where,
-    nonEmptyList(a.fields),
-    nonEmptyList(b?.fields),
+    expectedFields,
+    b === undefined ? undefined : fieldsKept ? expectedFields : fieldNames(b.fields),
     present,
   );
   ctx.tally.record(
@@ -294,10 +317,11 @@ function labels(blocks: readonly BlockModel[], prefix: string, suffix: string): 
   });
 }
 
-/** Texte affiché, texte canonique et format d'un en-tête ou d'un pied, en un seul bloc chacun. */
+/** Texte affiché, texte canonique, champs de fusion et format d'un en-tête ou d'un pied, en un seul bloc chacun. */
 export function headerFooterSummary(part: HeaderFooterModel): {
   text: string;
   placeholderText: string;
+  fields: readonly FieldModel[];
   format: string;
 } {
   const format = part.blocks.map((block) => {
@@ -315,6 +339,7 @@ export function headerFooterSummary(part: HeaderFooterModel): {
   return {
     text: part.blocks.map((block) => block.text).join('\n'),
     placeholderText: part.blocks.map((block) => block.placeholderText).join('\n'),
+    fields: part.blocks.flatMap((block) => (block.kind === 'paragraph' ? block.fields : [])),
     format: fmt(format),
   };
 }

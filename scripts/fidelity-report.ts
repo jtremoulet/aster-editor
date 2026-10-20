@@ -8,8 +8,16 @@
  * (`exportDocx({ template, layout })`, L27 : les parties annexes du paquet sont conservées,
  * seul le corps est régénéré), compare l'original et le résultat avec `compareDocx` et
  * imprime un tableau Markdown (groupe, propriété, total, conservé, perdu, exemples), les
- * parties changées, les objets perdus et le score. Code de sortie 1 si le score est sous le
- * seuil (0,98 par défaut).
+ * parties changées, les objets perdus et le score.
+ *
+ * Verdict (R30-10) : OK si le score **et** la part de texte conservée (`paragraph.text`
+ * conservé / total) atteignent le seuil (0,98 par défaut, borné à [0, 1]). Le score seul
+ * ne suffit pas : un document dont tout le texte a disparu score encore ≈ 0,6, un corps
+ * vide ≈ 0,3 (les parties du paquet, les sections et les en-têtes restent identiques).
+ *
+ * Codes de sortie (R30-11) : 0 verdict OK, 1 verdict KO, 2 usage (arguments), 3 erreur
+ * d'exécution (fichier introuvable, document illisible, dossier de sortie absent…), avec
+ * un message sans pile d'appels.
  *
  * `--no-template` : export **neuf** avec `layout` seul (styles, numérotation, en-têtes…
  * régénérés). Sert à mesurer ce que l'export neuf sait reconstruire ; le score y est
@@ -22,7 +30,7 @@
  * `DOMParser`, `XMLSerializer` et `document` avant cet import. Node 24 strippe les types
  * de ce script lui-même.
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
@@ -33,6 +41,20 @@ const WORD_ENTRY = resolve(ROOT, 'packages/word/src/index.ts');
 const BUNDLE_DIR = resolve(ROOT, 'node_modules/.cache/aster-fidelity');
 const BUNDLE = resolve(BUNDLE_DIR, 'word.mjs');
 const DEFAULT_THRESHOLD = 0.98;
+
+/** Codes de sortie : verdict OK / KO, usage, erreur d'exécution. */
+const EXIT_OK = 0;
+const EXIT_BELOW_THRESHOLD = 1;
+const EXIT_USAGE = 2;
+const EXIT_ERROR = 3;
+
+/** Erreur d'exécution attendue (entrée absente, document illisible…) : message seul, sans pile. */
+class ReportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReportError';
+  }
+}
 
 interface CliOptions {
   readonly input: string;
@@ -96,7 +118,8 @@ function usage(): never {
   console.error(
     'Usage : node scripts/fidelity-report.ts <fichier.docx> [--out rapport.md] [--keep sortie.docx] [--threshold 0.98] [--no-template]',
   );
-  process.exit(2);
+  console.error('  --threshold : nombre entre 0 et 1 (0,98 par défaut).');
+  process.exit(EXIT_USAGE);
 }
 
 function parseArgs(argv: readonly string[]): CliOptions {
@@ -121,7 +144,10 @@ function parseArgs(argv: readonly string[]): CliOptions {
     else if (input === undefined) input = arg;
     else usage();
   }
-  if (input === undefined || !Number.isFinite(threshold)) usage();
+  // Seuil borné à [0, 1] (R30-11) : `-1` rendait tout OK, `2` tout KO.
+  if (input === undefined || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    usage();
+  }
   return { input, out, keep, threshold, template };
 }
 
@@ -181,8 +207,35 @@ async function loadWord(): Promise<WordModule> {
 }
 
 async function readDocx(path: string): Promise<ArrayBuffer> {
+  try {
+    await access(path);
+  } catch {
+    throw new ReportError(`Fichier introuvable : ${path}`);
+  }
   const bytes = await readFile(path);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+/** Verdict du rapport : score et part de texte conservée, tous deux au seuil (R30-10). */
+interface Verdict {
+  readonly ok: boolean;
+  readonly textKept: number;
+  readonly textTotal: number;
+  /** `kept / total`, `1` sans aucun paragraphe comparé. */
+  readonly textRatio: number;
+}
+
+function verdictOf(report: FidelityReportLike, threshold: number): Verdict {
+  const text = report.properties.find((property) => property.name === 'paragraph.text');
+  const textKept = text?.kept ?? 0;
+  const textTotal = text?.total ?? 0;
+  const textRatio = textTotal === 0 ? 1 : textKept / textTotal;
+  return {
+    ok: report.score >= threshold && textRatio >= threshold,
+    textKept,
+    textTotal,
+    textRatio,
+  };
 }
 
 /**
@@ -229,13 +282,13 @@ function renderMarkdown(
   useTemplate: boolean,
 ): string {
   const lines: string[] = [];
-  const verdict = report.score >= threshold ? 'OK' : 'KO';
+  const verdict = verdictOf(report, threshold);
   const mode = useTemplate
     ? 'export dans le gabarit (`template` + `layout`)'
     : 'export neuf avec `layout` (`--no-template`)';
   lines.push(`# Rapport de fidélité — ${name}`, '');
   lines.push(
-    `**Score : ${String(report.score)}** (seuil ${String(threshold)}, ${verdict}) — ${mode}.`,
+    `**Score : ${String(report.score)}**, texte conservé ${String(verdict.textKept)}/${String(verdict.textTotal)} (${ratio(verdict.textKept, verdict.textTotal)}) — seuil ${String(threshold)} sur les deux, ${verdict.ok ? 'OK' : 'KO'} — ${mode}.`,
     '',
   );
   lines.push('| Groupe | Propriété | Total | Conservé | Perdu | Taux | Exemples |');
@@ -300,13 +353,29 @@ async function main(): Promise<void> {
     console.log(`Rapport écrit dans ${options.out}`);
   }
   console.log(markdown);
+  const verdict = verdictOf(report, options.threshold);
+  const compare = (value: number): string => (value >= options.threshold ? '>=' : '<');
   console.log(
-    `Score ${String(report.score)} ${report.score >= options.threshold ? '>=' : '<'} seuil ${String(options.threshold)}`,
+    `Score ${String(report.score)} ${compare(report.score)} seuil ${String(options.threshold)} ; ` +
+      `paragraph.text ${String(verdict.textKept)}/${String(verdict.textTotal)} (${ratio(verdict.textKept, verdict.textTotal)}) ${compare(verdict.textRatio)} seuil`,
   );
-  process.exitCode = report.score >= options.threshold ? 0 : 1;
+  process.exitCode = verdict.ok ? EXIT_OK : EXIT_BELOW_THRESHOLD;
+}
+
+/** Message d'une erreur d'exécution : jamais de pile ; un `ENOENT` nomme le chemin. */
+function describeError(error: unknown): string {
+  if (error instanceof ReportError) return error.message;
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    const path = (error as { path?: unknown }).path;
+    if (code === 'ENOENT' && typeof path === 'string')
+      return `Fichier ou dossier introuvable : ${path}`;
+    return `${error.name} : ${error.message}`;
+  }
+  return String(error);
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
-  process.exitCode = 1;
+  console.error(describeError(error));
+  process.exitCode = EXIT_ERROR;
 });

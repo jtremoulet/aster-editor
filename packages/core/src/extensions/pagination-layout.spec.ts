@@ -55,6 +55,17 @@ describe('paginate (calcul pur)', () => {
     expect(paginate([10, 10], 100, [0, 7, -1]).gaps).toEqual([]);
   });
 
+  it('R30-01 : un bloc de hauteur nulle (saut explicite) n’ouvre jamais de page à lui seul', () => {
+    // Bloc qui déborde sa page, puis le `hr` (hauteur 0) et la coupure forcée après lui :
+    // avant le correctif, le hr « débordait » (200 + 0 > 100) et ouvrait une page vide.
+    expect(paginate([200, 0, 10], 100, [2]).gaps).toEqual([{ index: 2, page: 2, fill: 0 }]);
+    // Près du bas d'une page, même chose : la coupure est posée après le hr, pas avant.
+    expect(paginate([40, 40, 0, 10], 113, [3])).toEqual({
+      gaps: [{ index: 3, page: 2, fill: 33 }],
+      pageCount: 2,
+    });
+  });
+
   it('un tableau (bloc insécable) qui déborde passe entier à la page suivante', () => {
     const table = 90;
     const result = paginate([30, table, 10], 100);

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { exportDocx } from '../../export/export-docx';
 import { importDocx } from '../import-docx';
@@ -21,8 +22,13 @@ const LAYOUT_FIXTURES = [
 /** Cible de l'aller-retour dans le gabarit (critère d'acceptation de la session 3). */
 const TEMPLATE_TARGET_SCORE = 0.98;
 
-/** Seuil bas de l'aller-retour sans gabarit : l'export neuf perd volontairement les parties annexes. */
-const ROUNDTRIP_MIN_SCORE = 0.3;
+/**
+ * Part minimale du texte conservée par l'aller-retour sans gabarit (R30-03). On asserte
+ * la propriété, pas un plancher de score : un résultat au corps vide score encore 0,3 à
+ * 0,36 sur ces fixtures (`package-part`, `section` et `header-footer` restent à 1), ce
+ * qu'un plancher global ne détectait pas.
+ */
+const ROUNDTRIP_MIN_TEXT_RATIO = 0.7;
 
 /**
  * Fixtures qui atteignent la cible dans le gabarit (mesure du 20/10/2026, L28c : le
@@ -119,6 +125,30 @@ function changedNotAdded(report: FidelityReport): readonly { path: string; summa
   return report.changedParts.filter((part) => part.summary !== 'ajoutée');
 }
 
+/** Part du texte des paragraphes conservée (`paragraph.text` kept / total), `0` sans occurrence. */
+function textKeptRatio(report: FidelityReport): number {
+  const text = report.properties.find((p) => p.name === 'paragraph.text');
+  return text && text.total > 0 ? text.kept / text.total : 0;
+}
+
+/** Le même paquet dont le corps est réduit à un paragraphe vide et son `w:sectPr` (preuve P4 de R30). */
+async function emptyBody(original: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(original);
+  const xml = await zip.file('word/document.xml')?.async('string');
+  if (xml === undefined) throw new Error('word/document.xml absent');
+  const start = xml.lastIndexOf('<w:sectPr');
+  const end = xml.indexOf('</w:sectPr>', start);
+  const sectPr = start >= 0 && end >= 0 ? xml.slice(start, end + '</w:sectPr>'.length) : '';
+  zip.file(
+    'word/document.xml',
+    xml.replace(/<w:body>[\s\S]*<\/w:body>/, `<w:body><w:p/>${sectPr}</w:body>`),
+  );
+  const bytes = await zip.generateAsync({ type: 'uint8array' });
+  const output = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(output).set(bytes);
+  return output;
+}
+
 describe('compareDocx sur les fixtures de mise en page', () => {
   it.each(LAYOUT_FIXTURES)(
     '%s comparé à lui-même : score 1, toutes parties identiques',
@@ -135,19 +165,33 @@ describe('compareDocx sur les fixtures de mise en page', () => {
     },
   );
 
-  it.each(LAYOUT_FIXTURES)('%s aller-retour sans gabarit : score cohérent', async (name) => {
+  it.each(LAYOUT_FIXTURES)('%s aller-retour sans gabarit : texte conservé à 70 %', async (name) => {
     const original = fixture(name);
     const report = await compareDocx(original, await roundTrip(original));
-    expect(report.score).toBeGreaterThanOrEqual(ROUNDTRIP_MIN_SCORE);
     expect(report.score).toBeLessThan(1);
     // L'export neuf réécrit styles.xml : la partie est forcément différente ou absente.
     expect(report.changedParts.some((part) => part.path === 'word/styles.xml')).toBe(true);
     // Le texte survit presque toujours ; les blocs coupés par un saut de page ou une
     // tabulation (cadratin à l'export) expliquent les quelques paragraphes désalignés.
-    const text = report.properties.find((p) => p.name === 'paragraph.text');
-    expect(text).toBeDefined();
-    expect(text && text.kept / text.total).toBeGreaterThanOrEqual(0.7);
+    // C'est la propriété assertée, pas le score (R30-03) : voir le test suivant.
+    expect(report.properties.some((p) => p.name === 'paragraph.text')).toBe(true);
+    expect(textKeptRatio(report)).toBeGreaterThanOrEqual(ROUNDTRIP_MIN_TEXT_RATIO);
   });
+
+  it.each(LAYOUT_FIXTURES)(
+    '%s R30-03 : un résultat au corps vide passe un plancher de score à 0,3, pas la part de texte',
+    async (name) => {
+      const original = fixture(name);
+      const report = await compareDocx(original, await emptyBody(original));
+      // Preuve du relecteur : 11 → 0,364 ; 12, 13, 14 → 0,308 ; 17 → 0,364 (15 → 0,25, 16 → 0,167) :
+      // les groupes `package-part`, `section` et `header-footer` restent à 1 sans aucun texte.
+      expect(report.score).toBeGreaterThan(0.15);
+      expect(report.score).toBeLessThan(0.4);
+      if (name === '13-styles-nommes.docx') expect(report.score).toBeGreaterThanOrEqual(0.3);
+      expect(textKeptRatio(report)).toBe(0);
+      expect(textKeptRatio(report)).toBeLessThan(ROUNDTRIP_MIN_TEXT_RATIO);
+    },
+  );
 
   it.each(LAYOUT_FIXTURES)(
     '%s aller-retour dans le gabarit : parties annexes identiques à l’octet',
@@ -271,11 +315,11 @@ describe.skipIf(!existsSync(CLIENT))('compareDocx sur le document client', () =>
     expect(report.changedParts).toEqual([]);
   });
 
-  it('aller-retour sans gabarit : ne plante pas, score mesuré', async () => {
+  it('aller-retour sans gabarit : ne plante pas, texte conservé à 70 %', async () => {
     const original = client();
     const report = await compareDocx(original, await roundTrip(original));
-    expect(report.score).toBeGreaterThan(0);
     expect(report.score).toBeLessThan(1);
+    expect(textKeptRatio(report)).toBeGreaterThanOrEqual(ROUNDTRIP_MIN_TEXT_RATIO);
     if (process.env.ASTER_CLIENT_DOC_LOG) {
       const { appendFileSync } = await import('node:fs');
       appendFileSync(
@@ -294,8 +338,7 @@ describe.skipIf(!existsSync(CLIENT))('compareDocx sur le document client', () =>
     expect(report.score).toBeGreaterThanOrEqual(CLIENT_TEMPLATE_FLOOR);
     // Le texte reste très majoritairement conservé : les pertes sont des espaces finaux
     // et des champs de fusion réécrits, pas des paragraphes manquants.
-    const text = report.properties.find((p) => p.name === 'paragraph.text');
-    expect(text && text.kept / text.total).toBeGreaterThanOrEqual(0.75);
+    expect(textKeptRatio(report)).toBeGreaterThanOrEqual(0.75);
   });
 
   // Cible non atteinte, causes hors périmètre du comparateur : voir CLIENT_TEMPLATE_FLOOR.
