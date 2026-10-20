@@ -1,7 +1,49 @@
+import type { DocxLostObject } from '../types';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import { escapeAttr, escapeHtml, pt, styleAttr } from './html';
+import { detectLostInline } from './lost';
 import { docDefaultsOf } from './styles';
 import type { ConverterContext, ResolvedParagraphProps, ResolvedRunProps } from './types';
+
+/** Enfants d'un `w:p` sans contenu ni objet : jamais signalés. */
+const IGNORED_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([
+  'pPr',
+  'bookmarkStart',
+  'bookmarkEnd',
+  'proofErr',
+  'commentRangeStart',
+  'commentRangeEnd',
+  'permStart',
+  'permEnd',
+  'rPr',
+]);
+
+/** Enfants d'un `w:r` qui portent un objet non représentable. */
+const LOST_RUN_CHILDREN: ReadonlySet<string> = new Set([
+  'object',
+  'commentReference',
+  'oMath',
+  'oMathPara',
+]);
+
+function sameLost(a: DocxLostObject, b: DocxLostObject): boolean {
+  return a.kind === b.kind && a.where === b.where && a.detail === b.detail && a.text === b.text;
+}
+
+/**
+ * Signale un objet non représentable rencontré dans le flux inline (classification par
+ * `lost.ts`), une seule fois par objet identique : révisions et commentaires reviennent
+ * souvent, `images.ts` dédoublonne de la même façon.
+ */
+function reportLost(element: Element, ctx: ConverterContext): void {
+  const lost = detectLostInline(element, ctx);
+  if (!lost || ctx.lost.some((known) => sameLost(known, lost))) return;
+  ctx.lost.push(lost);
+  ctx.warnings.push({
+    code: 'object-lost',
+    message: `Objet non représentable ignoré (${lost.kind})${lost.detail ? ` : ${lost.detail}` : ''}.`,
+  });
+}
 
 /**
  * Contenu inline d'un paragraphe Word → HTML stylé. Parcourt les enfants du `w:p` dans
@@ -190,6 +232,8 @@ export async function convertRuns(
         await withAnchor(await hyperlinkHref(element, ctx), () => walkChildren(element));
         return;
       case 'fldSimple':
+        // Le résultat du champ est rendu ; un champ hors fusion / page / lien est signalé.
+        reportLost(element, ctx);
         await withAnchor(hyperlinkTarget(wordAttribute(element, 'instr')), () =>
           walkChildren(element),
         );
@@ -199,17 +243,27 @@ export async function convertRuns(
         if (content) await walkChildren(content);
         return;
       }
-      case 'smartTag':
-      case 'customXml':
       case 'ins':
       case 'moveTo':
+        // Texte inséré conservé ; la révision est signalée une fois par document (lost.ts).
+        reportLost(element, ctx);
+        await walkChildren(element);
+        return;
+      case 'del':
+      case 'moveFrom':
+        // Texte supprimé retiré, révision signalée.
+        reportLost(element, ctx);
+        return;
+      case 'smartTag':
+      case 'customXml':
       case 'dir':
       case 'bdo':
         await walkChildren(element);
         return;
       default:
-        // `w:pPr`, `w:del`, `w:moveFrom`, signets, commentaires, `w:proofErr`, maths… :
-        // rien à rendre ici (L25 signale les objets perdus au niveau bloc).
+        // `w:pPr`, signets, marques de commentaire, `w:proofErr` : rien à rendre. Le reste
+        // (maths, objets, champs inconnus…) est signalé comme objet non représentable.
+        if (!IGNORED_PARAGRAPH_CHILDREN.has(element.localName)) reportLost(element, ctx);
         return;
     }
   };
@@ -250,6 +304,7 @@ export async function convertRuns(
           break;
         case 'instrText':
           if (top && top.phase === 'instr') top.instr.push(child.textContent ?? '');
+          reportLost(child, ctx);
           break;
         case 'fldChar':
           fieldChar(child);
@@ -299,7 +354,9 @@ export async function convertRuns(
           break;
         }
         default:
-          // `w:rPr`, `w:delText`, `w:lastRenderedPageBreak`, `w:commentReference`… ignorés.
+          // `w:rPr`, `w:delText`, `w:lastRenderedPageBreak` : ignorés. Objets incorporés,
+          // références de commentaire et maths dans un run : signalés, jamais rendus.
+          if (LOST_RUN_CHILDREN.has(child.localName)) reportLost(child, ctx);
           break;
       }
     }

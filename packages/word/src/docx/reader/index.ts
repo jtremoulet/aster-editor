@@ -1,7 +1,7 @@
 import type { DocumentLayout } from '@aster-editor/core';
 import type { DocxImportWarning, DocxLostObject } from '../types';
-import { childNamed } from '../preprocess/xml-utils';
-import { readHeadersFooters } from './headers';
+import { childNamed, childrenNamed } from '../preprocess/xml-utils';
+import { readHeadersFooters, type HeadersFootersResult } from './headers';
 import { escapeHtml } from './html';
 import { createImageConverter } from './images';
 import { createNumberingResolver, renderBlocks } from './lists';
@@ -9,7 +9,7 @@ import { detectLost } from './lost';
 import { createNoteRegistry } from './notes';
 import { openPackage } from './package';
 import { convertParagraph } from './paragraphs';
-import { readSectionLayout } from './sections';
+import { readDocumentLang, readSectionLayout } from './sections';
 import { createStyleResolver } from './styles';
 import { convertTable } from './tables';
 import type {
@@ -135,8 +135,43 @@ export async function readDocx(buffer: ArrayBuffer, options: ReaderOptions): Pro
   const sectPr = finalSectPr(body);
   const bodyHtml = renderBlocks(blocks, ctx);
   const notesHtml = options.footnotes ? await notes.render(ctx) : '';
-  const headersFooters = await readHeadersFooters(sectPr, ctx);
-  const layout: DocumentLayout = { ...readSectionLayout(sectPr, styles), ...headersFooters };
+  const lang = await readDocumentLang(pkg);
+  const headersFooters = await readEffectiveHeadersFooters(body, ctx);
+  const layout: DocumentLayout = { ...readSectionLayout(sectPr, styles, lang), ...headersFooters };
 
   return { html: bodyHtml + notesHtml, layout, lost, warnings };
+}
+
+/** Tous les `w:sectPr` du corps dans l'ordre : ceux des `w:pPr` (fins de section) puis le final. */
+function allSectPrs(body: Element): Element[] {
+  const result: Element[] = [];
+  for (const p of childrenNamed(body, 'p')) {
+    const pPr = childNamed(p, 'pPr');
+    const sectPr = pPr ? childNamed(pPr, 'sectPr') : null;
+    if (sectPr) result.push(sectPr);
+  }
+  const last = finalSectPr(body);
+  if (last) result.push(last);
+  return result;
+}
+
+/**
+ * En-têtes et pieds effectifs : Word fait hériter chaque section des références de la
+ * précédente quand elle n'en déclare pas. On lit donc toutes les sections dans l'ordre, les
+ * plus récentes recouvrant les plus anciennes type par type (`default`, `first`, `even`),
+ * et `titlePage` vaut celui de la dernière section qui le déclare. Un document dont seule
+ * la première section référence un pied (cas client) le conserve ainsi.
+ */
+async function readEffectiveHeadersFooters(
+  body: Element,
+  ctx: ConverterContext,
+): Promise<HeadersFootersResult> {
+  const merged: { -readonly [K in keyof HeadersFootersResult]: HeadersFootersResult[K] } = {};
+  for (const sectPr of allSectPrs(body)) {
+    const section = await readHeadersFooters(sectPr, ctx);
+    if (section.headers) merged.headers = { ...merged.headers, ...section.headers };
+    if (section.footers) merged.footers = { ...merged.footers, ...section.footers };
+    if (section.titlePage !== undefined) merged.titlePage = section.titlePage;
+  }
+  return merged;
 }
