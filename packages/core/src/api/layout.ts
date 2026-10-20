@@ -203,11 +203,14 @@ export interface CellLayoutAttrs {
 /**
  * Vue page : l'hôte de l'éditeur rend une feuille aux dimensions et marges de
  * `layout.page`, avec les en-têtes et pieds `default` en lecture seule au-dessus et
- * au-dessous du corps. Aucune pagination : les sauts de page explicites sont visibles, le
- * nombre de pages n'est pas calculé.
+ * au-dessous du corps. La pagination est **approximative** : des coupures visuelles sont
+ * posées là où la hauteur utile de la page est dépassée (blocs insécables, sauts de page
+ * explicites respectés), sans garantie d'exactitude avec Word.
  */
 export interface PageViewOptions {
   readonly layout?: DocumentLayout;
   /** Afficher les en-têtes et pieds, vrai par défaut. */
   readonly showHeadersFooters?: boolean;
+  /** Pagination approximative (coupures visuelles, numéros de page), vrai par défaut. */
+  readonly pagination?: boolean;
 }
