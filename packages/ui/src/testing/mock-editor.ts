@@ -10,7 +10,9 @@ import type {
   AsterVariable,
   CommandId,
   CommandRegistry,
+  DocumentLayout,
   I18n,
+  PageViewOptions,
   TranslateParams,
   Unsubscribe,
   VariableStore,
@@ -23,6 +25,15 @@ export interface RecordedCall {
   readonly id: string;
   readonly args: unknown;
 }
+
+/** Une étape d'une chaîne Tiptap (`tiptap.chain().focus().setMark(…).run()`). */
+export interface ChainStep {
+  readonly method: string;
+  readonly args: readonly unknown[];
+}
+
+/** Classe posée sur l'hôte par le core quand la vue page est active (L23). */
+const PAGE_VIEW_CLASS = 'aster--page-view';
 
 /** Options du mock : commandes enregistrées, locale, lecture seule initiales. */
 export interface MockEditorOptions {
@@ -43,6 +54,15 @@ export interface MockEditorOptions {
   variableValues?: VariableValues;
   /** Insertion d'une variable non déclarée autorisée ? Vrai par défaut, comme le core. */
   allowUnknownVariables?: boolean;
+  /**
+   * Expose `setPageView` / `getLayout` (méthodes hors contrat annoncées par L23). Vrai par
+   * défaut ; `false` simule un core sans vue page pour tester le widget désactivé.
+   */
+  pageViewApi?: boolean;
+  /** Mise en page initiale renvoyée par `getLayout()`. */
+  layout?: DocumentLayout | null;
+  /** Vue page active au montage (classe `aster--page-view` sur l'hôte). */
+  pageView?: boolean;
 }
 
 /** Nom de variable valide : même règle que le core (`isValidVariableName`). */
@@ -81,6 +101,15 @@ export interface MockEditor extends AsterEditor {
   readonly plugins: Plugin[];
   /** Plages supprimées via `tiptap.commands.deleteRange`, dans l'ordre. */
   readonly deletedRanges: Range[];
+  /** Chaînes Tiptap exécutées via `tiptap.chain()…run()`, une liste d'étapes par chaîne. */
+  readonly chains: ChainStep[][];
+  /** Appels à `setPageView`, dans l'ordre. */
+  readonly pageViewCalls: (PageViewOptions | boolean)[];
+  /** Mise en page courante renvoyée par `getLayout()`, modifiable par les tests. */
+  layout: DocumentLayout | null;
+  /** Vue page (hors contrat, L23) : présente sauf `pageViewApi: false`. */
+  setPageView?(options: PageViewOptions | boolean): void;
+  getLayout?(): DocumentLayout | null;
   /** Nombre d'écouteurs encore abonnés, tous événements confondus. */
   listenerCount(): number;
 }
@@ -119,6 +148,7 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
 
   const element = document.createElement('div');
   element.className = 'aster-content';
+  if (options.pageView) element.classList.add(PAGE_VIEW_CLASS);
   const contentElement = document.createElement('div');
   contentElement.className = 'ProseMirror';
   contentElement.contentEditable = 'true';
@@ -173,6 +203,30 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
   const presentVariables = new Set<string>();
   const plugins: Plugin[] = [];
   const deletedRanges: Range[] = [];
+  const chains: ChainStep[][] = [];
+  const pageViewCalls: (PageViewOptions | boolean)[] = [];
+
+  /** Chaîne Tiptap minimale : chaque méthode est journalisée, `run()` valide la chaîne. */
+  const createChain = (): Record<string, (...args: unknown[]) => unknown> => {
+    const steps: ChainStep[] = [];
+    const record =
+      (method: string) =>
+      (...args: unknown[]): unknown => {
+        steps.push({ method, args });
+        return chain;
+      };
+    const chain: Record<string, (...args: unknown[]) => unknown> = {
+      focus: record('focus'),
+      setMark: record('setMark'),
+      unsetMark: record('unsetMark'),
+      updateAttributes: record('updateAttributes'),
+      run: (): boolean => {
+        chains.push(steps);
+        return !readOnly;
+      },
+    };
+    return chain;
+  };
 
   const tiptap = {
     getAttributes: (name: string): Record<string, unknown> => attributes.get(name) ?? {},
@@ -184,6 +238,7 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
       const index = plugins.findIndex((plugin) => plugin.spec.key === key || plugin === key);
       if (index >= 0) plugins.splice(index, 1);
     },
+    chain: createChain,
     commands: {
       deleteRange: (range: Range): boolean => {
         deletedRanges.push(range);
@@ -252,6 +307,9 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     presentVariables,
     plugins,
     deletedRanges,
+    chains,
+    pageViewCalls,
+    layout: options.layout ?? null,
     get focusCalls() {
       return focusCalls;
     },
@@ -309,6 +367,21 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
       listeners.clear();
     },
   };
+
+  // Vue page (hors contrat, L23) : `setPageView` pose ou retire la classe sur l'hôte et
+  // mémorise la mise en page ; `getLayout` la renvoie. Absents avec `pageViewApi: false`.
+  if (options.pageViewApi !== false) {
+    editor.setPageView = (pageView: PageViewOptions | boolean): void => {
+      pageViewCalls.push(pageView);
+      if (pageView === false) {
+        element.classList.remove(PAGE_VIEW_CLASS);
+        return;
+      }
+      element.classList.add(PAGE_VIEW_CLASS);
+      if (typeof pageView === 'object' && pageView.layout) editor.layout = pageView.layout;
+    };
+    editor.getLayout = (): DocumentLayout | null => editor.layout;
+  }
 
   const ids: readonly string[] = options.commands ?? STANDARD_COMMAND_IDS;
   const stateless = new Set(options.stateless ?? []);

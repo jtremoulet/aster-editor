@@ -7,15 +7,39 @@ import type {
 
 const widget = (name: string): ToolbarWidgetItem => ({ type: 'widget', widget: name });
 
-/** Toolbar complète : tout le jeu standard, du plus fréquent au plus rare. */
+/**
+ * Toolbar complète : tout le jeu standard, du plus fréquent au plus rare. Les retraits
+ * passent par les widgets `indentDecrease` / `indentIncrease` (paragraphe ou liste), qui
+ * remplacent les boutons `outdent` / `indent` limités aux listes.
+ */
 export const FULL_PRESET: readonly ToolbarGroup[] = [
   ['undo', 'redo'],
   [widget('heading'), widget('outline')],
-  ['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'code', 'highlight'],
+  [
+    'bold',
+    'italic',
+    'underline',
+    widget('underlineStyle'),
+    'strike',
+    'subscript',
+    'superscript',
+    widget('caps'),
+    'code',
+    'highlight',
+  ],
   [widget('fontFamily'), widget('fontSize')],
   [widget('textColor'), widget('backgroundColor')],
   ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify'],
-  ['bulletList', 'orderedList', 'taskList', 'outdent', 'indent'],
+  // Mise en page (session 3).
+  [
+    widget('lineSpacing'),
+    widget('paragraphSpacing'),
+    widget('indentDecrease'),
+    widget('indentIncrease'),
+    widget('paragraphBorders'),
+    widget('pageLayout'),
+  ],
+  ['bulletList', 'orderedList', 'taskList'],
   [widget('link'), widget('image'), widget('table'), widget('variable')],
   ['blockquote', 'codeBlock', 'horizontalRule'],
   ['clearFormatting', widget('formatPainter')],
@@ -34,7 +58,8 @@ export const STANDARD_PRESET: readonly ToolbarGroup[] = [
   [widget('heading')],
   ['bold', 'italic', 'underline', 'strike', 'code', 'highlight'],
   ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify'],
-  ['bulletList', 'orderedList', 'taskList', 'outdent', 'indent'],
+  [widget('lineSpacing'), widget('indentDecrease'), widget('indentIncrease')],
+  ['bulletList', 'orderedList', 'taskList'],
   [widget('link'), widget('image'), widget('table'), widget('variable')],
   ['blockquote', 'codeBlock', 'horizontalRule'],
   ['clearFormatting'],

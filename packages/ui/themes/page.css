@@ -1,0 +1,243 @@
+/*
+ * Aster Editor — vue page et dialogues de mise en page (session 3, lot L26).
+ * Complète `base.css` ; mêmes variables `--aster-*`, aucune valeur en dur hors repli.
+ *
+ * Vue page : quand l'hôte de l'éditeur porte `aster--page-view` (posé par le core avec
+ * `AsterOptions.pageView`), le conteneur `.aster-content` devient un « bureau » et le
+ * contenteditable `.ProseMirror` une feuille centrée aux dimensions et marges du document.
+ * Le core pose aussi, sur l'hôte, les variables calculées depuis `DocumentLayout.page` :
+ *
+ *   --aster-page-width           largeur de la feuille (mm), 210mm par défaut
+ *   --aster-page-height          hauteur minimale de la feuille (mm), 297mm par défaut
+ *   --aster-page-margin-top      marges de la feuille = padding du contenteditable
+ *   --aster-page-margin-right
+ *   --aster-page-margin-bottom
+ *   --aster-page-margin-left
+ *   --aster-page-margin-header   distance du bord à l'en-tête (optionnelle, 12.7mm)
+ *   --aster-page-margin-footer   distance du bord au pied (optionnelle, 12.7mm)
+ *
+ * Les thèmes (`light.css` / `night.css`) fournissent les couleurs :
+ *
+ *   --aster-page-bg              fond de la feuille (blanc / gris très sombre)
+ *   --aster-page-desk            fond du bureau autour de la feuille
+ *   --aster-page-shadow          ombre de la feuille
+ *   --aster-page-desk-padding    espace entre le bord du bureau et la feuille
+ *
+ * Aucune pagination : `hr[data-page-break]` est rendu comme une coupure de feuille, les
+ * en-têtes et pieds `default` (conteneurs posés par le core) sont affichés une fois, en
+ * lecture seule, dans les marges haute et basse.
+ */
+
+/* ---------- Bureau et feuille -------------------------------------------- */
+
+.aster--page-view .aster-content {
+  position: relative;
+  padding: var(--aster-page-desk-padding) var(--aster-space-4);
+  background: var(--aster-page-desk);
+  overflow-x: auto;
+}
+
+.aster--page-view .aster-content .ProseMirror {
+  width: var(--aster-page-width, 210mm);
+  max-width: 100%;
+  min-height: var(--aster-page-height, 297mm);
+  margin: 0 auto;
+  padding: var(--aster-page-margin-top, 25.4mm) var(--aster-page-margin-right, 25.4mm)
+    var(--aster-page-margin-bottom, 25.4mm) var(--aster-page-margin-left, 25.4mm);
+  background: var(--aster-page-bg);
+  box-shadow: var(--aster-page-shadow);
+  border-radius: 0;
+}
+
+.aster--page-view .aster-content .ProseMirror:focus-visible {
+  box-shadow:
+    var(--aster-page-shadow),
+    inset 0 0 0 2px var(--aster-accent-soft);
+}
+
+/* ---------- En-tête et pied (lecture seule) ------------------------------ */
+
+.aster--page-view .aster-page-header,
+.aster--page-view .aster-page-footer {
+  position: absolute;
+  left: 50%;
+  width: var(--aster-page-width, 210mm);
+  max-width: calc(100% - 2 * var(--aster-space-4));
+  padding: 0 var(--aster-page-margin-right, 25.4mm) 0 var(--aster-page-margin-left, 25.4mm);
+  transform: translateX(-50%);
+  overflow: hidden;
+  color: var(--aster-text);
+  font-family: var(--aster-font-content);
+  font-size: var(--aster-font-size-content);
+  line-height: var(--aster-line-height);
+  opacity: 0.55;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+.aster--page-view .aster-page-header {
+  top: calc(var(--aster-page-desk-padding) + var(--aster-page-margin-header, 12.7mm));
+  max-height: calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm));
+}
+
+.aster--page-view .aster-page-footer {
+  bottom: calc(var(--aster-page-desk-padding) + var(--aster-page-margin-footer, 12.7mm));
+  max-height: calc(
+    var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)
+  );
+}
+
+.aster--page-view .aster-page-header:empty,
+.aster--page-view .aster-page-footer:empty,
+.aster-page-header[hidden],
+.aster-page-footer[hidden] {
+  display: none;
+}
+
+.aster--page-view .aster-page-header p,
+.aster--page-view .aster-page-footer p {
+  margin: 0;
+}
+
+/* ---------- Saut de page explicite --------------------------------------- */
+
+.aster--page-view .aster-content .ProseMirror hr[data-page-break] {
+  height: var(--aster-page-desk-padding);
+  margin: var(--aster-page-margin-bottom, 25.4mm) calc(-1 * var(--aster-page-margin-right, 25.4mm))
+    var(--aster-page-margin-top, 25.4mm) calc(-1 * var(--aster-page-margin-left, 25.4mm));
+  border: 0;
+  background: var(--aster-page-desk);
+  box-shadow:
+    inset 0 1px 0 var(--aster-border),
+    inset 0 -1px 0 var(--aster-border);
+}
+
+/* ---------- Dialogues de mise en page ------------------------------------ */
+
+.aster-dialog__row {
+  display: flex;
+  gap: var(--aster-space-2);
+}
+
+.aster-dialog__row > .aster-dialog__field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.aster-dialog__input--number {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.aster-dialog__select {
+  width: 100%;
+  cursor: pointer;
+}
+
+.aster-dialog__radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aster-space-3);
+}
+
+/* Bouton secondaire (« Réinitialiser ») poussé à gauche des actions. */
+.aster-dialog__button--secondary {
+  margin-right: auto;
+}
+
+/* Libellé réservé aux lecteurs d'écran (tableau de bordures : l'en-tête de colonne suffit). */
+.aster-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Interligne : menu puis formulaire « Personnalisé ». */
+.aster-line-spacing--custom {
+  gap: var(--aster-space-3);
+  padding: var(--aster-space-3);
+  min-width: 240px;
+}
+
+.aster-line-spacing__kinds {
+  flex-direction: row;
+  gap: var(--aster-space-3);
+}
+
+/* Espacement de paragraphe. */
+.aster-paragraph-spacing {
+  min-width: 320px;
+}
+
+/* Bordures et fond : une grille côté / style / épaisseur / couleur. */
+.aster-borders-dialog {
+  min-width: 380px;
+}
+
+.aster-borders-dialog__sides {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) 5.5em 2.5em;
+  gap: var(--aster-space-1) var(--aster-space-2);
+  align-items: center;
+}
+
+.aster-borders-dialog__head,
+.aster-borders-dialog__row {
+  display: contents;
+}
+
+.aster-borders-dialog__color {
+  width: 100%;
+  height: var(--aster-button-size);
+  padding: 2px;
+  border: 1px solid var(--aster-border);
+  border-radius: var(--aster-radius);
+  background: var(--aster-surface);
+  cursor: pointer;
+}
+
+.aster-borders-dialog__color:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.aster-borders-dialog__shading-row {
+  align-items: center;
+}
+
+.aster-borders-dialog__shading-color {
+  width: 2.5em;
+}
+
+/* Mise en page du document. */
+.aster-page-layout {
+  min-width: 340px;
+}
+
+/* Taille d'image : largeur et hauteur côte à côte. */
+.aster-image-dialog__size > .aster-dialog__field {
+  flex: 1 1 0;
+}
+
+/* Retraits : boutons simples, aucune règle propre (voir `.aster-toolbar__button`). */
+
+/* Aperçu des styles de soulignement dans le menu. */
+.aster-underline-style__item .aster-toolbar__text {
+  text-underline-offset: 3px;
+}
+
+/* Casse : aperçu des entrées. */
+.aster-caps__item--all .aster-toolbar__text {
+  text-transform: uppercase;
+}
+
+.aster-caps__item--small .aster-toolbar__text {
+  font-variant: small-caps;
+}

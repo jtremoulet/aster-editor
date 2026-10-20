@@ -50,8 +50,21 @@ describe('createAster', () => {
 
   it('monte le preset standard par défaut et enregistre les chaînes UI', () => {
     createAster(host);
-    expect(host.querySelectorAll('.aster-toolbar__group').length).toBe(8);
+    // 9 groupes depuis L26 : un groupe « mise en page » (interligne, retraits).
+    expect(host.querySelectorAll('.aster-toolbar__group').length).toBe(9);
+    expect(host.querySelector('.aster-line-spacing')).not.toBeNull();
     expect(editor.i18n.t('ui.toolbar.label')).toBe('Formatting toolbar');
+    expect(editor.i18n.t('ui.lineSpacing.label')).toBe('Line spacing');
+  });
+
+  it('transmet pageView au core (booléen ou options), sans le garder côté UI', () => {
+    createAster(host, { toolbar: false, pageView: true });
+    expect(vi.mocked(createEditor).mock.calls[0]?.[0]?.pageView).toBe(true);
+    const options = { layout: { page: { size: 'A5' as const } } };
+    createAster(host, { toolbar: false, pageView: options });
+    expect(vi.mocked(createEditor).mock.calls[1]?.[0]?.pageView).toBe(options);
+    createAster(host, { toolbar: false });
+    expect(vi.mocked(createEditor).mock.calls[2]?.[0]).not.toHaveProperty('pageView');
   });
 
   it('respecte toolbar: false et une config custom', () => {

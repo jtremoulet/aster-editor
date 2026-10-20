@@ -380,3 +380,12 @@
 - Dette à solder à l'intégration de L25 : `units.ts` (L24) et `units-blocks.ts` (L25) en doublon ; `renderBlocks` doit retirer `margin-left` / `text-indent` des items (`data-docx-num-indent`).
 - Correctifs orchestrateur : regex du test du squelette, `tcPr` et autres propriétés de conteneur ignorées par `convertBlocks` (42 faux `object-lost` sur le document client). Typecheck `word` temporairement rouge à cause de `core/src/html/serialize-html.ts` en cours (L23).
 - Revue R24 lancée.
+
+### 20/10 17:40 — L25 lecteur blocs et L26 ui rendus et intégrés
+
+- **L25** (agent 25 min, 322k tokens, 62 outils) : tableaux (bordures extérieures sur `<table>`, intérieures sur les cellules, fusions, `colwidth`), listes depuis `numbering.xml` (reprise, continuation, puces Symbol ramenées à l'Unicode), images DrawingML et VML, notes à séquence commune, en-têtes et pieds, sections, objets perdus. 72 tests, `expected/` 14-17 figés. Document client : 8 tableaux, 4 listes, aucun avertissement.
+- Orchestrateur : langue du document branchée, **en-têtes et pieds hérités entre sections** (Word fait hériter ; le document client ne référence son pied que dans la première section), `reportLost` dans `runs.ts` pour les révisions, champs inconnus, maths, commentaires et objets incorporés (fixture 17 : 7 objets signalés, une fois chacun). Décision : un champ `DATE` est rendu par son résultat **et** signalé.
+- Dette : `units.ts` (L24) et `units-blocks.ts` (L25) en doublon partiel ; `renderBlocks` ne retire pas encore `margin-left` / `text-indent` des items (`data-docx-num-indent`) ; `w:jc` de tableau ignoré ; `numStyleLink` non suivi.
+- **L26** (agent 25 min, 342k tokens, 83 outils) : 8 widgets (interligne, espacement, retraits, bordures et fond, casse, style de souligné, mise en page), `themes/page.css` (bureau, feuille, en-têtes et pieds en lecture seule, coupure de feuille), variables `--aster-page-*`, dialogue d'image avec hauteur et verrou, icône `ordered-list` redessinée avec test géométrique. 289 → 375 tests, 24 widgets, 81 icônes, 179 clés i18n. Décisions validées : `indentIncrease` / `indentDecrease` remplacent `indent` / `outdent` dans les presets `full` et `standard` ; pas de `@page` dans `print.css`.
+- Propositions de contrat en attente de L23 : `image.setAttributes.height`, `setPageView` / `getLayout` dans `api/editor.ts`, `text.setCaps` / `text.unsetCaps`, commande de style de souligné.
+- Revues R25 et R26 lancées. Typecheck global encore rouge sur `core/src/html/serialize-html.ts` (L23 en cours).

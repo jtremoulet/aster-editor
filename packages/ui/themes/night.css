@@ -34,5 +34,9 @@
   --aster-content-min-height: 200px;
   --aster-highlight: #6b5500; /* texte night dessus : ratio ≈ 5,9 : 1 (AA) */
   --aster-selection: rgba(122, 156, 255, 0.3);
+  --aster-page-bg: #1c1f27; /* gris très sombre, texte night dessus : ratio > 12 : 1 */
+  --aster-page-desk: #0f1116;
+  --aster-page-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  --aster-page-desk-padding: 24px;
   color-scheme: dark;
 }

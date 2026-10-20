@@ -1,0 +1,176 @@
+import type { AsterEditor, ParagraphLayoutAttrName } from '@aster-editor/core';
+import type { ToolbarWidget } from '../types';
+import { el } from '../utils/dom';
+import { createPlainButton } from './button';
+import { createDropdown, type Dropdown } from './dropdown';
+import {
+  canEditBlockLayout,
+  createAlert,
+  createCheckbox,
+  createNumberField,
+  currentBlockLayout,
+  fieldSuffix,
+  flagInvalid,
+  parseNumberInput,
+  readFlag,
+  readNumber,
+  setBlockLayout,
+  submitOnEnter,
+  unsetBlockLayout,
+} from './paragraph-layout';
+
+/** Champs numériques du dialogue, dans l'ordre d'affichage : attribut et clé i18n. */
+const NUMBER_FIELDS: readonly {
+  readonly attr: Extract<
+    ParagraphLayoutAttrName,
+    'spacingBeforePt' | 'spacingAfterPt' | 'indentLeftPt' | 'indentRightPt' | 'indentFirstLinePt'
+  >;
+  readonly labelKey: string;
+  /** Un retrait de première ligne négatif est un retrait suspendu : seul champ sans minimum. */
+  readonly min?: number;
+}[] = [
+  { attr: 'spacingBeforePt', labelKey: 'ui.paragraphSpacing.before', min: 0 },
+  { attr: 'spacingAfterPt', labelKey: 'ui.paragraphSpacing.after', min: 0 },
+  { attr: 'indentLeftPt', labelKey: 'ui.paragraphSpacing.indentLeft', min: 0 },
+  { attr: 'indentRightPt', labelKey: 'ui.paragraphSpacing.indentRight', min: 0 },
+  { attr: 'indentFirstLinePt', labelKey: 'ui.paragraphSpacing.firstLine' },
+];
+
+/** Attributs que le dialogue pilote, et que « Réinitialiser » efface. */
+export const PARAGRAPH_SPACING_ATTRS: readonly ParagraphLayoutAttrName[] = [
+  'spacingBeforePt',
+  'spacingAfterPt',
+  'indentLeftPt',
+  'indentRightPt',
+  'indentFirstLinePt',
+  'keepWithNext',
+  'pageBreakBefore',
+];
+
+/** Vrai si le bloc courant porte au moins un des attributs du dialogue. */
+export function hasParagraphSpacing(editor: AsterEditor): boolean {
+  const attrs = currentBlockLayout(editor);
+  return PARAGRAPH_SPACING_ATTRS.some((attr) => attrs[attr] !== null && attrs[attr] !== undefined);
+}
+
+/**
+ * Widget `paragraphSpacing` : dialogue « Espacement » (avant / après, retraits gauche,
+ * droite et première ligne en pt, « Conserver avec le suivant », « Saut de page avant »),
+ * prérempli depuis le bloc courant. « Appliquer » envoie `paragraph.setLayout` avec chaque
+ * champ : un nombre, ou `null` pour un champ vidé / une case décochée (retour à l'héritage).
+ * « Réinitialiser » envoie `paragraph.unsetLayout` sur les sept attributs.
+ */
+export function createParagraphSpacingDialog(editor: AsterEditor): ToolbarWidget {
+  return createDropdown({
+    editor,
+    labelKey: 'ui.paragraphSpacing.title',
+    icon: 'paragraph-spacing',
+    panelRole: 'dialog',
+    panelClass: 'aster-dialog aster-paragraph-spacing',
+    isEnabled: () => canEditBlockLayout(editor),
+    isActive: () => hasParagraphSpacing(editor),
+    renderPanel: (panel, dropdown) => renderSpacingPanel(editor, panel, dropdown),
+  });
+}
+
+function renderSpacingPanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dropdown): void {
+  const t = (key: string): string => editor.i18n.t(key);
+  const current = currentBlockLayout(editor);
+  const suffix = fieldSuffix();
+  panel.setAttribute('aria-label', t('ui.paragraphSpacing.title'));
+
+  const fields = NUMBER_FIELDS.map((field) => ({
+    ...field,
+    ...createNumberField({
+      id: `aster-paragraph-spacing-${field.attr}-${suffix}`,
+      label: t(field.labelKey),
+      value: readNumber(current, field.attr),
+      min: field.min,
+      step: 0.5,
+    }),
+  }));
+  fields[0]?.input.setAttribute('autofocus', '');
+  const alert = createAlert();
+
+  const keepWithNext = createCheckbox(
+    t('ui.paragraphSpacing.keepWithNext'),
+    readFlag(current, 'keepWithNext'),
+    'aster-paragraph-spacing__keep',
+  );
+  const pageBreakBefore = createCheckbox(
+    t('ui.paragraphSpacing.pageBreakBefore'),
+    readFlag(current, 'pageBreakBefore'),
+    'aster-paragraph-spacing__break',
+  );
+
+  const submit = (): void => {
+    const values: Partial<Record<ParagraphLayoutAttrName, number | null>> = {};
+    for (const field of fields) {
+      const parsed = parseNumberInput(field.input.value);
+      if (
+        parsed === 'invalid' ||
+        (parsed !== null && field.min !== undefined && parsed < field.min)
+      ) {
+        flagInvalid(field.input, alert, t('ui.paragraphSpacing.invalid'));
+        return;
+      }
+      values[field.attr] = parsed;
+    }
+    setBlockLayout(editor, {
+      spacingBeforePt: values.spacingBeforePt ?? null,
+      spacingAfterPt: values.spacingAfterPt ?? null,
+      indentLeftPt: values.indentLeftPt ?? null,
+      indentRightPt: values.indentRightPt ?? null,
+      indentFirstLinePt: values.indentFirstLinePt ?? null,
+      keepWithNext: keepWithNext.input.checked ? true : null,
+      pageBreakBefore: pageBreakBefore.input.checked ? true : null,
+    });
+    dropdown.close(false);
+    editor.focus();
+  };
+  submitOnEnter(
+    fields.map((field) => field.input),
+    submit,
+  );
+  for (const field of fields) {
+    field.input.addEventListener('input', () => {
+      field.input.removeAttribute('aria-invalid');
+      alert.setAttribute('hidden', '');
+    });
+  }
+
+  const ok = createPlainButton({
+    className: 'aster-dialog__button aster-dialog__button--primary',
+    text: t('ui.paragraphSpacing.ok'),
+  });
+  ok.addEventListener('click', submit);
+  const cancel = createPlainButton({
+    className: 'aster-dialog__button',
+    text: t('ui.paragraphSpacing.cancel'),
+  });
+  cancel.addEventListener('click', () => dropdown.close(true));
+  const reset = createPlainButton({
+    className: 'aster-dialog__button aster-dialog__button--secondary',
+    text: t('ui.paragraphSpacing.reset'),
+  });
+  reset.disabled =
+    !hasParagraphSpacing(editor) || !editor.commands.canRun('paragraph.unsetLayout', {});
+  reset.addEventListener('click', () => {
+    unsetBlockLayout(editor, PARAGRAPH_SPACING_ATTRS);
+    dropdown.close(false);
+    editor.focus();
+  });
+
+  const [before, after, left, right, firstLine] = fields;
+  panel.append(
+    el('div', { className: 'aster-dialog__row' }, [before?.wrapper ?? '', after?.wrapper ?? '']),
+    el('div', { className: 'aster-dialog__row' }, [left?.wrapper ?? '', right?.wrapper ?? '']),
+    firstLine?.wrapper ?? '',
+    alert,
+    el('div', { className: 'aster-dialog__field' }, [
+      keepWithNext.wrapper,
+      pageBreakBefore.wrapper,
+    ]),
+    el('div', { className: 'aster-dialog__actions' }, [reset, cancel, ok]),
+  );
+}

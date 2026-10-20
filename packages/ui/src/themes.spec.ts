@@ -14,11 +14,30 @@ const THEMES_DIR = join(__dirname, '..', 'themes');
 /** Seuil WCAG 2.1 AA pour du texte normal. */
 const AA_RATIO = 4.5;
 
-/** Variables posées à chaud par les widgets, jamais déclarées par un thème. */
+/**
+ * Variables posées à chaud par les widgets ou par le core (vue page : dimensions et marges
+ * calculées depuis `DocumentLayout`), jamais déclarées par un thème.
+ */
 const RUNTIME_VARIABLES: ReadonlySet<string> = new Set([
   '--aster-swatch',
   '--aster-table-grid-cols',
+  '--aster-page-width',
+  '--aster-page-height',
+  '--aster-page-margin-top',
+  '--aster-page-margin-right',
+  '--aster-page-margin-bottom',
+  '--aster-page-margin-left',
+  '--aster-page-margin-header',
+  '--aster-page-margin-footer',
 ]);
+
+/** Variables de vue page que chaque thème doit déclarer (documentées dans `page.css`). */
+const PAGE_THEME_VARIABLES: readonly string[] = [
+  '--aster-page-bg',
+  '--aster-page-desk',
+  '--aster-page-shadow',
+  '--aster-page-desk-padding',
+];
 
 type Rgb = readonly [number, number, number];
 
@@ -72,6 +91,9 @@ const PAIRS: readonly (readonly [string, string])[] = [
   ['--aster-text', '--aster-highlight'],
   ['--aster-accent-contrast', '--aster-accent'],
   ['--aster-danger-contrast', '--aster-danger'],
+  // Vue page : le corps du document est posé sur la feuille, ses libellés en muet aussi.
+  ['--aster-text', '--aster-page-bg'],
+  ['--aster-text-muted', '--aster-page-bg'],
 ];
 
 describe('thèmes CSS', () => {
@@ -87,6 +109,14 @@ describe('thèmes CSS', () => {
         AA_RATIO,
       );
     });
+
+    it('déclare les variables de vue page --aster-page-*', () => {
+      for (const name of PAGE_THEME_VARIABLES) {
+        expect(variables.has(name), `${theme} : ${name} manquante`).toBe(true);
+      }
+      // La feuille et le bureau sont des couleurs distinctes, pour que la feuille se voie.
+      expect(variables.get('--aster-page-bg')).not.toBe(variables.get('--aster-page-desk'));
+    });
   });
 
   it('chaque var(--aster-*) utilisée dans les CSS est définie dans les deux thèmes', () => {
@@ -99,6 +129,7 @@ describe('thèmes CSS', () => {
       'images-tables.css',
       'search-source.css',
       'variables.css',
+      'page.css',
     ]) {
       expect(files, `${expected} manquant dans themes/`).toContain(expected);
     }
@@ -121,5 +152,36 @@ describe('thèmes CSS', () => {
     const light = Array.from(readTheme('light').keys()).sort();
     const night = Array.from(readTheme('night').keys()).sort();
     expect(night).toEqual(light);
+  });
+
+  it('aster.css importe page.css, qui rend la vue page, les en-têtes, pieds et sauts de page', () => {
+    const aster = readFileSync(join(THEMES_DIR, 'aster.css'), 'utf8');
+    expect(aster).toContain("@import './page.css';");
+    // Importée après `base.css` : ses règles sur `.ProseMirror` doivent l'emporter.
+    expect(aster.indexOf("'./page.css'")).toBeGreaterThan(aster.indexOf("'./base.css'"));
+    const page = readFileSync(join(THEMES_DIR, 'page.css'), 'utf8');
+    expect(page).toContain('.aster--page-view .aster-content .ProseMirror');
+    expect(page).toContain('var(--aster-page-width, 210mm)');
+    expect(page).toContain('.aster--page-view .aster-page-header');
+    expect(page).toContain('.aster--page-view .aster-page-footer');
+    expect(page).toContain('pointer-events: none');
+    expect(page).toContain('user-select: none');
+    expect(page).toContain('hr[data-page-break]');
+    // Chaque variable runtime du core a un repli : la feuille s'affiche même sans `DocumentLayout`.
+    for (const name of [
+      '--aster-page-width',
+      '--aster-page-height',
+      '--aster-page-margin-top',
+      '--aster-page-margin-right',
+      '--aster-page-margin-bottom',
+      '--aster-page-margin-left',
+    ]) {
+      expect(page, `${name} sans repli`).toMatch(new RegExp(`var\\(${name}, [\\d.]+mm\\)`));
+    }
+    const print = readFileSync(join(THEMES_DIR, 'print.css'), 'utf8');
+    expect(print).toContain('.aster--page-view .aster-content .ProseMirror');
+    expect(print).toContain('page-break-after: always');
+    // Pas de règle `@page` globale (ses descripteurs n'acceptent pas `var()`), seulement une note.
+    expect(print).not.toMatch(/^\s*@page\s*\{/m);
   });
 });
