@@ -27,3 +27,7 @@ Attendus `fixtures/docx/expected/*.html` régénérés par `ASTER_REGEN=1 npx vi
 ## Rapport attendu
 
 `## Rapport Lot F42` : tableau finding → correctif → test ; Non fait ; Attendus régénérés (diff expliqué) ; Scores avant → après ; Tests (compteurs) ; Fichiers.
+
+## Ajout (contrat étendu après R43)
+
+8. **Taquets alignés** : `packages/core/src/api/layout.ts` porte désormais `TabAttrs.align` (`'left' | 'center' | 'right' | 'decimal'`, `left` non sérialisé) → `data-align`, et `TabAttrs.leader` (`'dot' | 'hyphen' | 'underscore'`) → `data-leader`, émis dans cet ordre **après** `data-stop` sur le `<span data-tab>`. Le lecteur lit `w:val` et `w:leader` du taquet résolu (`w:tabs` du paragraphe puis des styles) ; `bar` et `clear` → pas de `data-align` ; `w:leader="none"` → rien. Attendus 12 et 19 régénérés en conséquence (diff cité). Le comparateur (`compare/**`) compare l'alignement des taquets (`paragraph.tabs` : position + alignement) : la fixture 19 mesure la perte tant que F43 (writer, en parallèle) ne les réécrit pas — ajuste `compare-fixtures.spec.ts` au score mesuré en fin de lot, et cite-le.

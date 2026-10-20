@@ -24,3 +24,7 @@ Corriger R44-01 à R44-06, chaque correctif accompagné d'un test qui reproduit 
 ## Rapport attendu
 
 `## Rapport Lot F44` : tableau finding → correctif → test ; Non fait ; Tests (compteurs) ; Fichiers.
+
+## Ajout (contrat étendu après R43)
+
+7. **`tab.ts`** : attributs `align` (`data-align`, valeurs `center` / `right` / `decimal`, `left` ou invalide → `null`, non sérialisé) et `leader` (`data-leader`, `dot` / `hyphen` / `underscore`), émis dans cet ordre après `data-stop`, `setHTML(getHTML())` stable ; `text.insertTab` accepte `{ stopPt?, align?, leader? }`. Rendu : aucun changement visuel exigé (l'espace élastique reste), mais `.aster-tab[data-leader]` peut recevoir une bordure basse pointillée dans `page.css` si trivial.
