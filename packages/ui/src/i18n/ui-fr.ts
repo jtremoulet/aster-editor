@@ -185,6 +185,8 @@ export const uiFr: AsterDictionary = {
   'ui.pageLayout.enabled': 'Vue page',
   'ui.pageLayout.pagination': 'Pagination (approximative)',
   'ui.pageLayout.section': 'Section {index} sur {count}',
+  'ui.pageLayout.sectionMixed':
+    'Section {index} sur {count} — la sélection couvre plusieurs sections',
   'ui.pageLayout.invalid': 'Saisis des marges valides',
   'ui.pageLayout.ok': 'Appliquer',
   'ui.pageLayout.cancel': 'Annuler',

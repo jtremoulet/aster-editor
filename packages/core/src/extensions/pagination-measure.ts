@@ -7,6 +7,7 @@ import {
   pageViewCssValues,
   resolvePageMetrics,
   resolveSectionLayout,
+  sectionOpenedByBreak,
   type PageMetrics,
 } from './page-view';
 import {
@@ -208,8 +209,10 @@ export interface SectionSegment extends PageSegment {
 /**
  * Segments de pagination d'un document à sections : la section 1 depuis l'hôte, puis une
  * section par saut, dont les variables sont lues sur son `hr` (posées par le core pour la
- * section suivante) et, à défaut, résolues depuis `layout.sections` (numérotation
- * **positionnelle** : le k-ième saut ouvre la section k + 1, quel que soit son attribut).
+ * section qu'il ouvre) et, à défaut, résolues depuis `layout.sections`. La section d'un
+ * saut est **positionnelle** (`sectionOpenedByBreak`, partagée avec le NodeView du core,
+ * R44-01) : le k-ième saut ouvre la section k + 1, quel que soit son attribut ; `hr`,
+ * coupure, libellé et en-tête désignent donc toujours la même section.
  */
 export function sectionSegments(
   host: HTMLElement | null,
@@ -231,7 +234,7 @@ export function sectionSegments(
   };
   const segments = [segmentOf(host, 1, 0, false)];
   sectionBreaks.forEach((sectionBreak, position) => {
-    const section = position + 2;
+    const section = sectionOpenedByBreak(position);
     const declared = sectionBreak.element?.getAttribute(SECTION_START_ATTRIBUTE) ?? null;
     const start = declared ?? resolveSectionLayout(layout, section).start ?? 'nextPage';
     segments.push(

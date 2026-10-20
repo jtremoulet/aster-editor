@@ -8,7 +8,7 @@ import {
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
-import type { TabAttrs } from '../api';
+import type { TabAlign, TabAttrs, TabLeader } from '../api';
 import { formatPt, isLayoutNumber, parsePt, roundLayoutNumber } from './layout-css';
 
 /** Nom du nœud de tabulation. */
@@ -17,6 +17,14 @@ export const TAB_NODE_NAME = 'tab';
 export const TAB_ATTRIBUTE = 'data-tab';
 /** Attribut HTML de la position du taquet : `data-stop="36pt"`. */
 export const TAB_STOP_ATTRIBUTE = 'data-stop';
+/** Attribut HTML de l'alignement sur le taquet, émis après `data-stop` : `data-align="center"`. */
+export const TAB_ALIGN_ATTRIBUTE = 'data-align';
+/** Attribut HTML des points de suite, émis après `data-align` : `data-leader="dot"`. */
+export const TAB_LEADER_ATTRIBUTE = 'data-leader';
+/** Alignements sérialisés ; `left` est le défaut, jamais émis (`TabAlign`). */
+export const TAB_ALIGNS: readonly Exclude<TabAlign, 'left'>[] = ['center', 'right', 'decimal'];
+/** Points de suite connus (`TabLeader`). */
+export const TAB_LEADERS: readonly TabLeader[] = ['dot', 'hyphen', 'underscore'];
 /** Classe du `span` rendu par le NodeView. */
 export const TAB_CLASS = 'aster-tab';
 /** Variable CSS posée sur le NodeView quand le taquet est connu : `--aster-tab-stop: 36pt`. */
@@ -34,6 +42,23 @@ export function sanitizeTabStop(value: unknown): number | null {
   return isLayoutNumber(value) && value >= 0 ? roundLayoutNumber(value) : null;
 }
 
+/**
+ * Alignement sérialisable (`center`, `right`, `decimal`) ou `null` : `left` est le défaut
+ * du contrat, non sérialisé, et toute autre valeur (texte libre, casse, nombre) est ignorée.
+ */
+export function sanitizeTabAlign(value: unknown): Exclude<TabAlign, 'left'> | null {
+  return typeof value === 'string' && (TAB_ALIGNS as readonly string[]).includes(value)
+    ? (value as Exclude<TabAlign, 'left'>)
+    : null;
+}
+
+/** Points de suite connus (`dot`, `hyphen`, `underscore`) ou `null` pour toute autre valeur. */
+export function sanitizeTabLeader(value: unknown): TabLeader | null {
+  return typeof value === 'string' && (TAB_LEADERS as readonly string[]).includes(value)
+    ? (value as TabLeader)
+    : null;
+}
+
 /** Vrai si le nœud est une tabulation. */
 export function isTabNode(node: ProseMirrorNode | null | undefined): boolean {
   return node?.type.name === TAB_NODE_NAME;
@@ -41,7 +66,11 @@ export function isTabNode(node: ProseMirrorNode | null | undefined): boolean {
 
 /** Attributs typés d'un nœud `tab`. */
 export function tabAttrs(node: ProseMirrorNode): TabAttrs {
-  return { stopPt: sanitizeTabStop(node.attrs['stopPt']) };
+  return {
+    stopPt: sanitizeTabStop(node.attrs['stopPt']),
+    align: sanitizeTabAlign(node.attrs['align']),
+    leader: sanitizeTabLeader(node.attrs['leader']),
+  };
 }
 
 /** Vrai si la sélection est dans un item de liste ou une cellule : la touche Tab leur appartient. */
@@ -93,8 +122,10 @@ export function normalizeTabsInCodeBlocks(html: string): string {
 /**
  * NodeView minimal d'une tabulation : `<span class="aster-tab" contenteditable="false"
  * data-tab="">` avec une largeur de repli inline (`display: inline-block; min-width: 2em`)
- * et, quand le taquet est connu, `data-stop` et `--aster-tab-stop`. La feuille `ui` fait
- * le rendu élastique ; le core garantit seulement qu'une tabulation occupe de la place.
+ * et, quand ils sont connus, `data-stop` et `--aster-tab-stop`, `data-align` et
+ * `data-leader` (session 4 : la feuille `ui` peut dessiner les points de suite). La
+ * feuille `ui` fait le rendu élastique ; le core garantit seulement qu'une tabulation
+ * occupe de la place.
  */
 export class TabNodeView implements NodeView {
   readonly dom: HTMLElement;
@@ -123,14 +154,25 @@ export class TabNodeView implements NodeView {
   }
 
   private render(): void {
-    const stop = sanitizeTabStop(this.node.attrs['stopPt']);
+    const { stopPt, align, leader } = tabAttrs(this.node);
     this.dom.style.cssText = 'display: inline-block; min-width: 2em';
-    if (stop === null) {
+    this.reflect(TAB_ALIGN_ATTRIBUTE, align ?? null);
+    this.reflect(TAB_LEADER_ATTRIBUTE, leader ?? null);
+    if (stopPt === null || stopPt === undefined) {
       this.dom.removeAttribute(TAB_STOP_ATTRIBUTE);
       return;
     }
-    this.dom.setAttribute(TAB_STOP_ATTRIBUTE, formatPt(stop));
-    this.dom.style.setProperty(TAB_STOP_CSS_VARIABLE, formatPt(stop));
+    this.dom.setAttribute(TAB_STOP_ATTRIBUTE, formatPt(stopPt));
+    this.dom.style.setProperty(TAB_STOP_CSS_VARIABLE, formatPt(stopPt));
+  }
+
+  /** Pose l'attribut quand la valeur est connue, le retire sinon. */
+  private reflect(name: string, value: string | null): void {
+    if (value === null) {
+      this.dom.removeAttribute(name);
+    } else {
+      this.dom.setAttribute(name, value);
+    }
   }
 }
 
@@ -141,8 +183,10 @@ export function renderTabNodeView(): NodeViewRenderer {
 
 /**
  * Nœud `tab` : inline, atomique, non sélectionnable (le curseur le franchit comme un
- * caractère), attribut `stopPt` (`null` par défaut). HTML figé :
- * `<span data-tab=""></span>` ou `<span data-tab="" data-stop="36pt"></span>` ;
+ * caractère), attributs `stopPt`, `align` et `leader` (`null` par défaut). HTML figé :
+ * `<span data-tab=""></span>` ou, dans cet ordre et seulement quand ils sont connus,
+ * `<span data-tab="" data-stop="36pt" data-align="right" data-leader="dot"></span>`
+ * (`align: 'left'` ou une valeur inconnue n'est jamais émise, R43-05) ;
  * `getText()` rend `\t`. La touche Tab insère une tabulation dans un paragraphe ou un
  * titre, mais reste `sinkListItem` dans une liste et la navigation de cellule dans une
  * table (l'extension est de priorité basse : ces keymaps passent avant), et n'est pas
@@ -168,6 +212,25 @@ export const Tab = Node.create({
         renderHTML: (attributes: Record<string, unknown>) => {
           const stop = sanitizeTabStop(attributes['stopPt']);
           return stop === null ? {} : { [TAB_STOP_ATTRIBUTE]: formatPt(stop) };
+        },
+      },
+      // Ordre des clés = ordre des attributs HTML : `data-stop`, `data-align`, `data-leader`.
+      align: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          sanitizeTabAlign(element.getAttribute(TAB_ALIGN_ATTRIBUTE)),
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const align = sanitizeTabAlign(attributes['align']);
+          return align === null ? {} : { [TAB_ALIGN_ATTRIBUTE]: align };
+        },
+      },
+      leader: {
+        default: null,
+        parseHTML: (element: HTMLElement) =>
+          sanitizeTabLeader(element.getAttribute(TAB_LEADER_ATTRIBUTE)),
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const leader = sanitizeTabLeader(attributes['leader']);
+          return leader === null ? {} : { [TAB_LEADER_ATTRIBUTE]: leader };
         },
       },
     };

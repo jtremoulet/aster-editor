@@ -8,6 +8,8 @@ import {
   canInsertTab,
   isTabNode,
   normalizeTabsInCodeBlocks,
+  sanitizeTabAlign,
+  sanitizeTabLeader,
   sanitizeTabStop,
   tabAttrs,
 } from './tab';
@@ -21,6 +23,8 @@ import {
 
 const TAB = '<span data-tab=""></span>';
 const STOPPED = '<span data-tab="" data-stop="36pt"></span>';
+/** Les trois attributs, dans l'ordre figé par le contrat : taquet, alignement, points de suite. */
+const FULL = '<span data-tab="" data-stop="36pt" data-align="right" data-leader="dot"></span>';
 
 /**
  * Frappe une touche par le vrai chemin de ProseMirror (`handleKeyDown` de chaque plugin,
@@ -76,6 +80,12 @@ describe('Tab', () => {
         `<h1>a${TAB}b</h1><table><tbody><tr><td><p>${STOPPED}c</p></td></tr></tbody></table>`,
       ],
       ['décimales du taquet', `<p>a<span data-tab="" data-stop="12.5pt"></span>b</p>`],
+      ['taquet, alignement et points de suite', `<p>a${FULL}b</p>`],
+      [
+        'points de suite sans taquet',
+        '<p>a<span data-tab="" data-leader="underscore"></span>b</p>',
+      ],
+      ['alignement décimal seul', '<p>a<span data-tab="" data-align="decimal"></span>b</p>'],
     ])('%s : rendu exact et idempotence stricte', (_name, html) => {
       mounted.editor.setHTML(html);
       expect(bodyHtml(mounted.editor)).toBe(html);
@@ -90,9 +100,9 @@ describe('Tab', () => {
       const json = mounted.editor.getJSON();
       const tabs = json.content?.[0]?.content?.filter((node) => node.type === 'tab') ?? [];
       expect(tabs.map((node) => node.attrs)).toEqual([
-        { stopPt: null },
-        { stopPt: 36 },
-        { stopPt: 36 },
+        { stopPt: null, align: null, leader: null },
+        { stopPt: 36, align: null, leader: null },
+        { stopPt: 36, align: null, leader: null },
       ]);
     });
 
@@ -118,6 +128,45 @@ describe('Tab', () => {
       expect(sanitizeTabStop(0)).toBe(0);
       expect(sanitizeTabStop(-1)).toBeNull();
       expect(sanitizeTabStop(Number.NaN)).toBeNull();
+    });
+
+    it('align left ou inconnu et leader inconnu ne sont pas émis ; ordre data-stop, data-align, data-leader', () => {
+      // Attributs dans le désordre et `left` explicite : réémis dans l'ordre du contrat, sans `left`.
+      mounted.editor.setHTML(
+        '<p>a<span data-leader="dot" data-align="left" data-tab="" data-stop="36pt"></span>b</p>',
+      );
+      expect(mounted.editor.getHTML()).toBe(
+        '<p>a<span data-tab="" data-stop="36pt" data-leader="dot"></span>b</p>',
+      );
+      mounted.editor.setHTML(
+        '<p>a<span data-tab="" data-align="justify"></span><span data-tab="" data-align="RIGHT" data-leader="dots"></span>b</p>',
+      );
+      expect(mounted.editor.getHTML()).toBe(`<p>a${TAB}${TAB}b</p>`);
+      mounted.editor.setJSON({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'tab', attrs: { align: 'center', leader: 'hyphen' } },
+              { type: 'tab', attrs: { stopPt: 72, align: 7, leader: null } },
+            ],
+          },
+        ],
+      });
+      expect(mounted.editor.getHTML()).toBe(
+        '<p><span data-tab="" data-align="center" data-leader="hyphen"></span><span data-tab="" data-stop="72pt"></span></p>',
+      );
+      const node = mounted.editor.tiptap.state.doc.nodeAt(findNodePos(mounted.editor, 'tab'));
+      expect(node ? tabAttrs(node) : null).toEqual({
+        stopPt: null,
+        align: 'center',
+        leader: 'hyphen',
+      });
+      expect(sanitizeTabAlign('left')).toBeNull();
+      expect(sanitizeTabAlign('decimal')).toBe('decimal');
+      expect(sanitizeTabLeader('underscore')).toBe('underscore');
+      expect(sanitizeTabLeader(' dot')).toBeNull();
     });
 
     it('le contenu textuel d’un span data-tab chargé est ignoré (atome)', () => {
@@ -166,6 +215,20 @@ describe('Tab', () => {
       view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { stopPt: null }));
       expect(el?.hasAttribute('data-stop')).toBe(false);
       expect(el?.style.getPropertyValue(TAB_STOP_CSS_VARIABLE)).toBe('');
+    });
+
+    it('reflète data-align et data-leader, retirés quand ils ne sont plus connus', () => {
+      mounted.editor.setHTML(`<p>a${FULL}b</p>`);
+      const [el] = tabElements(mounted);
+      expect(el?.getAttribute('data-align')).toBe('right');
+      expect(el?.getAttribute('data-leader')).toBe('dot');
+      const pos = findNodePos(mounted.editor, 'tab');
+      const { view } = mounted.editor.tiptap;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { stopPt: 36 }));
+      expect(tabElements(mounted)[0]).toBe(el);
+      expect(el?.hasAttribute('data-align')).toBe(false);
+      expect(el?.hasAttribute('data-leader')).toBe(false);
+      expect(el?.getAttribute('data-stop')).toBe('36pt');
     });
   });
 
@@ -270,7 +333,25 @@ describe('Tab', () => {
       expect(bodyHtml(mounted.editor)).toBe(`<ul><li><p>un${TAB}</p></li></ul>`);
       const node = mounted.editor.tiptap.state.doc.nodeAt(findNodePos(mounted.editor, 'tab'));
       expect(isTabNode(node)).toBe(true);
-      expect(node ? tabAttrs(node) : null).toEqual({ stopPt: null });
+      expect(node ? tabAttrs(node) : null).toEqual({ stopPt: null, align: null, leader: null });
+    });
+
+    it('accepte align et leader, dans l’ordre du contrat ; left et valeurs inconnues ignorés', () => {
+      cursorAtEndOf(mounted, 'a');
+      expect(
+        mounted.editor.commands.run('text.insertTab', {
+          stopPt: 36,
+          align: 'right',
+          leader: 'dot',
+        }),
+      ).toBe(true);
+      expect(mounted.editor.commands.run('text.insertTab', { align: 'left', leader: 'x' })).toBe(
+        true,
+      );
+      expect(mounted.editor.commands.run('text.insertTab', { leader: 'underscore' })).toBe(true);
+      expect(mounted.editor.getHTML()).toBe(
+        `<p>a${FULL}${TAB}<span data-tab="" data-leader="underscore"></span></p>`,
+      );
     });
 
     it('est refusée en lecture seule', () => {

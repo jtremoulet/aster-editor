@@ -15,6 +15,7 @@ import {
   pageViewCssValues,
   resolvePageMetrics,
   resolveSectionLayout,
+  sectionOpenedByBreak,
 } from './page-view';
 
 /** Nom du nœud de saut de section. */
@@ -29,6 +30,14 @@ export const SECTION_BREAK_CLASS = 'aster-section-break';
  * pagination (L44) sache si la section commence une nouvelle feuille.
  */
 export const SECTION_START_ATTRIBUTE = 'data-section-start';
+/**
+ * Événement DOM (sans bulle) émis sur `view.dom` par le plugin quand la suite des sauts
+ * de premier niveau change (insertion, suppression, remplacement) : chaque NodeView
+ * recalcule alors son rang (R44-01). Émis après la mise à jour complète de la vue, quand
+ * les positions sont exactes ; pendant `update()`, ProseMirror peut encore porter des
+ * nœuds périmés avant le saut.
+ */
+export const SECTION_BREAKS_CHANGE_EVENT = 'aster:section-breaks-change';
 
 /**
  * Numéro de section maximal (R41-06), même ordre de grandeur que `MAX_PAGE_MM`. Au-delà,
@@ -125,6 +134,27 @@ export function renumberSections(tr: Transaction): boolean {
   return changed;
 }
 
+/**
+ * Rang (0-based) d'un saut parmi les sauts de premier niveau du document : par identité
+ * du nœud d'abord (le document de `view.state` est déjà le nouveau pendant la mise à jour
+ * des NodeViews), sinon par position (`getPos`), `null` si le saut n'est pas de premier
+ * niveau (imbriqué, ramené à un `hr` à la transaction suivante). Positionnel, comme
+ * `getSections` : l'attribut `section` n'entre pas en jeu (R44-01).
+ */
+export function sectionBreakRank(
+  doc: ProseMirrorNode,
+  node: ProseMirrorNode,
+  pos: number | undefined,
+): number | null {
+  const breaks = findSectionBreaks(doc);
+  const byIdentity = breaks.findIndex((found) => found.node === node);
+  if (byIdentity >= 0) {
+    return byIdentity;
+  }
+  const byPosition = pos === undefined ? -1 : breaks.findIndex((found) => found.pos === pos);
+  return byPosition >= 0 ? byPosition : null;
+}
+
 /** Suite ordonnée des numéros des sauts de premier niveau, telle que le HTML les émet. */
 function sectionNumbers(doc: ProseMirrorNode): number[] {
   return findSectionBreaks(doc).map(({ node }) => sanitizeSectionNumber(node.attrs['section']));
@@ -191,11 +221,15 @@ function ensureSectionBlocks(tr: Transaction, paragraph: NodeType): boolean {
 /**
  * NodeView d'un saut de section : `<hr class="aster-section-break" data-section-break="n">`.
  * Quand la vue page est active avec `layout.sections`, le `hr` porte en plus, en style
- * inline, les variables `--aster-page-*` (mêmes noms que sur l'hôte) de la section
- * **suivante** (`n + 1`, `resolveSectionLayout`), et `data-section-start` avec son type de
- * saut. La feuille `ui/themes/page.css` et la pagination (L44) changent de feuille à ce
- * point ; le core ne fait que poser les valeurs. Le NodeView écoute `aster:page-view-change`
- * sur `view.dom` pour suivre `setPageView` sans transaction.
+ * inline, les variables `--aster-page-*` (mêmes noms que sur l'hôte) de la section que ce
+ * saut **ouvre**, et `data-section-start` avec son type de saut. Cette section est
+ * **positionnelle** (`sectionOpenedByBreak`, R44-01 : le k-ième saut ouvre la section
+ * k + 1), la même que la pagination lit pour la coupure qui suit ; l'attribut `section`
+ * n'y entre pas (un document chargé peut porter des numéros hors ordre). La feuille
+ * `ui/themes/page.css` et la pagination (L44) changent de feuille à ce point ; le core
+ * ne fait que poser les valeurs. Le NodeView écoute `aster:page-view-change` (suivre
+ * `setPageView` sans transaction) et `aster:section-breaks-change` (suite des sauts
+ * modifiée) sur `view.dom`.
  */
 export class SectionBreakNodeView implements NodeView {
   readonly dom: HTMLElement;
@@ -207,6 +241,7 @@ export class SectionBreakNodeView implements NodeView {
     this.dom.className = SECTION_BREAK_CLASS;
     this.render();
     props.view.dom.addEventListener(PAGE_VIEW_CHANGE_EVENT, this.refresh);
+    props.view.dom.addEventListener(SECTION_BREAKS_CHANGE_EVENT, this.refresh);
   }
 
   update(node: ProseMirrorNode): boolean {
@@ -224,11 +259,23 @@ export class SectionBreakNodeView implements NodeView {
 
   destroy(): void {
     this.props.view.dom.removeEventListener(PAGE_VIEW_CHANGE_EVENT, this.refresh);
+    this.props.view.dom.removeEventListener(SECTION_BREAKS_CHANGE_EVENT, this.refresh);
   }
 
   private readonly refresh = (): void => {
     this.render();
   };
+
+  /**
+   * Section que ce saut ouvre : positionnelle (`sectionBreakRank`), avec l'attribut
+   * `section + 1` en repli si le saut n'est pas (encore) de premier niveau.
+   */
+  private openedSection(): number {
+    const rank = sectionBreakRank(this.props.view.state.doc, this.node, this.props.getPos());
+    return rank === null
+      ? sanitizeSectionNumber(this.node.attrs['section']) + 1
+      : sectionOpenedByBreak(rank);
+  }
 
   /** Reflète le numéro de section et, si la vue page a des sections, la feuille suivante. */
   private render(): void {
@@ -241,7 +288,7 @@ export class SectionBreakNodeView implements NodeView {
       this.dom.removeAttribute(SECTION_START_ATTRIBUTE);
       return;
     }
-    const next = resolveSectionLayout(layout, section + 1);
+    const next = resolveSectionLayout(layout, this.openedSection());
     const values = pageViewCssValues(resolvePageMetrics(next));
     PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
       this.dom.style.setProperty(name, values[index] ?? '');
@@ -268,7 +315,9 @@ export function renderSectionBreakNodeView(): NodeViewRenderer {
  * (`ensureSectionBlocks`, le `TrailingNode` de `StarterKit` couvrant le saut final) ; hors
  * chargement complet (`SET_CONTENT_META`), dès que la suite ordonnée des numéros de premier
  * niveau diffère de celle d'avant (insertion, suppression, collage, déplacement, changement
- * d'attribut), les sauts sont renumérotés 1..n (`renumberSections`).
+ * d'attribut), les sauts sont renumérotés 1..n (`renumberSections`). Sa vue émet
+ * `aster:section-breaks-change` dès que la suite des nœuds de saut change, pour que chaque
+ * NodeView recalcule la section qu'il ouvre (R44-01).
  */
 export const SectionBreak = Node.create({
   name: SECTION_BREAK_NODE_NAME,
@@ -325,6 +374,21 @@ export const SectionBreak = Node.create({
           }
           return changed ? tr : null;
         },
+        view: () => ({
+          update: (view, prevState) => {
+            if (view.state.doc === prevState.doc) {
+              return;
+            }
+            const before = findSectionBreaks(prevState.doc);
+            const after = findSectionBreaks(view.state.doc);
+            const same =
+              before.length === after.length &&
+              before.every((found, index) => found.node === after[index]?.node);
+            if (!same) {
+              view.dom.dispatchEvent(new CustomEvent(SECTION_BREAKS_CHANGE_EVENT));
+            }
+          },
+        }),
       }),
     ];
   },

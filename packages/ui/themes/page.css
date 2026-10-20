@@ -428,9 +428,50 @@
   max-height: calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm));
 }
 
+/*
+ * Coupure qui ouvre une section avec un en-tête (R44-04) : le libellé « Section n · … »
+ * et le numéro de page quittent le milieu de la marge haute (où commence l'en-tête, à
+ * `margin-header` du bord) pour la bande entre le bord haut de la page et l'en-tête :
+ * leur bas est posé 2px au-dessus du haut de l'en-tête, sans recentrage.
+ */
+.aster--page-view
+  .aster-content
+  .ProseMirror
+  .aster-page-gap--section:has(> .aster-page-gap__header)
+  .aster-page-gap__section,
+.aster--page-view
+  .aster-content
+  .ProseMirror
+  .aster-page-gap--section:has(> .aster-page-gap__header)
+  .aster-page-gap__number {
+  bottom: calc(
+    var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm) + 2px
+  );
+  transform: none;
+}
+
 .aster--page-view .aster-content .ProseMirror .aster-page-gap__header p,
 .aster--page-view .aster-content .ProseMirror .aster-page-gap__footer p {
   margin: 0;
+}
+
+/* ---------- Tabulations (session 4) -------------------------------------- */
+
+/*
+ * Points de suite d'une tabulation (`data-leader`, posé par le NodeView du core) : une
+ * bordure basse pointillée, en tirets ou pleine sur l'espace élastique. L'alignement
+ * (`data-align`) n'a pas de rendu propre : approximation documentée.
+ */
+.aster-content .ProseMirror .aster-tab[data-leader='dot'] {
+  border-bottom: 1px dotted currentColor;
+}
+
+.aster-content .ProseMirror .aster-tab[data-leader='hyphen'] {
+  border-bottom: 1px dashed currentColor;
+}
+
+.aster-content .ProseMirror .aster-tab[data-leader='underscore'] {
+  border-bottom: 1px solid currentColor;
 }
 
 /* Impression de la page hôte : la coupure devient un vrai saut de page, sans bande ni libellé. */

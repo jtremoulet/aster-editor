@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentLayout, PageSetup, PaginatedPageViewOptions } from '@aster-editor/core';
-import { applyPageView } from '@aster-editor/core';
+import { applyPageView, createEditor } from '@aster-editor/core';
 import { createMockEditor, type MockEditor, type MockEditorOptions } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
 import type { ToolbarWidget } from '../types';
@@ -458,9 +458,18 @@ describe('createPageLayoutDialog', () => {
         { page: { size: 'A5' } },
       ]);
       expect(sectionsOf(null, 2)).toEqual([{}, {}]);
-      // Une seule section : seul `page` change, comme avant.
+      // Une seule section sans `sections` : seul `page` change, comme avant. Avec une
+      // section déclarée, c'est elle qui est éditée et recopiée au premier niveau (R44-03).
       const page: PageSetup = { size: 'Legal', orientation: 'portrait' };
-      expect(withSectionPage(layout, { index: 1, count: 1 }, page)).toEqual({ ...layout, page });
+      expect(withSectionPage({ page: { size: 'A5' } }, { index: 1, count: 1 }, page)).toEqual({
+        page,
+      });
+      expect(withSectionPage(layout, { index: 1, count: 1 }, page)).toEqual({
+        ...layout,
+        page,
+        headers: { default: { html: '<p>h</p>' } },
+        sections: [{ page, headers: { default: { html: '<p>h</p>' } } }],
+      });
       expect(withSectionPage(null, { index: 1, count: 1 }, page)).toEqual({ page });
       // Section intermédiaire : `sections` complété, `page` de premier niveau intact.
       expect(withSectionPage(layout, { index: 2, count: 3 }, page)).toEqual({
@@ -567,13 +576,14 @@ describe('createPageLayoutDialog', () => {
           },
         },
       ]);
-      // Sans saut de section dans le document, aucune mention de section.
+      // Sans saut de section dans le document, aucune mention de section ; la page
+      // préremplie est celle de la section 1 déclarée, comme l'hôte la rend (R44-03).
       widget.destroy();
       host.remove();
       mount({ layout: { sections: [{ page: { size: 'A3' } }] } });
       open();
       expect(panel().querySelector('.aster-page-layout__section')).toBeNull();
-      expect(size().value).toBe('A4');
+      expect(size().value).toBe('A3');
     });
 
     it('préremplie depuis la vue page active du core (pagination: false) ; libellé fr', () => {
@@ -590,6 +600,159 @@ describe('createPageLayoutDialog', () => {
       editor.i18n.setLocale('fr');
       open();
       expect(pagination().parentElement?.textContent).toBe('Pagination (approximative)');
+    });
+  });
+
+  describe('correctifs R44 (sections)', () => {
+    const S1: PageSetup = { size: 'Legal' };
+    const S2: PageSetup = { size: 'Letter', orientation: 'landscape', margins: { topMm: 12.7 } };
+    const S3: PageSetup = { size: 'A5', margins: { topMm: 10 } };
+    /** Trois sections déclarées ; le premier niveau est la copie de la troisième (contrat). */
+    const THREE: DocumentLayout = {
+      page: S3,
+      footers: { default: { html: '<p>Pied 3</p>' } },
+      sections: [
+        { page: S1, footers: { default: { html: '<p>Pied 1</p>' } } },
+        { page: S2, headers: { default: { html: '<p>Tête 2</p>' } }, start: 'continuous' },
+        { page: S3, footers: { default: { html: '<p>Pied 3</p>' } } },
+      ],
+    };
+    const sentLayout = (): DocumentLayout => {
+      const call = editor.pageViewCalls[0];
+      if (typeof call !== 'object' || !call.layout) throw new Error('layout attendu');
+      return call.layout;
+    };
+
+    it('R44-02 : withSectionPage ne tronque jamais sections ; la dernière du corps est recopiée au premier niveau', () => {
+      // Corps à 2 sections, 3 déclarées : la section 3 (en-têtes, pieds) survit, l'invariant tient.
+      const edited = withSectionPage(THREE, { index: 1, count: 2 }, { size: 'A3' });
+      expect(edited.sections).toHaveLength(3);
+      expect(edited.sections?.[0]).toEqual({ ...THREE.sections?.[0], page: { size: 'A3' } });
+      expect(edited.sections?.[1]).toBe(THREE.sections?.[1]);
+      expect(edited.sections?.[2]).toBe(THREE.sections?.[2]);
+      expect(edited.page).toBe(edited.sections?.at(-1)?.page);
+      expect(edited.footers).toEqual(edited.sections?.at(-1)?.footers);
+      // Dernière section du corps éditée : `page` et consorts suivent la dernière entrée.
+      const last = withSectionPage(THREE, { index: 3, count: 3 }, { size: 'A3' });
+      expect(last.sections?.[2]?.page).toEqual({ size: 'A3' });
+      expect(last.page).toEqual({ size: 'A3' });
+      expect(last.footers).toBe(THREE.sections?.[2]?.footers);
+      expect(last.headers).toBeUndefined();
+      // Un premier niveau orphelin (en-tête sans équivalent dans la dernière section) est retiré.
+      const orphan: DocumentLayout = {
+        ...THREE,
+        headers: { default: { html: '<p>Orphelin</p>' } },
+        columns: 2,
+      };
+      const synced = withSectionPage(orphan, { index: 3, count: 3 }, { size: 'A3' });
+      expect(synced.headers).toBeUndefined();
+      expect(synced.columns).toBeUndefined();
+      expect(synced.lang).toBe(orphan.lang);
+      // Section intermédiaire : rien ne bouge au premier niveau.
+      const middle = withSectionPage(THREE, { index: 2, count: 3 }, { size: 'A3' });
+      expect(middle.page).toBe(THREE.page);
+      expect(middle.sections?.[1]).toEqual({ ...THREE.sections?.[1], page: { size: 'A3' } });
+      // Un `sections` qui n'est pas un tableau vaut aucune section.
+      expect(
+        withSectionPage({ sections: 'x' as never }, { index: 1, count: 1 }, { size: 'A3' }),
+      ).toEqual({ sections: 'x', page: { size: 'A3' } });
+    });
+
+    it('R44-03 : corps sans saut mais sections déclarées : préremplit et édite sections[0], comme l’hôte', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: THREE, pageView: true });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')).toBeNull();
+      // L'hôte rend sections[0] (Legal), pas la copie de la dernière section (A5).
+      expect(size().value).toBe('Legal');
+      size().value = 'A3';
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.sections).toHaveLength(3);
+      expect(sent.sections?.[0]?.page?.size).toBe('A3');
+      expect(sent.sections?.[0]?.footers).toBe(THREE.sections?.[0]?.footers);
+      expect(sent.sections?.[1]).toBe(THREE.sections?.[1]);
+      expect(sent.sections?.[2]).toBe(THREE.sections?.[2]);
+      // Invariant du contrat : le premier niveau reste la copie de la dernière entrée.
+      expect(sent.page).toBe(S3);
+      // Réouvert : la section 1 montre A3.
+      open();
+      expect(size().value).toBe('A3');
+    });
+
+    it('R44-06 : la section affichée est celle de la tête ; une sélection à cheval est signalée (fr / en)', () => {
+      expect(
+        sectionOfSelection(createMockEditor({ sections: { count: 3, current: 2, anchor: 3 } })),
+      ).toEqual({ index: 2, count: 3, mixed: true });
+      expect(
+        sectionOfSelection(createMockEditor({ sections: { count: 3, current: 3, anchor: 1 } })),
+      ).toEqual({ index: 3, count: 3, mixed: true });
+      expect(
+        sectionOfSelection(createMockEditor({ sections: { count: 3, current: 1, anchor: 1 } })),
+      ).toEqual({ index: 1, count: 3 });
+      widget.destroy();
+      host.remove();
+      mount({ layout: THREE, pageView: true, sections: { count: 3, current: 2, anchor: 3 } });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 of 3 — the selection spans several sections',
+      );
+      expect(size().value).toBe('Letter');
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 sur 3 — la sélection couvre plusieurs sections',
+      );
+    });
+
+    it('R44-06 : sur un éditeur réel, curseur sur le hr → section qui s’y termine ; tête et bornes réelles', () => {
+      const container = document.createElement('div');
+      document.body.append(container);
+      const element = document.createElement('div');
+      container.append(element);
+      const real = createEditor({
+        element,
+        content:
+          '<p>un</p><hr data-section-break="1"><p>deux</p><hr data-section-break="2"><p>trois</p>',
+      });
+      try {
+        const { doc } = real.tiptap.state;
+        const breaks: number[] = [];
+        const texts = new Map<string, number>();
+        doc.forEach((node, offset) => {
+          if (node.type.name === 'sectionBreak') breaks.push(offset);
+          else texts.set(node.textContent, offset + 1);
+        });
+        real.tiptap.commands.setNodeSelection(breaks[0]!);
+        expect(sectionOfSelection(real)).toEqual({ index: 1, count: 3 });
+        real.tiptap.commands.setNodeSelection(breaks[1]!);
+        expect(sectionOfSelection(real)).toEqual({ index: 2, count: 3 });
+        // De « un » à « trois » : la tête est dans la section 3, la sélection couvre 1 à 3.
+        real.tiptap.commands.setTextSelection({
+          from: texts.get('un')!,
+          to: texts.get('trois')! + 3,
+        });
+        expect(sectionOfSelection(real)).toEqual({ index: 3, count: 3, mixed: true });
+        // Inversée (ancre dans « trois », tête dans « deux ») : la tête compte, pas la borne basse.
+        real.tiptap.commands.setTextSelection({
+          from: texts.get('trois')! + 1,
+          to: texts.get('deux')!,
+        });
+        expect(sectionOfSelection(real)).toEqual({ index: 2, count: 3, mixed: true });
+        real.tiptap.commands.setTextSelection({
+          from: texts.get('deux')! + 1,
+          to: texts.get('deux')! + 3,
+        });
+        expect(sectionOfSelection(real)).toEqual({ index: 2, count: 3 });
+        // Sélection de tout le document : à cheval, tête dans la dernière section.
+        real.tiptap.commands.selectAll();
+        expect(sectionOfSelection(real)).toEqual({ index: 3, count: 3, mixed: true });
+      } finally {
+        real.destroy();
+        container.remove();
+      }
     });
   });
 });

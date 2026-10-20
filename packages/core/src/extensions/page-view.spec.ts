@@ -10,6 +10,7 @@ import {
   PAGE_VIEW_CLASS,
   PAGE_VIEW_CSS_VARIABLES,
   PAGE_WIDTH_MAX_CSS_VARIABLE,
+  bodySectionCount,
   maxSectionWidthMm,
   pageViewCssValues,
   resolvePageMetrics,
@@ -475,6 +476,30 @@ describe('vue page', () => {
       expect(maxSectionWidthMm(TWO_SECTIONS)).toBe(297);
     });
 
+    it('R44-05 : bodySectionCount compte les sauts de premier niveau du corps, borné par les sections', () => {
+      const three: DocumentLayout = { sections: [{}, {}, {}] };
+      const content = document.createElement('div');
+      expect(bodySectionCount(three, content)).toBe(1);
+      expect(bodySectionCount(three, null)).toBe(1);
+      content.innerHTML = '<p>a</p><hr data-section-break="1"><p>b</p>';
+      expect(bodySectionCount(three, content)).toBe(2);
+      // Un saut imbriqué ne compte pas ; au-delà des sections déclarées, borné.
+      content.innerHTML =
+        '<p>a</p><hr data-section-break="1"><blockquote><hr data-section-break="9"></blockquote><p>b</p><hr data-section-break="2"><p>c</p><hr data-section-break="3"><p>d</p>';
+      expect(bodySectionCount(three, content)).toBe(3);
+      expect(bodySectionCount({ page: { size: 'A5' } }, content)).toBe(1);
+      expect(bodySectionCount({ sections: 'x' as never }, content)).toBe(1);
+      // La largeur maximale suit la même borne.
+      const widths: DocumentLayout = {
+        sections: [{ page: { size: 'A5' } }, { page: { size: 'A3' } }, { page: { size: 'A4' } }],
+      };
+      expect(maxSectionWidthMm(widths, 1)).toBe(148);
+      expect(maxSectionWidthMm(widths, 2)).toBe(297);
+      expect(maxSectionWidthMm(widths, 9)).toBe(297);
+      expect(maxSectionWidthMm(widths, 0)).toBe(148);
+      expect(maxSectionWidthMm(widths)).toBe(297);
+    });
+
     it('setPageView avec un sections texte ne lève pas et remplace la vue sans sections', () => {
       mounted = mountEditor({ content: '<p>a</p><hr data-section-break="1"><p>b</p>' });
       const editor = impl(mounted.editor);
@@ -503,7 +528,8 @@ describe('vue page', () => {
       expect(() => editor.setPageView({ layout: hostile })).toThrow('sections hostiles');
       expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
       expect(cssVariables(mounted.element)[0]).toBe('148mm');
-      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('297mm');
+      // Corps sans saut : seule la section 1 (A5) compte pour la largeur maximale (R44-05).
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('148mm');
       expect(mounted.element.querySelectorAll(`.${PAGE_HEADER_CLASS}`)).toHaveLength(1);
       expect(mounted.element.querySelectorAll(`.${PAGE_FOOTER_CLASS}`)).toHaveLength(1);
       expect(editor.getLayout()).toBe(TWO_SECTIONS);

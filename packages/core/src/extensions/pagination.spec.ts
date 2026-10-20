@@ -826,6 +826,93 @@ describe('pagination (plugin)', () => {
       expect(getPaginationResult(editor)).toBe(EMPTY_PAGINATION);
     });
 
+    /** Trois sections sans marges haut/bas : 100 × 30, 120 × 20 et 130 × 10 mm (nœud `sectionBreak` réel). */
+    const THREE: DocumentLayout = {
+      page: { size: { widthMm: 130, heightMm: 10 }, margins: { topMm: 0, bottomMm: 0 } },
+      footers: { default: { html: '<p>Pied 3</p>' } },
+      sections: [
+        {
+          page: SMALL_PAGE.page,
+          headers: { default: { html: '<p>Tête 1</p>' } },
+          footers: { default: { html: '<p>Pied 1</p>' } },
+        },
+        {
+          page: { size: { widthMm: 120, heightMm: 20 }, margins: { topMm: 0, bottomMm: 0 } },
+          headers: { default: { html: '<p>Tête 2</p>' } },
+          footers: { default: { html: '<p>Pied 2</p>' } },
+        },
+        {
+          page: { size: { widthMm: 130, heightMm: 10 }, margins: { topMm: 0, bottomMm: 0 } },
+          headers: { default: { html: '<p>Tête 3</p>' } },
+          footers: { default: { html: '<p>Pied 3</p>' } },
+        },
+      ],
+    };
+    const hrs = (editor: AsterEditor): HTMLElement[] =>
+      Array.from(editor.contentElement.querySelectorAll<HTMLElement>('hr[data-section-break]'));
+
+    it('R44-01 : numéros hors ordre chargés → hr, coupure, libellé et en-tête désignent la même section positionnelle', () => {
+      const { editor } = mount({
+        // Un chargement complet garde les numéros tels quels (L41) : 2 puis 1.
+        content:
+          '<p>a</p><p>b</p><hr data-section-break="2"><p>c</p><p>d</p><hr data-section-break="1"><p>e</p><p>f</p>',
+        pageView: { layout: THREE },
+      });
+      expect(editor.getHTML()).toContain('<hr data-section-break="2"><p>c</p>');
+      const result = paginateNow(editor);
+      // Le premier saut ouvre la section 2 (120 × 20), le second la section 3 (130 × 10),
+      // quel que soit leur attribut : le hr et le segment lisent la même entrée.
+      expect(hrs(editor).map((hr) => hr.style.getPropertyValue('--aster-page-height'))).toEqual([
+        '20mm',
+        '10mm',
+      ]);
+      expect(result.sections?.map((section) => section['--aster-page-height'])).toEqual([
+        '30mm',
+        '20mm',
+        '10mm',
+      ]);
+      const first = gaps(editor)[0];
+      expect(first?.getAttribute(PAGE_SECTION_ATTRIBUTE)).toBe('2');
+      expect(first?.style.getPropertyValue('--aster-page-height')).toBe('20mm');
+      expect(first?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)?.textContent).toBe(
+        'Section 2 · 120 × 20 mm paysage',
+      );
+      expect(first?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
+      expect(first?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 1</p>');
+      const third = gaps(editor).find((gap) => gap.getAttribute(PAGE_SECTION_ATTRIBUTE) === '3');
+      expect(third?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)?.textContent).toBe(
+        'Section 3 · 130 × 10 mm paysage',
+      );
+      expect(third?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 3</p>');
+    });
+
+    it('R44-05 : le pied de l’hôte et --aster-page-width-max suivent la dernière section du corps', () => {
+      const { editor, element } = mount({
+        content: '<p>a</p><p>b</p><hr data-section-break="1"><p>c</p><p>d</p>',
+        pageView: { layout: THREE },
+      });
+      paginateNow(editor);
+      expect(gaps(editor).map((gap) => gap.getAttribute(PAGE_SECTION_ATTRIBUTE))).toEqual([
+        '2',
+        '2',
+      ]);
+      // Un seul saut : le corps finit en section 2, jamais en section 3.
+      expect(element.querySelector(`.${PAGE_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 2</p>');
+      expect(element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('120mm');
+      // Sans saut : section 1 seule.
+      editor.setHTML('<p>seul</p>');
+      impl(editor).setPageView({ layout: THREE });
+      expect(element.querySelector(`.${PAGE_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 1</p>');
+      expect(element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('100mm');
+      // Plus de sauts que de sections : borné par les sections déclarées.
+      editor.setHTML(
+        '<p>a</p><hr data-section-break="1"><p>b</p><hr data-section-break="2"><p>c</p><hr data-section-break="3"><p>d</p>',
+      );
+      impl(editor).setPageView({ layout: THREE });
+      expect(element.querySelector(`.${PAGE_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 3</p>');
+      expect(element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('130mm');
+    });
+
     it('helpers : previousPageSection, gapCssVariables et pageHeightTotalMm', () => {
       const result = paginate(
         [40, 40, 40, 40],

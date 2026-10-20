@@ -60,10 +60,12 @@ export interface MockEditorOptions extends MockVariablesOptions {
   pageView?: boolean;
   /**
    * Sections du document (L44) : `tiptap.state` minimal dont le document alterne un
-   * paragraphe et un `sectionBreak` par section (`count` sections) et dont la sélection
-   * est dans le paragraphe de la section `current` (1-based). Absent : pas de `state`.
+   * paragraphe et un `sectionBreak` par section (`count` sections) et dont la tête de
+   * sélection (`$head`) est dans le paragraphe de la section `current` (1-based) ; `anchor`
+   * (R44-06) place l'ancre dans une autre section (sélection à cheval), `current` par
+   * défaut. Absent : pas de `state`.
    */
-  sections?: { readonly count: number; readonly current: number };
+  sections?: { readonly count: number; readonly current: number; readonly anchor?: number };
 }
 
 /**
@@ -122,18 +124,31 @@ interface MockTopLevelNode {
   readonly type: { readonly name: string };
 }
 
+/** Position résolue minimale : dans un paragraphe (profondeur 1) d'index donné. */
+function mockResolvedPos(childIndex: number): { depth: number; index: () => number } {
+  return { depth: 1, index: () => childIndex };
+}
+
 /**
  * `EditorState` minimal pour les sections (L44) : `doc.forEach` énumère, par section, un
- * paragraphe puis un `sectionBreak` (sauf pour la dernière) ; `selection.$from.index(0)`
- * est l'index du paragraphe de la section courante. Suffit à `sectionOfSelection`.
+ * paragraphe puis un `sectionBreak` (sauf pour la dernière) ; `$head` est dans le
+ * paragraphe de la section courante, `$anchor` dans celui de `anchor` (R44-06), `$from` /
+ * `$to` en sont le min et le max. Suffit à `sectionOfSelection`.
  */
-function createMockSectionsState(sections: { count: number; current: number }): unknown {
+function createMockSectionsState(sections: {
+  count: number;
+  current: number;
+  anchor?: number;
+}): unknown {
   const nodes: MockTopLevelNode[] = [];
   for (let section = 1; section <= sections.count; section += 1) {
     nodes.push({ type: { name: 'paragraph' } });
     if (section < sections.count) nodes.push({ type: { name: 'sectionBreak' } });
   }
-  const cursorIndex = (Math.min(Math.max(sections.current, 1), sections.count) - 1) * 2;
+  const paragraphIndex = (section: number): number =>
+    (Math.min(Math.max(section, 1), sections.count) - 1) * 2;
+  const head = paragraphIndex(sections.current);
+  const anchor = paragraphIndex(sections.anchor ?? sections.current);
   return {
     doc: {
       childCount: nodes.length,
@@ -141,7 +156,12 @@ function createMockSectionsState(sections: { count: number; current: number }): 
         nodes.forEach((node, index) => callback(node, index, index));
       },
     },
-    selection: { $from: { index: () => cursorIndex } },
+    selection: {
+      $head: mockResolvedPos(head),
+      $anchor: mockResolvedPos(anchor),
+      $from: mockResolvedPos(Math.min(head, anchor)),
+      $to: mockResolvedPos(Math.max(head, anchor)),
+    },
   };
 }
 

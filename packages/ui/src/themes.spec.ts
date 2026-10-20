@@ -330,6 +330,34 @@ describe('thèmes CSS', () => {
       expect(page).toContain('.aster-page-layout__section');
     });
 
+    it('R44-04 : dans la coupure d’ouverture, libellé et numéro sont posés au-dessus de l’en-tête', () => {
+      const rule =
+        /\.aster-page-gap--section:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__number \{([^}]*)\}/.exec(
+          page,
+        );
+      expect(rule?.[1]?.replace(/\s+/g, ' ')).toContain(
+        'bottom: calc( var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm) + 2px )',
+      );
+      expect(rule?.[1]).toContain('transform: none');
+      // Même règle pour le libellé de section, dans le même bloc.
+      expect(page).toMatch(
+        /\.aster-page-gap--section:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__section,/,
+      );
+    });
+
+    it('session 4 : les points de suite d’une tabulation (data-leader) sont une bordure basse', () => {
+      for (const [leader, style] of [
+        ['dot', 'dotted'],
+        ['hyphen', 'dashed'],
+        ['underscore', 'solid'],
+      ]) {
+        const rule = new RegExp(`\\.aster-tab\\[data-leader='${leader}'\\] \\{([^}]*)\\}`).exec(
+          page,
+        );
+        expect(rule?.[1], leader).toContain(`border-bottom: 1px ${style} currentColor`);
+      }
+    });
+
     it('R30-02 : à l’impression, la feuille étirée à N pages retombe à min-height: 0 dans page.css', () => {
       const selector = '.aster--page-view .aster-content .ProseMirror';
       const rule = new RegExp(`${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, 'g');

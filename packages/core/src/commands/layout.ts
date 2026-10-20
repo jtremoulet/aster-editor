@@ -5,6 +5,8 @@ import {
   type AsterCommand,
   type AsterEditor,
   type ParagraphLayoutAttrName,
+  type TabAlign,
+  type TabLeader,
 } from '../api';
 import { isLayoutNumber } from '../extensions/layout-css';
 import {
@@ -12,7 +14,13 @@ import {
   normalizeParagraphLayoutValue,
 } from '../extensions/paragraph-layout';
 import { isCaps, type RunCaps } from '../extensions/run-layout';
-import { TAB_NODE_NAME, canInsertTab, sanitizeTabStop } from '../extensions/tab';
+import {
+  TAB_NODE_NAME,
+  canInsertTab,
+  sanitizeTabAlign,
+  sanitizeTabLeader,
+  sanitizeTabStop,
+} from '../extensions/tab';
 import { defineStandardCommand, iconIdFor } from './define';
 
 /** Arguments de `text.setLetterSpacing` : espacement en points, `null` pour retirer. */
@@ -25,9 +33,14 @@ export interface SetCapsArgs {
   caps: RunCaps;
 }
 
-/** Arguments de `text.insertTab` : position du taquet en points, absente par défaut. */
+/**
+ * Arguments de `text.insertTab` : position du taquet en points, alignement et points de
+ * suite (session 4, R43-05), tous absents par défaut.
+ */
 export interface InsertTabArgs {
   stopPt?: number | null;
+  align?: TabAlign | null;
+  leader?: TabLeader | null;
 }
 
 /** Identifiants des commandes de run de mise en page, enregistrées en plus de `STANDARD_COMMAND_IDS`. */
@@ -323,9 +336,11 @@ export const TEXT_LAYOUT_COMMANDS: readonly AsterCommand[] = [
 ];
 
 /**
- * Commande additive `text.insertTab { stopPt? }` (session 4) : insère un nœud `tab` à la
- * sélection, avec la position de taquet si elle est donnée et valide (nombre de mise en
- * page ≥ 0 ; une valeur invalide est ignorée, pas refusée). C'est l'équivalent de la
+ * Commande additive `text.insertTab { stopPt?, align?, leader? }` (session 4) : insère un
+ * nœud `tab` à la sélection, avec la position de taquet si elle est donnée et valide
+ * (nombre de mise en page ≥ 0), l'alignement (`center` / `right` / `decimal`) et les
+ * points de suite (`dot` / `hyphen` / `underscore`) s'ils sont connus ; une valeur
+ * invalide est ignorée, pas refusée. C'est l'équivalent de la
  * touche Tab dans un paragraphe, sans la réserve des listes et des tables, mais avec la
  * même garde (`canInsertTab`, R41-04) : refusée dans un bloc de code ou là où le nœud `tab`
  * n'est pas accepté, plutôt que de scinder le bloc.
@@ -336,10 +351,13 @@ export const TAB_COMMANDS: readonly AsterCommand[] = [
       if (!canInsertTab(editor.tiptap.state)) {
         return false;
       }
-      const stopPt = sanitizeTabStop(readArgs(args)['stopPt']);
-      const content =
-        stopPt === null ? { type: TAB_NODE_NAME } : { type: TAB_NODE_NAME, attrs: { stopPt } };
-      return editor.tiptap.chain().focus().insertContent(content).run();
+      const read = readArgs(args);
+      const attrs = {
+        stopPt: sanitizeTabStop(read['stopPt']),
+        align: sanitizeTabAlign(read['align']),
+        leader: sanitizeTabLeader(read['leader']),
+      };
+      return editor.tiptap.chain().focus().insertContent({ type: TAB_NODE_NAME, attrs }).run();
     },
     canRun: (editor) =>
       canInsertTab(editor.tiptap.state) &&

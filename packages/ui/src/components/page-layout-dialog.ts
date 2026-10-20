@@ -168,6 +168,8 @@ export function resolvePageSetup(layout: DocumentLayout | SectionLayout | null):
 export interface SectionPosition {
   readonly index: number;
   readonly count: number;
+  /** Vrai si la sélection s'étend sur plusieurs sections (R44-06) ; absent sinon. */
+  readonly mixed?: boolean;
 }
 
 /** Document d'une seule section : le comportement d'avant les sections. */
@@ -176,25 +178,51 @@ const SINGLE_SECTION: SectionPosition = { index: 1, count: 1 };
 /** Nom du nœud de saut de section du core (`<hr data-section-break="n">`). */
 const SECTION_BREAK_NODE_NAME = 'sectionBreak';
 
+/** Ce que `sectionOfSelection` lit d'une position résolue : sa profondeur et son index de premier niveau. */
+interface TopLevelPos {
+  readonly depth: number;
+  index(depth?: number): number;
+}
+
+/**
+ * Index du bloc de premier niveau qui contient une position résolue. À la profondeur 0
+ * (entre deux blocs : fin d'une sélection de nœud, sélection totale), `index(0)` désigne
+ * le bloc **suivant** : pour une borne haute (`$to`, `$head` d'une sélection de nœud),
+ * on prend le bloc qui précède, celui que la sélection couvre réellement.
+ */
+function topLevelIndex($pos: TopLevelPos, end: boolean): number {
+  const index = $pos.index(0);
+  return end && $pos.depth === 0 ? Math.max(index - 1, 0) : index;
+}
+
 /**
  * Section du curseur et nombre de sections, comptés sur les nœuds `sectionBreak` de
  * premier niveau du document (numérotation positionnelle, comme `getSections` du core) :
- * la section du curseur est le nombre de sauts avant son bloc, plus un ; un curseur sur
- * un saut appartient à la section qui s'y termine. Sans état Tiptap (mock) ni saut :
- * une seule section.
+ * la section d'un bloc est le nombre de sauts avant lui, plus un ; un curseur sur un
+ * saut appartient à la section qui s'y termine. La section affichée est celle de la
+ * **tête** de la sélection (`$head`, le point d'insertion, comme Word, R44-06), et
+ * `mixed` signale une sélection dont les deux bornes ne sont pas dans la même section.
+ * Sans état Tiptap (mock) ni saut : une seule section.
  */
 export function sectionOfSelection(editor: AsterEditor): SectionPosition {
   const state: EditorState | undefined = editor.tiptap.state;
   if (!state) return SINGLE_SECTION;
-  const cursorIndex = state.selection.$from.index(0);
-  let count = 0;
-  let before = 0;
+  const { selection } = state;
+  const breaks: number[] = [];
   state.doc.forEach((node, _offset, index) => {
-    if (node.type.name !== SECTION_BREAK_NODE_NAME) return;
-    count += 1;
-    if (index < cursorIndex) before += 1;
+    if (node.type.name === SECTION_BREAK_NODE_NAME) breaks.push(index);
   });
-  return count === 0 ? SINGLE_SECTION : { index: before + 1, count: count + 1 };
+  if (breaks.length === 0) return SINGLE_SECTION;
+  const sectionAt = (blockIndex: number): number =>
+    breaks.filter((index) => index < blockIndex).length + 1;
+  // Une sélection de nœud a sa tête après le nœud : c'est le nœud lui-même qui compte.
+  const headIsEnd = selection.$head.pos === selection.$to.pos;
+  const index = sectionAt(topLevelIndex(selection.$head, headIsEnd));
+  const mixed =
+    sectionAt(topLevelIndex(selection.$from, false)) !==
+    sectionAt(topLevelIndex(selection.$to, true));
+  const count = breaks.length + 1;
+  return mixed ? { index, count, mixed } : { index, count };
 }
 
 /** Champs de premier niveau d'une mise en page, comme section de repli (`resolveSectionLayout` du core). */
@@ -208,22 +236,54 @@ function topLevelSection(layout: DocumentLayout | null): SectionLayout {
   return section;
 }
 
+/** Sections déclarées par la mise en page, ou aucune (`sections` absent ou pas un tableau). */
+function knownSections(layout: DocumentLayout | null): readonly SectionLayout[] {
+  const sections: unknown = layout?.sections;
+  return Array.isArray(sections) ? (sections as readonly SectionLayout[]) : [];
+}
+
 /**
  * Les `count` sections d'une mise en page, dans l'ordre : `layout.sections` complété, au
  * besoin, par les champs de premier niveau (la seule section d'un document sans
  * `sections`, la copie de la dernière sinon), pour qu'un document dont le corps a plus
- * de sauts que la mise en page ne décale rien.
+ * de sauts que la mise en page ne décale rien. Une entrée qui n'est pas un objet compte
+ * pour le premier niveau, comme `resolveSectionLayout` du core.
  */
 export function sectionsOf(layout: DocumentLayout | null, count: number): SectionLayout[] {
-  const known = layout?.sections ?? [];
+  const known = knownSections(layout);
   const fallback = topLevelSection(layout);
-  return Array.from({ length: count }, (_, position) => known[position] ?? fallback);
+  return Array.from({ length: count }, (_, position) => {
+    const section: unknown = known[position];
+    return isRecord(section) ? (section as SectionLayout) : fallback;
+  });
+}
+
+/** Champs de section recopiés de la dernière entrée de `sections` au premier niveau (contrat). */
+const SECTION_FIELDS = ['page', 'columns', 'headers', 'footers', 'titlePage'] as const;
+
+/** Mise en page dont les champs de premier niveau sont la copie de `last` (invariant du contrat). */
+function withLastSection(base: DocumentLayout, last: SectionLayout): DocumentLayout {
+  const next: { -readonly [K in keyof DocumentLayout]: DocumentLayout[K] } = { ...base };
+  for (const field of SECTION_FIELDS) {
+    const value = last[field];
+    if (value === undefined) {
+      delete next[field];
+    } else {
+      Object.assign(next, { [field]: value });
+    }
+  }
+  return next;
 }
 
 /**
- * Mise en page avec la page de la section `position.index` remplacée : `sections`
- * complété à `position.count` entrées ; la dernière section reste recopiée dans `page`
- * (contrat `DocumentLayout.sections`). Avec une seule section, seul `page` change.
+ * Mise en page avec la page de la section `position.index` remplacée. `sections` n'est
+ * **jamais tronqué** (R44-02) : il garde toutes les sections déclarées, complétées jusqu'à
+ * `position.count` par le premier niveau ; quand la section éditée est la dernière du
+ * corps, la dernière entrée de `sections` est recopiée dans `page`, `columns`,
+ * `headers`, `footers` et `titlePage` (invariant du contrat `DocumentLayout.sections`).
+ * Avec une seule section et `layout.sections` présent (sauts supprimés, mise en page
+ * conservée), c'est `sections[0]` qui est éditée, comme l'hôte la rend (R44-03) ; sans
+ * `sections`, seul `page` change, comme avant.
  */
 export function withSectionPage(
   layout: DocumentLayout | null,
@@ -231,13 +291,17 @@ export function withSectionPage(
   page: PageSetup,
 ): DocumentLayout {
   const base: DocumentLayout = layout ?? {};
-  if (position.count <= 1) {
+  const known = knownSections(layout);
+  if (position.count <= 1 && known.length === 0) {
     return { ...base, page };
   }
-  const sections = sectionsOf(layout, position.count).map((section, index) =>
+  const count = Math.max(position.count, known.length);
+  const sections = sectionsOf(layout, count).map((section, index) =>
     index === position.index - 1 ? { ...section, page } : section,
   );
-  return position.index === position.count ? { ...base, page, sections } : { ...base, sections };
+  const next: DocumentLayout = { ...base, sections };
+  const last = sections[sections.length - 1];
+  return position.index === position.count && last ? withLastSection(next, last) : next;
 }
 
 /**
@@ -249,8 +313,10 @@ export function withSectionPage(
  * le déclencheur est « enfoncé » quand la vue page est active.
  *
  * Sections (session 4, L44) : dans un document à sauts de section, le dialogue affiche
- * « Section n sur N », préremplit la page de la section du curseur et n'applique qu'elle
- * (`layout.sections[n - 1].page`), les autres sections étant conservées.
+ * « Section n sur N » (section de la tête de sélection ; une sélection à cheval sur
+ * plusieurs sections est signalée, R44-06), préremplit la page de cette section et
+ * n'applique qu'elle (`layout.sections[n - 1].page`), les autres sections étant
+ * conservées, jamais tronquées (R44-02).
  */
 export function createPageLayoutDialog(editor: AsterEditor): ToolbarWidget {
   return createDropdown({
@@ -269,11 +335,10 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   const t = (key: string): string => editor.i18n.t(key);
   const api = pageViewApiOf(editor);
   const layout = api?.getLayout() ?? null;
-  // Section du curseur (L44) : sa page est éditée ; sans saut, celle du document.
+  // Section de la tête de sélection (L44) : sa page est éditée. Sans saut, c'est la
+  // section 1, résolue comme l'hôte la rend (`sections[0]` quand il existe, R44-03).
   const position = sectionOfSelection(editor);
-  const current = resolvePageSetup(
-    position.count > 1 ? (sectionsOf(layout, position.count)[position.index - 1] ?? null) : layout,
-  );
+  const current = resolvePageSetup(sectionsOf(layout, position.count)[position.index - 1] ?? null);
   const suffix = fieldSuffix();
   panel.setAttribute('aria-label', t('ui.pageLayout.title'));
   const alert = createAlert();
@@ -281,10 +346,10 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
     position.count > 1
       ? el('p', {
           className: 'aster-page-layout__section',
-          text: editor.i18n.t('ui.pageLayout.section', {
-            index: position.index,
-            count: position.count,
-          }),
+          text: editor.i18n.t(
+            position.mixed ? 'ui.pageLayout.sectionMixed' : 'ui.pageLayout.section',
+            { index: position.index, count: position.count },
+          ),
         })
       : null;
 

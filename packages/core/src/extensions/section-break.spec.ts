@@ -5,7 +5,7 @@ import { AsterEditorImpl } from '../editor/aster-editor';
 import { en } from '../i18n/en';
 import { fr } from '../i18n/fr';
 import { SECTION_COMMAND_IDS } from '../commands/sections';
-import { PAGE_VIEW_CSS_VARIABLES, resolveSectionLayout } from './page-view';
+import { PAGE_VIEW_CSS_VARIABLES, resolveSectionLayout, sectionOpenedByBreak } from './page-view';
 import {
   MAX_SECTION_NUMBER,
   SECTION_BREAK_ATTRIBUTE,
@@ -16,6 +16,7 @@ import {
   getSections,
   sanitizeSectionNumber,
   sectionBreakAttrs,
+  sectionBreakRank,
 } from './section-break';
 import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount';
 
@@ -574,6 +575,53 @@ describe('SectionBreak', () => {
       expect(elements.map((el) => el.getAttribute(SECTION_BREAK_ATTRIBUTE))).toEqual(['1', '2']);
       expect(elements[1]?.style.getPropertyValue('--aster-page-width')).toBe('210mm');
       expect(elements[1]?.getAttribute(SECTION_START_ATTRIBUTE)).toBe('nextPage');
+    });
+
+    it('R44-01 : la section ouverte par un saut est positionnelle, pas son attribut (numéros hors ordre chargés)', () => {
+      // Un chargement complet garde les numéros tels quels : 2 puis 1.
+      mounted.editor.setHTML(
+        '<p>a</p><hr data-section-break="2"><p>b</p><hr data-section-break="1"><p>c</p>',
+      );
+      impl(mounted.editor).setPageView({ layout: SECTIONS_LAYOUT });
+      const [first, second] = breakElements(mounted);
+      expect(first?.getAttribute(SECTION_BREAK_ATTRIBUTE)).toBe('2');
+      // Premier saut → section 2 (A4 paysage, continue) ; second → section 3 (portrait).
+      expect(first?.style.getPropertyValue('--aster-page-width')).toBe('297mm');
+      expect(first?.getAttribute(SECTION_START_ATTRIBUTE)).toBe('continuous');
+      expect(second?.style.getPropertyValue('--aster-page-width')).toBe('210mm');
+      expect(second?.getAttribute(SECTION_START_ATTRIBUTE)).toBe('nextPage');
+      // La fonction partagée avec la pagination et le rang d'un saut.
+      expect([0, 1, 2].map(sectionOpenedByBreak)).toEqual([2, 3, 4]);
+      const { doc } = mounted.editor.tiptap.state;
+      const breaks = findSectionBreaks(doc);
+      expect(sectionBreakRank(doc, breaks[1]!.node, undefined)).toBe(1);
+      expect(sectionBreakRank(doc, doc.firstChild!, undefined)).toBeNull();
+      expect(sectionBreakRank(doc, doc.firstChild!, breaks[0]!.pos)).toBe(0);
+    });
+
+    it('R44-01 : un saut réutilisé par ProseMirror à un autre rang est rafraîchi après la transaction', () => {
+      mounted.editor.setHTML(TWO_BREAKS);
+      impl(mounted.editor).setPageView({ layout: SECTIONS_LAYOUT });
+      expect(breakElements(mounted)[1]?.style.getPropertyValue('--aster-page-width')).toBe('210mm');
+      // Nouveau document dont le seul saut porte le numéro 2 : ProseMirror peut réutiliser
+      // l'ancien hr(2) (rang 1, section 3) au rang 0 sans appeler `update`.
+      mounted.editor.setHTML('<p>x</p><hr data-section-break="2"><p>y</p>');
+      const elements = breakElements(mounted);
+      expect(elements).toHaveLength(1);
+      expect(elements[0]?.getAttribute(SECTION_BREAK_ATTRIBUTE)).toBe('2');
+      expect(elements[0]?.style.getPropertyValue('--aster-page-width')).toBe('297mm');
+      expect(elements[0]?.getAttribute(SECTION_START_ATTRIBUTE)).toBe('continuous');
+      // Suppression du premier saut en édition : le second passe au rang 0 et le suit.
+      mounted.editor.setHTML(TWO_BREAKS);
+      const { pos, node } = findSectionBreaks(mounted.editor.tiptap.state.doc)[0]!;
+      mounted.editor.tiptap.view.dispatch(
+        mounted.editor.tiptap.state.tr.delete(pos, pos + node.nodeSize),
+      );
+      const [remaining] = breakElements(mounted);
+      expect(breakElements(mounted)).toHaveLength(1);
+      expect(remaining?.getAttribute(SECTION_BREAK_ATTRIBUTE)).toBe('1');
+      expect(remaining?.style.getPropertyValue('--aster-page-width')).toBe('297mm');
+      expect(remaining?.getAttribute(SECTION_START_ATTRIBUTE)).toBe('continuous');
     });
   });
 });

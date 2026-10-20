@@ -178,16 +178,56 @@ export function resolveSectionLayout(layout: DocumentLayout, section: number): S
 }
 
 /**
+ * Section (1-based) ouverte par le saut de section de premier niveau de rang `rank`
+ * (0-based, dans l'ordre du document) : le k-ième saut ouvre la section k + 1, quel que
+ * soit l'attribut `data-section-break` du `hr` (R44-01). Seule source partagée par le
+ * NodeView du saut (variables posées sur le `hr`) et par la pagination (segments,
+ * libellé et en-tête de la coupure) : les deux désignent toujours la même entrée de
+ * `layout.sections`, même sur un document chargé avec des numéros hors ordre.
+ */
+export function sectionOpenedByBreak(rank: number): number {
+  return rank + 2;
+}
+
+/** Sélecteur des sauts de section de premier niveau dans le conteneur de contenu. */
+const TOP_LEVEL_SECTION_BREAK_SELECTOR = ':scope > hr[data-section-break]';
+
+/**
+ * Nombre de sections **du corps** : sauts de section de premier niveau rendus dans
+ * `contentElement` (`hr[data-section-break]`, NodeView du core ou rendu équivalent) plus
+ * un, borné par le nombre de sections déclarées (au moins 1). C'est la dernière section
+ * que l'hôte affiche (pied, `--aster-page-width-max`, R44-05) : un `layout.sections` plus
+ * long que le corps (sauts supprimés, mise en page conservée) n'impose pas une section
+ * jamais ouverte.
+ */
+export function bodySectionCount(
+  layout: DocumentLayout | undefined | null,
+  contentElement: Element | null,
+): number {
+  const declared = sectionLayouts(layout).length;
+  if (declared === 0) {
+    return 1;
+  }
+  const breaks = contentElement?.querySelectorAll(TOP_LEVEL_SECTION_BREAK_SELECTOR).length ?? 0;
+  return Math.max(1, Math.min(breaks + 1, declared));
+}
+
+/**
  * Largeur de la plus large section en mm (`--aster-page-width-max`, L44), `null` sans
  * `layout.sections` : la feuille suit alors `--aster-page-width`. Chaque section est
  * résolue comme ailleurs (`resolveSectionLayout`) : une entrée qui n'est pas un objet
- * compte pour le premier niveau.
+ * compte pour le premier niveau. `limit` borne le nombre de sections considérées (celles
+ * que le corps ouvre, R44-05) ; absent, toutes les sections déclarées comptent.
  */
-export function maxSectionWidthMm(layout: DocumentLayout | undefined | null): number | null {
-  const count = sectionLayouts(layout).length;
-  if (!layout || count === 0) {
+export function maxSectionWidthMm(
+  layout: DocumentLayout | undefined | null,
+  limit?: number,
+): number | null {
+  const declared = sectionLayouts(layout).length;
+  if (!layout || declared === 0) {
     return null;
   }
+  const count = limit === undefined ? declared : Math.max(1, Math.min(limit, declared));
   return Math.max(
     ...Array.from(
       { length: count },
@@ -247,11 +287,13 @@ export interface PageViewHandle {
  * juste avant et juste après `contentElement`. La feuille de style est dans `ui` ; le
  * core ne pose que classes, variables et conteneurs.
  *
- * Sections (session 4) : avec `layout.sections`, l'hôte porte les variables, l'en-tête
- * et le pied de la **section 1** (`resolveSectionLayout`), pas ceux du premier niveau
- * (copie de la dernière section). Chaque `sectionBreak` porte ensuite, sur son `hr`, les
- * variables de la section qui le suit ; les en-têtes des sections suivantes sont du
- * ressort de la pagination (L44).
+ * Sections (session 4) : avec `layout.sections`, l'hôte porte les variables et l'en-tête
+ * de la **section 1** (`resolveSectionLayout`), pas ceux du premier niveau (copie de la
+ * dernière section), et le pied de la dernière section que le corps ouvre
+ * (`bodySectionCount`, lu dans `contentElement` au moment de l'appel : le dialogue
+ * « Mise en page » rappelle `setPageView` à chaque application). Chaque `sectionBreak`
+ * porte ensuite, sur son `hr`, les variables de la section qui le suit ; les en-têtes
+ * des sections suivantes sont du ressort de la pagination (L44).
  */
 export function applyPageView(
   host: HTMLElement,
@@ -267,13 +309,15 @@ export function applyPageView(
   const headerHtml = showHeadersFooters
     ? sanitizeHeaderFooterHtml(first.headers?.default?.html ?? '')
     : '';
-  // Le pied en bas de la feuille est celui de la dernière section (la pagination affiche
+  // Le pied en bas de la feuille est celui de la dernière section **du corps** (R44-05 :
+  // sauts de premier niveau + 1, borné par les sections déclarées ; la pagination affiche
   // les pieds intermédiaires sur chaque coupure de section) ; l'en-tête, celui de la première.
-  const last = resolveSectionLayout(layout, sectionLayouts(layout).length || 1);
+  const lastSection = bodySectionCount(layout, contentElement);
+  const last = resolveSectionLayout(layout, lastSection);
   const footerHtml = showHeadersFooters
     ? sanitizeHeaderFooterHtml(last.footers?.default?.html ?? '')
     : '';
-  const widthMaxMm = maxSectionWidthMm(layout);
+  const widthMaxMm = maxSectionWidthMm(layout, lastSection);
 
   host.classList.add(PAGE_VIEW_CLASS);
   PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
