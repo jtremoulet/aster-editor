@@ -126,7 +126,8 @@ describe('buildDocx — mapping XML', () => {
     const { xml } = await toDocumentXml('<p>\n  a   <em> b </em>  c\n</p><p>x<br>y</p><p>   </p>');
     expect(xml).toContain('<w:t xml:space="preserve">a </w:t>');
     expect(xml).toContain('<w:t xml:space="preserve">b </w:t>');
-    expect(xml).toContain('<w:t xml:space="preserve">c</w:t>');
+    // L'espace finale (ici le `\n` réduit) est conservée : `<p>Titre : </p>` est du contenu (R27).
+    expect(xml).toContain('<w:t xml:space="preserve">c </w:t>');
     expect(xml).toContain('<w:br/>');
     // Le troisième `<p>` ne contient que des blancs : il devient un paragraphe vide `<w:p/>`.
     expect(count(xml, '<w:p>') + count(xml, '<w:p/>')).toBe(3);

@@ -54,6 +54,9 @@ describe('createImageDialog', () => {
       expect(inputById('alt').type).toBe('text');
       expect(inputById('title').type).toBe('text');
       expect(inputById('width').type).toBe('number');
+      // Hauteur et verrou : en édition seulement (le ratio vient de l'image sélectionnée).
+      expect(panel().querySelector('input[id^="aster-image-height-"]')).toBeNull();
+      expect(panel().querySelector('.aster-image-dialog__lock')).toBeNull();
       expect(panel().querySelectorAll('input[type="radio"]').length).toBe(3);
       expect(panel().querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe(
         'Alignment',
@@ -188,6 +191,55 @@ describe('createImageDialog', () => {
         width: 0,
         align: 'right',
       });
+    });
+
+    it('affiche la hauteur déduite du ratio et un verrou de proportions coché', () => {
+      editor.attributes.set('image', { src: 'https://img/x.png', width: 400, height: 200 });
+      open();
+      expect(inputById('height').type).toBe('number');
+      expect(inputById('height').value).toBe('200');
+      const lock = panel().querySelector<HTMLInputElement>('.aster-image-dialog__lock')!;
+      expect(lock.checked).toBe(true);
+      expect(lock.parentElement?.textContent).toBe('Lock aspect ratio');
+      // Largeur → hauteur, puis hauteur → largeur, selon le ratio 2:1.
+      inputById('width').value = '300';
+      inputById('width').dispatchEvent(new Event('input'));
+      expect(inputById('height').value).toBe('150');
+      inputById('height').value = '50';
+      inputById('height').dispatchEvent(new Event('input'));
+      expect(inputById('width').value).toBe('100');
+      inputById('width').value = '';
+      inputById('width').dispatchEvent(new Event('input'));
+      expect(inputById('height').value).toBe('');
+      inputById('width').value = '240';
+      inputById('width').dispatchEvent(new Event('input'));
+      button('Apply').click();
+      // Verrou actif : largeur seule, le core recalcule la hauteur (`height: auto`).
+      expect(editor.calls[0]?.args).toEqual({ alt: '', title: '', width: 240 });
+    });
+
+    it('verrou levé : la hauteur est envoyée en plus de la largeur, sans lier les champs', () => {
+      editor.attributes.set('image', { src: 'https://img/x.png', width: 400, height: 200 });
+      open();
+      const lock = panel().querySelector<HTMLInputElement>('.aster-image-dialog__lock')!;
+      lock.checked = false;
+      inputById('width').value = '300';
+      inputById('width').dispatchEvent(new Event('input'));
+      expect(inputById('height').value).toBe('200');
+      inputById('height').value = '120';
+      inputById('height').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      expect(editor.calls[0]?.args).toEqual({ alt: '', title: '', width: 300, height: 120 });
+    });
+
+    it('sans ratio connu, le verrou est sans effet et la hauteur reste vide', () => {
+      open();
+      expect(inputById('height').value).toBe('');
+      inputById('width').value = '100';
+      inputById('width').dispatchEvent(new Event('input'));
+      expect(inputById('height').value).toBe('');
+      expect(panel().querySelector('.aster-image-dialog__lock')).not.toBeNull();
     });
 
     it('revient en mode insertion quand l’image n’est plus sélectionnée', () => {

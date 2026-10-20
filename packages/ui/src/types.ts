@@ -1,4 +1,10 @@
-import type { AsterEditor, AsterOptions, AsterTheme, ToolbarConfig } from '@aster-editor/core';
+import type {
+  AsterEditor,
+  AsterOptions,
+  AsterTheme,
+  PageViewOptions,
+  ToolbarConfig,
+} from '@aster-editor/core';
 
 /** Toolbar montée, pilotable depuis l'extérieur. */
 export interface Toolbar {
@@ -32,6 +38,12 @@ export interface AsterUiOptions extends Omit<AsterOptions, 'element'> {
    * Vrai par défaut.
    */
   slashMenu?: boolean;
+  /**
+   * Vue page (session 3) : transmise telle quelle au core (`AsterOptions.pageView`), qui
+   * pose `aster--page-view` et les variables `--aster-page-*` sur l'hôte ; `themes/page.css`
+   * rend alors la feuille, les marges et les en-têtes / pieds. Faux par défaut.
+   */
+  pageView?: boolean | PageViewOptions;
 }
 
 /** Résultat de `createAster` : éditeur + toolbar montés dans un hôte avec le thème appliqué. */

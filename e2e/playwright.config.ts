@@ -36,13 +36,15 @@ export default defineConfig({
   projects: [
     {
       name: 'playground',
-      // `variables.spec.ts` (variables, bulles, menu `/`, sommaire) tourne aussi sur le playground.
-      testMatch: /(playground|variables)\.spec\.ts$/,
+      // `variables.spec.ts` (variables, bulles, menu `/`, sommaire) et `fidelity.spec.ts`
+      // (import stylé, vue page, pagination, export gabarit) tournent aussi sur le playground.
+      testMatch: /(playground|variables|fidelity)\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'], baseURL: PLAYGROUND_URL },
     },
     {
       name: 'demo',
-      testMatch: /demo\.spec\.ts$/,
+      // `fidelity.spec.ts` contient aussi le scénario de la page « Modèle » de la démo.
+      testMatch: /(demo|fidelity)\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'], baseURL: DEMO_URL },
     },
   ],

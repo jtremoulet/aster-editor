@@ -4,6 +4,7 @@ import type { ComponentFixture } from '@angular/core/testing';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import type { EnvironmentProviders, Provider } from '@angular/core';
 import type { AsterEditor } from '@aster-editor/core';
+import { pageViewApiOf } from '@aster-editor/ui';
 import { describe, expect, it, vi } from 'vitest';
 import { AsterEditorComponent } from './aster-editor.component';
 import { provideAster } from './provide-aster';
@@ -25,7 +26,11 @@ type Inputs = Partial<
     | 'variableValues'
     | 'variableResolver'
     | 'allowUnknownVariables'
-    | 'variableSuggestion',
+    | 'variableSuggestion'
+    | 'importFidelity'
+    | 'exportInTemplate'
+    | 'pageView'
+    | 'layout',
     unknown
   >
 >;
@@ -412,9 +417,10 @@ describe('AsterEditorComponent', () => {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
     const result = await component.importDocx(file);
-    expect(result.html).toContain('<h1>Titre principal</h1>');
-    expect(editor.getHTML()).toContain('<h1>Titre principal</h1>');
-    expect(editor.getHTML()).toContain('<ol>');
+    // Import stylé par défaut : titres avec leur style Word d'origine, listes numérotées.
+    expect(result.html).toMatch(/<h1[^>]*>.*Titre principal.*<\/h1>/);
+    expect(editor.getHTML()).toMatch(/<h1 data-docx-style="Heading1">.*Titre principal/);
+    expect(editor.getHTML()).toContain('<ol');
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
@@ -429,8 +435,9 @@ describe('AsterEditorComponent', () => {
     const pending = component.importDocx(file);
     fixture.destroy();
     const result = await pending;
-    expect(result.html).toContain('<h1>Titre principal</h1>');
+    expect(result.html).toContain('Titre principal');
     expect(component.editor()).toBeNull();
+    expect(component.importedTemplate()).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -581,6 +588,222 @@ describe('AsterEditorComponent', () => {
       });
       expect(component.variableNames()).toEqual(['client']);
     });
+  });
+
+  describe('fidélité Word', () => {
+    const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    async function fixtureFile(name: string): Promise<File> {
+      const bytes = await readFixture(`fixtures/docx/${name}`);
+      return new File([bytes], name, { type: DOCX_MIME });
+    }
+
+    /** Variable CSS posée par le core sur l'hôte `.aster` quand la vue page est active. */
+    function pageWidth(editor: AsterEditor): string {
+      return editor.element.style.getPropertyValue('--aster-page-width');
+    }
+
+    it('importDocx stylé conserve gabarit, mise en page et objets perdus, et les applique à la vue page', async () => {
+      const { component, editor } = await mount({ pageView: true });
+      expect(editor.element.classList.contains('aster--page-view')).toBe(true);
+      expect(pageWidth(editor)).toBe('210mm');
+      expect(component.importedTemplate()).toBeNull();
+      expect(component.layout()).toEqual({});
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+
+      const file = await fixtureFile('16-sections.docx');
+      const result = await component.importDocx(file);
+      expect(component.importedTemplate()).toBe(result.template);
+      expect(component.importedTemplate()?.byteLength).toBe(file.size);
+      expect(component.layout()).toBe(result.layout);
+      expect(component.layout()?.page?.size).toBe('Letter');
+      expect(component.layout()?.page?.orientation).toBe('landscape');
+      expect(component.layout()?.headers?.default?.html).toContain('Section 2');
+      expect(component.lostObjects()).toEqual([]);
+      expect(editor.getHTML()).toContain('data-docx-style');
+
+      // La mise en page est appliquée à la vue page par un effet : au prochain rendu.
+      TestBed.tick();
+      expect(pageWidth(editor)).toBe('279.4mm');
+      expect(editor.element.querySelector('.aster-page-header')?.textContent).toContain(
+        'Section 2',
+      );
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+      expect(layoutChanged).toHaveBeenCalledWith(result.layout);
+    }, 20_000);
+
+    it('importDocx liste les objets non représentables (fixture 17)', async () => {
+      const { component } = await mount();
+      const result = await component.importDocx(await fixtureFile('17-objets-perdus.docx'));
+      expect(result.lost.length).toBeGreaterThan(0);
+      expect(component.lostObjects()).toBe(result.lost);
+      expect(component.lostObjects().map((lost) => lost.kind)).toContain('textbox');
+    }, 20_000);
+
+    it('importFidelity semantic passe par mammoth : mise en page vide, gabarit conservé', async () => {
+      const { component, editor } = await mount({ importFidelity: 'semantic' });
+      const result = await component.importDocx(await fixtureFile('13-styles-nommes.docx'));
+      expect(result.layout).toEqual({});
+      expect(component.layout()).toEqual({});
+      expect(component.importedTemplate()).toBe(result.template);
+      expect(editor.getHTML()).not.toContain('data-docx-style');
+    }, 20_000);
+
+    it('exportDocx réutilise le gabarit importé par défaut, pas avec exportInTemplate=false', async () => {
+      const { fixture, component } = await mount();
+      const file = await fixtureFile('13-styles-nommes.docx');
+      const result = await component.importDocx(file);
+      const { compareDocx } = await import('@aster-editor/word');
+
+      const inTemplate = await component.exportDocx();
+      const kept = await compareDocx(result.template, await inTemplate.arrayBuffer());
+      // Export dans le gabarit : styles.xml ressort à l'octet.
+      expect(kept.identicalParts).toContain('word/styles.xml');
+      expect(kept.score).toBeGreaterThan(0.9);
+
+      fixture.componentRef.setInput('exportInTemplate', false);
+      fixture.detectChanges();
+      const fresh = await component.exportDocx();
+      const lost = await compareDocx(result.template, await fresh.arrayBuffer());
+      // Export neuf : la lib `docx` réécrit ses propres styles.
+      expect(lost.changedParts.some((part) => part.path === 'word/styles.xml')).toBe(true);
+
+      // Un gabarit explicite reste honoré même avec exportInTemplate=false.
+      const explicit = await component.exportDocx({ template: result.template });
+      const again = await compareDocx(result.template, await explicit.arrayBuffer());
+      expect(again.identicalParts).toContain('word/styles.xml');
+    }, 40_000);
+
+    it('exportDocx sans gabarit transmet la mise en page effective à l’export neuf', async () => {
+      const { fixture, component, editor } = await mount({ exportInTemplate: false });
+      editor.setHTML('<p>Corps</p>', false);
+      fixture.componentRef.setInput('layout', {
+        page: { size: 'Letter', orientation: 'landscape' },
+        footers: { default: { html: '<p>Pied imposé</p>' } },
+      });
+      fixture.detectChanges();
+      const blob = await component.exportDocx();
+      const { compareDocx } = await import('@aster-editor/word');
+      // Comparé à lui-même après import : le pied imposé est bien dans le document produit.
+      const { importDocx } = await import('@aster-editor/word');
+      const reread = await importDocx(await blob.arrayBuffer(), { fidelity: 'styled' });
+      expect(reread.layout.page?.size).toBe('Letter');
+      expect(reread.layout.page?.orientation).toBe('landscape');
+      expect(reread.layout.footers?.default?.html).toContain('Pied imposé');
+      const report = await compareDocx(await blob.arrayBuffer(), await blob.arrayBuffer());
+      expect(report.score).toBe(1);
+    }, 20_000);
+
+    it('pageView active, modifie et retire la vue page à chaud, et survit au remontage', async () => {
+      const { fixture, component, editor } = await mount({ toolbar: 'minimal' });
+      expect(editor.element.classList.contains('aster--page-view')).toBe(false);
+
+      fixture.componentRef.setInput('pageView', true);
+      fixture.detectChanges();
+      expect(editor.element.classList.contains('aster--page-view')).toBe(true);
+      expect(pageWidth(editor)).toBe('210mm');
+
+      fixture.componentRef.setInput('pageView', { layout: { page: { size: 'A5' } } });
+      fixture.detectChanges();
+      expect(pageWidth(editor)).toBe('148mm');
+
+      fixture.componentRef.setInput('toolbar', false);
+      fixture.detectChanges();
+      const next = component.editor();
+      expect(next).not.toBe(editor);
+      expect(next?.element.classList.contains('aster--page-view')).toBe(true);
+      expect(next && pageWidth(next)).toBe('148mm');
+
+      fixture.componentRef.setInput('pageView', false);
+      fixture.detectChanges();
+      expect(next?.element.classList.contains('aster--page-view')).toBe(false);
+    });
+
+    it('config.pageView est honoré et l’input dédié prime', async () => {
+      const { fixture, editor } = await mount({ config: { pageView: true } });
+      expect(editor.element.classList.contains('aster--page-view')).toBe(true);
+      fixture.componentRef.setInput('pageView', false);
+      fixture.detectChanges();
+      expect(editor.element.classList.contains('aster--page-view')).toBe(false);
+    });
+
+    it('l’input layout prime sur l’import, se répercute sur la vue page et émet layoutChanged', async () => {
+      const { fixture, component, editor } = await mount({ pageView: true });
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+      const result = await component.importDocx(await fixtureFile('16-sections.docx'));
+      TestBed.tick();
+      expect(pageWidth(editor)).toBe('279.4mm');
+
+      const imposed = {
+        ...result.layout,
+        page: { size: 'A4', orientation: 'portrait' },
+        headers: { default: { html: '<p>En-tête imposé</p>' } },
+      };
+      fixture.componentRef.setInput('layout', imposed);
+      fixture.detectChanges();
+      expect(component.layout()).toBe(imposed);
+      expect(pageWidth(editor)).toBe('210mm');
+      expect(editor.element.querySelector('.aster-page-header')?.textContent).toBe(
+        'En-tête imposé',
+      );
+      expect(layoutChanged).toHaveBeenLastCalledWith(imposed);
+      expect(layoutChanged).toHaveBeenCalledTimes(2);
+
+      fixture.componentRef.setInput('layout', undefined);
+      fixture.detectChanges();
+      expect(component.layout()).toBe(result.layout);
+      expect(pageWidth(editor)).toBe('279.4mm');
+    }, 20_000);
+
+    it('le dialogue « Mise en page » (setPageView du core) est relu : layout() suit et layoutChanged est émis', async () => {
+      const { fixture, component, editor } = await mount({ pageView: true });
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+      const api = pageViewApiOf(editor);
+      expect(api).not.toBeNull();
+
+      const fromDialog = { page: { size: 'Legal' as const, orientation: 'portrait' as const } };
+      api?.setPageView({ layout: fromDialog, pagination: false });
+      expect(component.layout()).toBe(fromDialog);
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+      expect(layoutChanged).toHaveBeenCalledWith(fromDialog);
+      // Relecture sans nouvelle émission : même référence.
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+
+      // Avec un input `layout`, la vue du dialogue est signalée mais ne remplace pas l'input.
+      const imposed = { page: { size: 'A5' as const } };
+      fixture.componentRef.setInput('layout', imposed);
+      fixture.detectChanges();
+      expect(pageWidth(editor)).toBe('148mm');
+      const other = { page: { size: 'A3' as const } };
+      api?.setPageView({ layout: other });
+      expect(component.layout()).toBe(imposed);
+      expect(layoutChanged).toHaveBeenLastCalledWith(other);
+      fixture.componentRef.setInput('layout', other);
+      fixture.detectChanges();
+      expect(component.layout()).toBe(other);
+      expect(layoutChanged).toHaveBeenCalledTimes(3);
+
+      api?.setPageView(false);
+      expect(component.layout()).toBe(other);
+      expect(editor.element.classList.contains('aster--page-view')).toBe(false);
+    });
+
+    it('compareWithTemplate rend null sans gabarit, puis un rapport après import', async () => {
+      const { component } = await mount();
+      await expect(component.compareWithTemplate()).resolves.toBeNull();
+      await component.importDocx(await fixtureFile('13-styles-nommes.docx'));
+      const report = await component.compareWithTemplate();
+      expect(report).not.toBeNull();
+      expect(report?.score).toBeGreaterThan(0.9);
+      expect(report?.score).toBeLessThanOrEqual(1);
+      expect(report?.identicalParts).toContain('word/styles.xml');
+      expect(report?.properties.some((property) => property.group === 'text')).toBe(true);
+    }, 40_000);
   });
 });
 

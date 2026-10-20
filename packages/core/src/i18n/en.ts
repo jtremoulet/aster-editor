@@ -62,7 +62,15 @@ export const en: AsterDictionary = {
   'command.search.clear': 'Clear search',
   'command.formatPainter.copy': 'Copy formatting',
   'command.formatPainter.paste': 'Paste formatting',
+  'command.paragraph.setLayout': 'Paragraph layout',
+  'command.paragraph.unsetLayout': 'Clear paragraph layout',
+  'command.text.setLetterSpacing': 'Letter spacing',
+  'command.text.setCaps': 'Capitalization',
+  'command.text.unsetCaps': 'Normal case',
   'editor.placeholder': 'Start writing…',
   'editor.words': '{count} words',
   'editor.characters': '{count} characters',
+  // Page view, approximate pagination (L30): "Page n of N" label of each gap.
+  'pageView.page': 'Page',
+  'pageView.of': 'of',
 };

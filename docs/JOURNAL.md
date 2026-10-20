@@ -355,3 +355,98 @@
 1. Lire `BILAN_SESSION2.md` (5 min), puis `docs/ROADMAP_SESSION2.md` pour ce qui a été différé.
 2. Tester dans Word réel avec `samples/README.md` et déposer un `.docx` client dans `fixtures/docx/`.
 3. Prochain contrat à dégeler (additif) : `VariableStore.allowUnknown` / `canInsert`, événements `formatPainterChange` / `sourceViewChange`, option `headingIds`.
+
+## 🌙 Session 3 — fidélité de mise en page Word (20 octobre 2026)
+
+### 20/10 16:32 — GO, phase 0
+
+- Point de départ : 0.4.3 sur `develop`, 1 262 tests + 35 e2e verts, paquets publiés (0.4.3 en validation npm pour `ui` et `angular`). Aucun `.docx` client déposé : la session démarre sur les fixtures générées (L22).
+- Contrat figé (additif) : `core/src/api/layout.ts` (`DocumentLayout`, `ParagraphLayoutAttrs` et leur sérialisation HTML exacte, `RunLayoutAttrs`, `ListLayoutAttrs`, `TableLayoutAttrs`, `CellLayoutAttrs`, `PageViewOptions`), `AsterOptions.pageView`, commandes `paragraph.setLayout` / `paragraph.unsetLayout` ; `word` : `DocxImportOptions.fidelity`, `DocxImportResult.layout` / `template` / `lost`, `DocxLostObject`, `DocxExportOptions.template` / `layout`, codes d'avertissement `image-skipped`, `object-lost`, `reader`.
+- Squelette du lecteur OOXML (`word/src/docx/reader/`) : `types.ts` (interfaces figées), `package.ts` (zip, parties, relations), `index.ts` (orchestrateur), dix stubs à signature figée que L24 et L25 remplacent fichier par fichier. `importDocx({ fidelity: 'styled' })` fonctionne de bout en bout en texte brut, variables comprises (5 tests). Défaut encore `semantic` : bascule à l'intégration de L24+L25.
+- Décision : les deux lots du lecteur se partagent un dossier mais pas un fichier ; ils ne se parlent que par `ConverterContext`. Les polices et tailles sont posées sur les runs, jamais sur les blocs (Tiptap ne lit pas `font-size` sur `<p>`).
+- Lancé : L22 fixtures (16:58). À suivre : L23 core, L24 reader runs, L25 reader blocs, L26 ui.
+
+### 20/10 17:05 — L22 fixtures rendu et intégré (agent ≈ 25 min)
+
+- 7 fixtures `11-styles-inline` … `17-objets-perdus` générées par `scripts/generate-fixtures-layout.ts` (lib `docx` + patches XML pour `TableGrid`, zone de texte, forme, objet OLE), reproductibles (hash identique hors `docProps/core.xml`), lisibles par mammoth sans rejet. README des fixtures mis à jour, `npm run fixtures` enchaîne les quatre scripts.
+- Décisions de l'agent validées : `Heading1`/`Heading2` déclarés via `styles.default.heading1/2` (la lib dupliquait le `styleId` sinon) ; pas de repli VML `mc:AlternateContent` autour des formes.
+- Dette : le script fait 844 lignes (un fichier pour sept fixtures), à découper si on y revient. Point à vérifier dans Word : l'objet OLE factice de la 17 peut déclencher une réparation.
+
+### 20/10 17:11 — L24 lecteur styles/runs/paragraphes rendu et intégré (agent 22 min, 267k tokens, 58 outils)
+
+- Résolution complète des styles (docDefaults, `basedOn` avec garde anti-cycle, `link`, thème, styles de tableau), runs avec champs coupés et imbriqués, paragraphes à la sérialisation exacte du contrat. 70 tests, `expected/` 11-13 figés, document client lu : 14 variables, aucun cas non couvert.
+- Décisions validées : saut de page = `<hr data-page-break>` dans le `html` du bloc (plusieurs frères) ; tabulation = U+2003 ; polices et tailles posées sur les runs quand elles diffèrent des `docDefaults`, jamais sur le bloc ; `tblStylePr` ignorés.
+- Extensions structurelles du contrat du lecteur acceptées : `DocxStyleResolver.docDefaults()`, `TableStyleProps.paragraphDefaults`. Proposition à trancher : `DocumentLayout.defaultParagraph` (interligne et espacement par défaut du document, utiles à la vue page).
+- Dette à solder à l'intégration de L25 : `units.ts` (L24) et `units-blocks.ts` (L25) en doublon ; `renderBlocks` doit retirer `margin-left` / `text-indent` des items (`data-docx-num-indent`).
+- Correctifs orchestrateur : regex du test du squelette, `tcPr` et autres propriétés de conteneur ignorées par `convertBlocks` (42 faux `object-lost` sur le document client). Typecheck `word` temporairement rouge à cause de `core/src/html/serialize-html.ts` en cours (L23).
+- Revue R24 lancée.
+
+### 20/10 17:16 — L25 lecteur blocs et L26 ui rendus et intégrés
+
+- **L25** (agent 25 min, 322k tokens, 62 outils) : tableaux (bordures extérieures sur `<table>`, intérieures sur les cellules, fusions, `colwidth`), listes depuis `numbering.xml` (reprise, continuation, puces Symbol ramenées à l'Unicode), images DrawingML et VML, notes à séquence commune, en-têtes et pieds, sections, objets perdus. 72 tests, `expected/` 14-17 figés. Document client : 8 tableaux, 4 listes, aucun avertissement.
+- Orchestrateur : langue du document branchée, **en-têtes et pieds hérités entre sections** (Word fait hériter ; le document client ne référence son pied que dans la première section), `reportLost` dans `runs.ts` pour les révisions, champs inconnus, maths, commentaires et objets incorporés (fixture 17 : 7 objets signalés, une fois chacun). Décision : un champ `DATE` est rendu par son résultat **et** signalé.
+- Dette : `units.ts` (L24) et `units-blocks.ts` (L25) en doublon partiel ; `renderBlocks` ne retire pas encore `margin-left` / `text-indent` des items (`data-docx-num-indent`) ; `w:jc` de tableau ignoré ; `numStyleLink` non suivi.
+- **L26** (agent 25 min, 342k tokens, 83 outils) : 8 widgets (interligne, espacement, retraits, bordures et fond, casse, style de souligné, mise en page), `themes/page.css` (bureau, feuille, en-têtes et pieds en lecture seule, coupure de feuille), variables `--aster-page-*`, dialogue d'image avec hauteur et verrou, icône `ordered-list` redessinée avec test géométrique. 289 → 375 tests, 24 widgets, 81 icônes, 179 clés i18n. Décisions validées : `indentIncrease` / `indentDecrease` remplacent `indent` / `outdent` dans les presets `full` et `standard` ; pas de `@page` dans `print.css`.
+- Propositions de contrat en attente de L23 : `image.setAttributes.height`, `setPageView` / `getLayout` dans `api/editor.ts`, `text.setCaps` / `text.unsetCaps`, commande de style de souligné.
+- Revues R25 et R26 lancées. Typecheck global encore rouge sur `core/src/html/serialize-html.ts` (L23 en cours).
+
+### 20/10 17:24 — L23 core rendu et intégré (agent 30 min, 363k tokens, 158 outils)
+
+- Attributs de paragraphe (12), marques de run, listes et tableaux stylés, vue page : 455 → 572 tests. Décision majeure validée : `getHTML()` passe par un **sérialiseur HTML verbatim** (`html/serialize-html.ts`) car le `DOMSerializer` réécrit les styles via le CSSOM (`rgb()`, raccourcis, ordre faux sous jsdom) ; effet de bord : les couleurs sortent en `#rrggbb`, deux specs existantes ajustées.
+- Alignement lecteur ↔ core fait par l'orchestrateur : ordre d'imbrication des marques (`<span><strong><em><s><u><sup>`) et ordre des déclarations du `span` (`background-color, color, font-family, font-size, letter-spacing, …`) calés sur le core dans `runs.ts` ; `AsterHorizontalRule` ajouté au core pour conserver `<hr data-page-break>` (la session 2 l'exportait mais le core le perdait à l'aller-retour). Attendus 11-17 régénérés (`regen-expected.spec.ts`, gardé sous `ASTER_REGEN`). Idempotence stricte import → `setHTML` → `getHTML` : verte sur 11 et 13, 12 dès le core intégré.
+- Propositions de contrat en attente : `setPageView` / `getLayout` dans `api/editor.ts`, commandes `text.*`, `image.setAttributes.height`, `DocumentLayout.defaultParagraph`.
+- Revue R23 lancée ; L30 pagination lancé.
+
+### 20/10 17:33 — Revues R24, R25, R26 rendues, correctifs F24, F25, F26 lancés
+
+- **R24** (lecteur runs, 20 min, 283k tokens) : 1 bloquant déjà corrigé par l'orchestrateur avant le rapport (ordre des marques), 4 majeurs prouvés : injection CSS par un nom de police (`w:rFonts` contenant `; position: fixed`), champ `HYPERLINK` complexe jamais fermé qui contamine tous les paragraphes suivants, `w:sym` hors Unicode qui rejette tout l'import, fragment `\l` d'un champ `HYPERLINK` mal placé ; mineurs : bornes absentes, chaînes de styles quadratiques (19 s sur 1 500 niveaux), toggles ECMA-376 non XOR, `DarkBlue` perdu, protocoles de liens non filtrés dans `result.html`.
+- **R25** (lecteur blocs, 16 min, 264k tokens) : 1 bloquant (`gridSpan` énorme → `colspan` géant → le core explose en mémoire à `setHTML`), 4 majeurs : zone de texte avec image prise pour une image seule, compteurs de liste remis à zéro par un tableau, **`mc:AlternateContent` ignoré** (forme systématique des dessins Word 2010+, la fixture 17 ne la couvrait pas), `w:customXml` de bloc aplati ; mineurs : bornes, `numId` inconnu silencieux, notes, continuation d'item sur un titre. Relayé au core : `colspan` à borner au parse, `data-docx-num-indent` jeté par le core (expected/15 non idempotent).
+- **R26** (ui, 11 min, 237k tokens) : aucun bloquant, 4 majeurs (replis CSS manquants pour les variables de thème, bordure `between` perdue par le dialogue, retrait appliqué au paragraphe dans une liste, bornes absentes), 12 mineurs (regex quadratique, `0` au lieu de `null`, formulaire reconstruit à chaque `update`, contraste des en-têtes, impression, couleurs non hexadécimales…).
+- Lots de correctifs lancés dès réception : F26 (hors `page.css`, `print.css`, `page-layout-dialog.ts` que L30 modifie), F24 (+ `mc:AlternateContent` côté runs), F25 (+ retrait des marges de numérotation dans les items, fixture 17 complétée). Les trois lots doivent reprendre chaque preuve du relecteur en test.
+- Leçon pour le REX : une fixture « objets perdus » construite à la main ne reproduit pas la forme réelle de Word ; sans Word, il faut au moins recopier les enveloppes connues (`mc:AlternateContent`, `w:customXml`). Le document client l'a confirmé pour les en-têtes hérités entre sections.
+
+### 20/10 17:44 — L30 pagination, L28 rapport de fidélité, F26 intégrés ; R23 rendue, F23 et F23b lancés
+
+- **L30** (agent 22 min, 244k tokens, 71 outils) : pagination approximative par décorations widget, mesure en lot, redessin sans transaction, 4 000 paragraphes en 11 ms ; vérifiée en navigateur (60 paragraphes A4 → 5 pages, « Page 2 sur 5 », coupure nette). Contrat : `PageViewOptions.pagination` ajouté (additif).
+- **L28** (agent 26 min, 323k tokens, 134 outils) : `compareDocx` (parties à l'octet, alignement LCS borné, 11 groupes de propriétés, score pondéré) et `npm run fidelity`. Scores **sans gabarit** (export neuf) : 11 → 0,986, 12 → 0,958, 13 → 0,946, 14 → 0,881, 15 → 0,877, 16 → 0,696, 17 → 0,881, **document client → 0,569** (0,378 avec l'export 0.4.3). C'est la baseline que L27 doit faire monter vers 0,98. Décision validée : une propriété ajoutée par le résultat compte comme perdue (strict, rend les régressions visibles).
+- **F26** : 10 findings corrigés, 375 → 392 tests ui ; R26-01/08/09/13 et les bornes des marges de page confiés à F23b après L30.
+- **R23** (core, 19 min, 240k tokens) : 1 bloquant (XSS par `java\tscript:` dans l'assainisseur des en-têtes de la vue page), 1 majeur (commandes de mise en page sur une sélection de cellules : une seule cellule traitée), 8 mineurs (récursion du sanitiseur, garde `suspiciousAttributes` du sérialiseur verbatim, `Infinity` sérialisé, valeur invalide qui efface, couleurs non normalisées, largeur de table dans la vue d'édition). Deux lots : F23 (tout sauf la vue page, + `colspan` borné au parse relayé par R25) et F23b (vue page + `page.css` / `print.css` / dialogue de mise en page).
+
+### 20/10 18:15 — F23, F23b, L27 intégrés ; R27, L28b, L29 lancés
+
+- **F23** (core, 31 min, 317k tokens, 136 outils) : sélections de cellules, garde XSS du sérialiseur verbatim, bornes ±100 000, valeurs invalides ignorées, span vide supprimé, couleurs normalisées en `#rrggbb` au rendu, largeur de table en édition, `colspan` ≤ 63 et `rowspan` ≤ 1 000 au parse, `data-docx-num-indent` conservé. `AsterStrike` et `AsterHighlight` câblés par l'orchestrateur. Core 626 tests.
+- **F23b** (vue page, 21 min, 216k tokens, 94 outils) : bloquant XSS fermé (`java\tscript:`), assainissement itératif plafonné à 64 niveaux, vue page qui lève au montage ignorée avec avertissement, bornes 0-10 000 mm, variables de marge d'en-tête et de pied posées ; `page.css` avec replis, contraste 0,7, impression du saut de page ; dialogue de mise en page : dimensions libres validées, marges ≤ moitié de la page. Dette : `page-view.ts` 473 lignes, sanitiseur à extraire.
+- **L27** (export dans le gabarit, 54 min, 641k tokens, 247 outils) : greffe du corps avec remappage des relations, réutilisation des styles (par id ou par nom localisé : `Lienhypertexte`, `Grilledutableau`) et des numérotations du gabarit, suppression des propriétés directes égales au style, **réconciliation inverse** contre les `docDefaults` (sans elle, 159 runs du document client passaient de Calibri à Times), notes et en-têtes ajoutés, `sectPr` final complété par héritage, variables des en-têtes résolues en mode `resolve`, en-tête ou pied modifié régénéré. Fixtures 11 et 13 : **toutes les parties identiques à l'octet** ; 12, 14-17 : seul `document.xml` diffère par des équivalences (`jc left` omis, `w:tab`) ; document client : aucun repli. 792 tests `word`.
+- Décision orchestrateur : le défaut de `fidelity` dans `importDocx` reste `semantic` en 0.5.0 (re-baseline de ~50 tests et changement observable pour les intégrateurs vanilla) ; le composant Angular, la démo et le playground passent en `styled` par défaut, la bascule du défaut de la lib est notée pour 0.6. Playground : import stylé, mise en page appliquée à la vue page, export (y compris variables) dans le gabarit après un import.
+- Lancés : R27 (revue de l'export dans le gabarit), L28b (scores avec gabarit, activation des tests ≥ 0,98), L29 (Angular, démo, en-têtes et pieds éditables).
+
+### 20/10 21:22 — R27, F27, L28b, L28c intégrés ; L29 interrompu puis repris
+
+- **R27** (export gabarit, 20 min, 275k tokens) : aucun bloquant, 4 majeurs (gabarit de 50 Mo → épuisement mémoire sans repli, `numberedHeadings` ignoré, styles de TOC retirés et `updateFields` absent, en-tête pair sans `evenAndOddHeaders`), 7 mineurs ; 72 attaques jouées, intégrité des paquets validée par un validateur maison. **F27** (25 min, 407k tokens, 133 outils) : tout corrigé, plus l'espace finale de paragraphe que l'export rognait depuis 0.1 (idempotence stricte de la fixture 17 désormais vraie), `startOverride` borné, fichier de fusion des styles découpé en trois. Word : 864 tests.
+- **L28b** (11 min) puis **L28c** (19 min) : scores dans le gabarit après passage du comparateur aux propriétés effectives (bordures de cellule résolues, saut de page comme frontière de bloc, champs de fusion par nom et résultat, largeurs ±0,5 pt) : 11 → 1, 12 → 0,990, 13 → 1, 14 → 0,998, 15 → 1, 16 → 0,756, 17 → 0,944, **document client → 0,889** (0,571 sans gabarit). Parties annexes identiques à l'octet sur les huit documents. Pertes restantes réelles : sections multiples réduites à la dernière (16, client), tabulations lues comme espaces (12), zone de texte et équation (17), `tcBorders nil` non réécrits par le writer et traits `#bfbfbf` ramenés à noir (client).
+- **L29** interrompu à 19:xx par la limite de session (panneau En-tête / Pied terminé, page Import en cours) ; repris à 21:22 à la levée de la limite, sans perte (travail sur disque).
+- Leçon REX : une limite de session en pleine vague se gère par reprise de l'agent (`SendMessage`), pas par un nouveau lot ; prévoir dans les briefs un rapport intermédiaire toutes les 20 minutes pour rendre la reprise sûre.
+
+### 20/10 21:27 — L29 Angular et démo intégré, bug navigateur corrigé
+
+- **L29** (agent 2 × ~25 min, 383k tokens, interrompu puis repris) : composant avec `importFidelity` (styled par défaut), `exportInTemplate`, `pageView`, `layout`, `layoutChanged`, `compareWithTemplate` ; page Modèle avec vue page, panneau En-tête / Pied éditable sur deux éditeurs Aster `minimal`, rapport de fidélité, objets non représentables, téléchargement dans le gabarit ; page Import avec choix du chemin et mise en page lue. 49 tests Angular, 30 démo, build démo 296 kB initial. Extractions `lib/word.ts`, `lib/page-view.ts`, `lib/editor-dom.ts`.
+- **Bug trouvé en navigateur réel par L29, invisible sous jsdom** : `XMLSerializer` de Chromium réémet la déclaration `<?xml…?>`, l'export dans le gabarit écrivait donc deux déclarations en tête de `document.xml` (XML invalide, score de fidélité effondré dans la démo). Corrigé par l'orchestrateur dans `writer/xml-io.ts` avec un test. Leçon REX : toute écriture de XML ou de HTML sérialisé par le navigateur doit être vérifiée hors jsdom avant le gel.
+- Suites : Word 867, core 626, ui 399, Angular 49, démo 30. E2E existants relancés, L32 (e2e fidélité) à suivre.
+
+### 20/10 21:43 — L32 e2e rendu ; second bug Chromium de déclaration XML corrigé
+
+- **L32** (13 min, 221k tokens, 80 outils) : 4 e2e existants réalignés sur le chemin stylé, nouveau `fidelity.spec.ts` (7 scénarios : import stylé idempotent en vrai navigateur, vue page et dialogue de mise en page, pagination avec `hr data-page-break`, export dans le gabarit vérifié dans le zip téléchargé, objets perdus, page Modèle complète avec en-tête édité répercuté, document client). 40 e2e verts en 17 s.
+- **Bug trouvé par L32, invisible sous jsdom et plus grave que celui de L29** : le prétraitement des champs de fusion (`preprocess/variables.ts`) concaténait lui aussi sa déclaration XML à la sortie de `XMLSerializer`, que Chromium préfixe déjà → `document.xml` prétraité invalide → chemin stylé **vide** pour tout `.docx` à champs de fusion ou contrôles de contenu dans un vrai navigateur (fixture 09 et document client). Corrigé à la source : `stripXmlDeclaration` partagé (`preprocess/xml-utils.ts`), appliqué aux trois sites de réécriture (prétraitement, greffe, en-têtes) ; `isParseError` du lecteur détecte aussi le `<parsererror>` que Chromium injecte dans la racine. Les deux e2e `fixme` réactivés.
+- Leçon REX (la même, renforcée) : un test jsdom ne prouve pas la sérialisation XML ; chaque lot qui écrit du XML doit avoir au moins un e2e en navigateur réel, et le relecteur doit l'exiger.
+
+### 20/10 22:09 — F30, L31 intégrés, gel 0.5.0
+
+- **F30** (23 min, 320k tokens, 126 outils) : 13 findings R30 corrigés (saut de page mesuré à zéro, impression, décorations mappées entre deux mesures, nom brut des champs, alignement patience, `w:sdt` dans les tableaux, codes de sortie du script), `pagination.ts` et `page-view.ts` découpés sous 400 lignes. **L31** (34 min, 602k tokens, 210 outils) : 11 documents, compteurs recalculés, deux JSDoc obsolètes corrigées par l'orchestrateur.
+- **Gel 0.5.0** : `npm run check` vert (**1 994 tests** : core 630, word 885 + 3 échecs attendus documentés + 7 ignorés, ui 400, angular 49, démo 30), `npm run build` vert, `npm run e2e` **42/42** en 16 s. Arbre propre, `develop` poussé. `main` reste en 0.4.3, merge sur demande ; publication npm à faire par Joris (2FA).
+- Fin de session à 22:09 : 5 h 37 de GO à 0.5.0 dont 1 h 20 de limite de session.
+
+#### Reprendre le travail
+
+1. `BILAN_SESSION3.md` (5 min), puis `docs/ROADMAP_SESSION3.md` et la section « Différé » du bilan.
+2. Ouvrir dans Word réel les exports dans le gabarit (`samples/README.md`, points 18-31) et les documents clients.
+3. Prochain chantier structurant : sections multiples conservées dans le corps (perte principale sur le document client et la fixture 16), puis bascule du défaut `fidelity: 'styled'` (0.6).

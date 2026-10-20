@@ -116,3 +116,72 @@ describe('parsePixels', () => {
     expect(parsePixels(null)).toBeNull();
   });
 });
+
+describe('mise en page du contrat (L27)', () => {
+  it('parsePoints : unités absolues, signe, relatives refusées', async () => {
+    const { parsePoints } = await import('./css');
+    expect(parsePoints('18pt')).toBe(18);
+    expect(parsePoints('-14.15pt')).toBe(-14.15);
+    expect(parsePoints('16px')).toBe(12);
+    expect(parsePoints('1in')).toBe(72);
+    expect(parsePoints('2.54cm')).toBe(72);
+    expect(parsePoints('36')).toBe(36);
+    expect(parsePoints('1.5em')).toBeNull();
+    expect(parsePoints('auto')).toBeNull();
+  });
+
+  it('parseBorder : raccourci dans tout ordre, couleurs hex / rgb / nommées, none', async () => {
+    const { parseBorder } = await import('./css');
+    expect(parseBorder('1pt solid #000000')).toEqual({
+      style: 'solid',
+      widthPt: 1,
+      color: '000000',
+    });
+    expect(parseBorder('dashed rgb(255, 0, 0) 2px')).toEqual({
+      style: 'dashed',
+      widthPt: 1.5,
+      color: 'FF0000',
+    });
+    expect(parseBorder('double red')).toEqual({ style: 'double', widthPt: 2.25, color: 'FF0000' });
+    expect(parseBorder('thin')).toEqual({ style: 'solid', widthPt: 0.75, color: '000000' });
+    expect(parseBorder('none')).toBeNull();
+    expect(parseBorder('0')).toBeNull();
+    expect(parseBorder(undefined)).toBeUndefined();
+    expect(parseBorder('bidule')).toBeUndefined();
+  });
+
+  it('parseBorders : raccourci, côtés, propriétés longues', async () => {
+    const { parseBorders, parseStyle } = await import('./css');
+    const borders = parseBorders(
+      parseStyle(
+        'border: 1pt solid #000; border-left: none; border-top-color: #ff0000; border-bottom-width: 2pt',
+      ),
+    );
+    expect(borders.get('top')).toEqual({ style: 'solid', widthPt: 1, color: 'FF0000' });
+    expect(borders.get('right')).toEqual({ style: 'solid', widthPt: 1, color: '000000' });
+    expect(borders.get('bottom')).toEqual({ style: 'solid', widthPt: 2, color: '000000' });
+    expect(borders.get('left')).toBeNull();
+    expect(parseBorders(parseStyle('border-right-style: dotted')).get('right')).toEqual({
+      style: 'dotted',
+      widthPt: 2.25,
+      color: '000000',
+    });
+    expect(parseBorders(parseStyle('color: red')).size).toBe(0);
+  });
+
+  it('parseLineHeight, parsePadding, highlightName', async () => {
+    const { parseLineHeight, parsePadding, highlightName } = await import('./css');
+    expect(parseLineHeight('1.15')).toEqual({ kind: 'multiple', value: 1.15 });
+    expect(parseLineHeight('150%')).toEqual({ kind: 'multiple', value: 1.5 });
+    expect(parseLineHeight('14pt')).toEqual({ kind: 'exact', points: 14 });
+    expect(parseLineHeight('normal')).toBeNull();
+    expect(parsePadding('4pt')).toEqual([4, 4, 4, 4]);
+    expect(parsePadding('2pt 4pt')).toEqual([2, 4, 2, 4]);
+    expect(parsePadding('1pt 2pt 3pt')).toEqual([1, 2, 3, 2]);
+    expect(parsePadding('1pt 2pt 3pt 4pt')).toEqual([1, 2, 3, 4]);
+    expect(parsePadding('1pt x')).toBeNull();
+    expect(highlightName('FFFF00')).toBe('yellow');
+    expect(highlightName('c0c0c0')).toBe('lightGray');
+    expect(highlightName('F2F2F2')).toBeNull();
+  });
+});

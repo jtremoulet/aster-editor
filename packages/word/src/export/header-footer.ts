@@ -1,10 +1,16 @@
+import type { HeaderFooterSet } from '@aster-editor/core';
 import type { Footer, Header, Paragraph, Table } from 'docx';
 import type { HtmlParser } from '../docx/types';
 import { convertChildren, type BlockScope } from './blocks';
 import type { ExportContext } from './context';
 import type { ParagraphAlignment } from './css';
 import { parseFragment, resolveParser } from './dom';
-import type { DocxFooterOptions, DocxHeaderAlign, DocxHeaderOptions } from './types';
+import type {
+  DocxExportOptions,
+  DocxFooterOptions,
+  DocxHeaderAlign,
+  DocxHeaderOptions,
+} from './types';
 
 /** Échappe un texte brut pour le passer au convertisseur HTML. */
 function escapeHtml(text: string): string {
@@ -93,4 +99,65 @@ export async function buildFooter(
     children.push(pageNumberParagraph(options.pageNumbers, options.align, ctx));
   }
   return children.length === 0 ? undefined : new ctx.docx.Footer({ children });
+}
+
+/** Jeu d'en-têtes ou de pieds d'une section `docx`, par type de page. */
+export interface HeaderFooterGroup<T> {
+  readonly default?: T;
+  readonly first?: T;
+  readonly even?: T;
+}
+
+/** `HeaderFooterSet` du contrat → option d'en-tête par type, `undefined` si le fragment est vide. */
+function layoutOption(
+  set: HeaderFooterSet | undefined,
+  key: keyof HeaderFooterSet,
+): DocxHeaderOptions | undefined {
+  const html = set?.[key]?.html;
+  return html === undefined || html.trim() === '' ? undefined : { html };
+}
+
+/**
+ * En-têtes de la section : `options.header` pour les pages courantes (il prime), sinon
+ * `layout.headers.default` ; `first` et `even` viennent du `layout` seul (contrat
+ * `HeaderFooterSet`, en général lu par l'import). Vide si rien n'est demandé.
+ */
+export async function buildHeaders(
+  options: DocxExportOptions,
+  ctx: ExportContext,
+): Promise<HeaderFooterGroup<Header>> {
+  const sets = options.layout?.headers;
+  const group: { -readonly [K in keyof HeaderFooterGroup<Header>]: Header | undefined } = {
+    default: await buildHeader(options.header ?? layoutOption(sets, 'default'), ctx, options.parse),
+    first: await buildHeader(layoutOption(sets, 'first'), ctx, options.parse),
+    even: await buildHeader(layoutOption(sets, 'even'), ctx, options.parse),
+  };
+  return compact(group);
+}
+
+/** Pieds de la section, mêmes règles que `buildHeaders` (numérotation via `options.footer`). */
+export async function buildFooters(
+  options: DocxExportOptions,
+  ctx: ExportContext,
+): Promise<HeaderFooterGroup<Footer>> {
+  const sets = options.layout?.footers;
+  const group: { -readonly [K in keyof HeaderFooterGroup<Footer>]: Footer | undefined } = {
+    default: await buildFooter(options.footer ?? layoutOption(sets, 'default'), ctx, options.parse),
+    first: await buildFooter(layoutOption(sets, 'first'), ctx, options.parse),
+    even: await buildFooter(layoutOption(sets, 'even'), ctx, options.parse),
+  };
+  return compact(group);
+}
+
+/** Retire les entrées `undefined` : `docx` n'accepte pas `{ first: undefined }`. */
+function compact<T>(group: {
+  readonly default?: T | undefined;
+  readonly first?: T | undefined;
+  readonly even?: T | undefined;
+}): HeaderFooterGroup<T> {
+  return {
+    ...(group.default !== undefined ? { default: group.default } : {}),
+    ...(group.first !== undefined ? { first: group.first } : {}),
+    ...(group.even !== undefined ? { even: group.even } : {}),
+  };
 }

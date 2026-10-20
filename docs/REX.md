@@ -197,3 +197,50 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 - `@tiptap/suggestion@^3.31.4` résolu en 3.32.0 avec une seconde copie de `@tiptap/core` imbriquée → 100 erreurs de types. Épingler Tiptap en exact et vérifier `find … @tiptap/core/package.json` après toute installation.
 - Un agent a arrêté le serveur `ng serve` de l'orchestrateur (même port). Règle : ne jamais arrêter un serveur qu'on n'a pas lancé.
 - Horodatages du journal estimés par l'orchestrateur pendant une heure, décalés de ~1h30 par rapport à l'horloge : toujours lire `date`.
+
+## 🌙 Session 3 — fidélité de mise en page Word (20 octobre 2026)
+
+### 📊 Métriques par lot
+
+| Lot                                | Durée agent      | Tokens | Outils | Tests ajoutés | Résultat                                               |
+| ---------------------------------- | ---------------- | ------ | ------ | ------------- | ------------------------------------------------------ |
+| Phase 0 (orchestrateur)            | 25 min           | —      | —      | +5            | contrat, squelette du lecteur, briefs                  |
+| L22 fixtures                       | 13 min           | 190k   | 49     | —             | 7 fixtures de mise en page                             |
+| L23 core mise en page              | 30 min           | 363k   | 158    | +114          | sérialiseur verbatim, vue page                         |
+| L24 lecteur styles/runs            | 22 min           | 267k   | 58     | +70           | résolution des styles, champs                          |
+| L25 lecteur blocs                  | 25 min           | 322k   | 62     | +72           | tableaux, listes, images, notes, sections              |
+| L26 ui mise en page                | 25 min           | 342k   | 83     | +86           | 8 widgets, page.css                                    |
+| L27 export dans le gabarit         | 54 min           | 641k   | 247    | +60           | greffe, fixtures 11 et 13 à l'octet                    |
+| L28 / L28b / L28c fidélité         | 26 + 11 + 19 min | 785k   | 301    | +101          | compareDocx, scores, propriétés effectives             |
+| L29 angular / démo                 | 2 × 25 min       | 383k   | —      | +17           | interrompu par la limite, repris sans perte            |
+| L30 pagination                     | 22 min           | 244k   | 71     | +26           | 4 000 ¶ en 11 ms                                       |
+| L31 docs                           | 34 min           | 602k   | 210    | —             | 11 documents, compteurs recalculés                     |
+| L32 e2e                            | 13 min           | 221k   | 80     | +7 e2e        | 2 bugs navigateur trouvés                              |
+| R23-R27, R30 (6 revues)            | 11 à 20 min      | 1,6M   | 303    | —             | 73 findings prouvés, 3 bloquants                       |
+| F23, F23b, F24, F25, F26, F27, F30 | 15 à 31 min      | ≈ 2,1M | ≈ 700  | +150          | tous les findings corrigés avec test de non-régression |
+
+Total : ≈ 8 M tokens d'agents, 1 262 → 1 994 tests unitaires, 35 → 42 e2e, GO → 0.5.0 en 6 h dont 1 h 20 de limite de session.
+
+### ✅ Ce qui a marché
+
+1. **Un dossier partagé, des fichiers disjoints, un contexte figé** : les deux lots du lecteur (L24, L25) ont travaillé dans `reader/` sans conflit, grâce à des stubs à signature figée et au `ConverterContext` comme seule interface. Même recette pour les deux lots de correctifs du core (F23 / F23b) séparés par fichier.
+2. **Revues lancées à l'intégration, correctifs lancés au rapport** : 73 findings traités avant le gel, dont trois bloquants (XSS dans l'assainisseur, `colspan` qui tue le core, ordre des marques). Le coût est réel (≈ 3,7 M tokens revues + correctifs) mais chaque finding est devenu un test.
+3. **Le document client a changé la session** : en-têtes hérités entre sections, champ imbriqué, `mc:AlternateContent`, `numId 0`, styles localisés (`Lienhypertexte`) : aucun de ces cas n'était dans les fixtures synthétiques. Règle : **un vrai document avant le brief, pas après.**
+4. **Un score plutôt qu'une impression** : le rapport de fidélité a orienté L27 (réconciliation contre les `docDefaults` découverte par la mesure : 159 runs passaient de Calibri à Times) et borné la discussion sur « c'est fidèle ».
+5. **La reprise après limite de session** : un agent interrompu reprend par `SendMessage` avec son transcript ; aucune perte.
+
+### 🧱 Frictions nouvelles
+
+1. **jsdom ment sur la sérialisation XML** : Chromium réémet la déclaration `<?xml?>`, jsdom non. Deux bugs invisibles par 1 900 tests unitaires (prétraitement des champs : chemin stylé vide dans le navigateur ; greffe : `document.xml` invalide), trouvés par L29 et L32 en navigateur. **Règle : tout lot qui écrit du XML ou du HTML sérialisé par le navigateur livre un e2e réel, et le relecteur l'exige.**
+2. **Les fixtures « hostiles » faites à la main ne reproduisent pas Word** : la fixture 17 n'avait pas la forme réelle des dessins (`mc:AlternateContent`). Sans Word, recopier les enveloppes connues du format.
+3. **Deux agents sur un même fichier d'utilitaires** (`units.ts` / `units-blocks.ts`) : doublon partiel à fusionner. Le brief doit nommer le propriétaire d'un fichier partagé **avant** le lancement.
+4. **Fichiers > 400 lignes** : six agents ont dépassé la règle sous la pression du périmètre ; les relecteurs l'ont relevé, les lots de correctifs ont découpé. Mettre la règle dans la définition of done des briefs, pas seulement dans `CLAUDE.md`.
+5. **Les timestamps du journal** : l'orchestrateur a écrit trois fois une heure estimée au lieu de lire `date`. Lire l'horloge avant chaque entrée.
+
+### 📐 Ce que la session 3 ajoute à la méthode
+
+1. Déposer les documents réels du client dans `fixtures/docx/client/` (hors dépôt) **avant** la phase 0 ; tous les lots les reçoivent comme critère obligatoire.
+2. Un e2e en navigateur réel par lot qui sérialise du XML ou du HTML, exigé par le relecteur.
+3. Les lots de correctifs reprennent chaque preuve du relecteur comme test, et le relecteur suivant vérifie que c'est fait.
+4. Nommer le propriétaire de chaque fichier partagé dans les briefs ; les helpers communs sont écrits en phase 0.
+5. Un rapport intermédiaire d'agent toutes les 20 minutes (une ligne dans son rapport final suffit), pour qu'une interruption de session ne coûte rien.

@@ -1,10 +1,51 @@
-import { ChangeDetectionStrategy, Component, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal, viewChild } from '@angular/core';
 import { AsterEditorComponent } from '@aster-editor/angular';
-import type { DocxImportWarning } from '@aster-editor/angular';
+import type { DocxImportFidelity, DocxImportWarning, PageSetup } from '@aster-editor/angular';
+
+const FIDELITIES: readonly DocxImportFidelity[] = ['styled', 'semantic'];
+
+/** Fixture stylée servie depuis `apps/demo/public/samples/`, copiée depuis `fixtures/docx/`. */
+const STYLED_SAMPLE_URL = 'samples/13-styles-nommes.docx';
+const STYLED_SAMPLE_NAME = '13-styles-nommes.docx';
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/** Lignes « libellé : valeur » décrivant `layout.page` (format, orientation, marges). */
+interface PageLine {
+  readonly label: string;
+  readonly value: string;
+}
+
+/** Marge affichée : valeur lue ou défaut Word (25,4 mm). */
+function marginMm(value: number | undefined): string {
+  return `${value ?? 25.4} mm`;
+}
+
+/** Décrit la page lue par l'import ; vide en mode `semantic` (pas de mise en page). */
+function describePage(page: PageSetup | undefined): readonly PageLine[] {
+  if (!page) {
+    return [];
+  }
+  const size =
+    typeof page.size === 'string'
+      ? page.size
+      : page.size
+        ? `${page.size.widthMm} × ${page.size.heightMm} mm`
+        : 'A4 (défaut)';
+  const margins = page.margins ?? {};
+  return [
+    { label: 'Format', value: size },
+    { label: 'Orientation', value: page.orientation ?? 'portrait' },
+    { label: 'Marge haute', value: marginMm(margins.topMm) },
+    { label: 'Marge droite', value: marginMm(margins.rightMm) },
+    { label: 'Marge basse', value: marginMm(margins.bottomMm) },
+    { label: 'Marge gauche', value: marginMm(margins.leftMm) },
+  ];
+}
 
 /**
  * Import Word : dépôt ou sélection d'un `.docx`, import via `importDocx` du composant
- * (module Word chargé à la demande), avertissements, et rappel du collage nettoyé.
+ * (module Word chargé à la demande), choix du chemin de lecture (`styled` / `semantic`),
+ * avertissements, mise en page lue, et rappel du collage nettoyé.
  */
 @Component({
   selector: 'app-import',
@@ -14,9 +55,25 @@ import type { DocxImportWarning } from '@aster-editor/angular';
     <section class="demo-page">
       <h1>Import Word</h1>
       <p class="demo-lead">
-        Dépose un <code>.docx</code> : titres, listes imbriquées, tables et images sont convertis en
-        HTML sémantique.
+        Dépose un <code>.docx</code> : en mode <code>styled</code>, polices, tailles, couleurs,
+        interlignes, bordures, tableaux et listes sont conservés ; en mode <code>semantic</code>,
+        mammoth produit un HTML propre sans mise en forme.
       </p>
+
+      <div class="demo-controls">
+        <label>
+          Fidélité
+          <select aria-label="Chemin de lecture du .docx" (change)="fidelity.set(selected($event))">
+            @for (item of fidelities; track item) {
+              <option [value]="item" [selected]="item === fidelity()">{{ item }}</option>
+            }
+          </select>
+        </label>
+        <span class="demo-spacer"></span>
+        <button type="button" class="demo-button" (click)="loadStyledSample()" [disabled]="busy()">
+          Charger l'exemple stylé
+        </button>
+      </div>
 
       <div
         class="demo-dropzone"
@@ -56,7 +113,22 @@ import type { DocxImportWarning } from '@aster-editor/angular';
         </ul>
       }
 
-      <aster-editor toolbar="standard" placeholder="Le document importé apparaîtra ici…" />
+      @if (pageLines().length > 0) {
+        <dl class="demo-layout">
+          @for (line of pageLines(); track line.label) {
+            <div class="demo-layout__item">
+              <dt>{{ line.label }}</dt>
+              <dd>{{ line.value }}</dd>
+            </div>
+          }
+        </dl>
+      }
+
+      <aster-editor
+        toolbar="standard"
+        placeholder="Le document importé apparaîtra ici…"
+        [importFidelity]="fidelity()"
+      />
 
       <aside class="demo-notice">
         <h2>Coller depuis Word</h2>
@@ -71,6 +143,8 @@ import type { DocxImportWarning } from '@aster-editor/angular';
   `,
 })
 export class ImportPage {
+  protected readonly fidelities = FIDELITIES;
+  protected readonly fidelity = signal<DocxImportFidelity>('styled');
   protected readonly over = signal(false);
   protected readonly busy = signal(false);
   protected readonly fileName = signal<string | null>(null);
@@ -78,6 +152,16 @@ export class ImportPage {
   protected readonly warnings = signal<readonly DocxImportWarning[]>([]);
 
   private readonly editorRef = viewChild.required(AsterEditorComponent);
+
+  /** Mise en page lue par le dernier import (`layout().page` du composant). */
+  protected readonly pageLines = computed<readonly PageLine[]>(() =>
+    describePage(this.editorRef().layout()?.page),
+  );
+
+  protected selected(event: Event): DocxImportFidelity {
+    const value = (event.target as HTMLSelectElement).value;
+    return value === 'semantic' ? 'semantic' : 'styled';
+  }
 
   protected onDragOver(event: DragEvent): void {
     event.preventDefault();
@@ -100,6 +184,24 @@ export class ImportPage {
       void this.importFile(file);
     }
     input.value = '';
+  }
+
+  /** Récupère la fixture stylée servie par la démo et l'importe comme un fichier déposé. */
+  protected async loadStyledSample(): Promise<void> {
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      const response = await fetch(STYLED_SAMPLE_URL);
+      if (!response.ok) {
+        throw new Error(`Exemple introuvable (${response.status}) : ${STYLED_SAMPLE_URL}`);
+      }
+      const blob = await response.blob();
+      await this.importFile(new File([blob], STYLED_SAMPLE_NAME, { type: DOCX_MIME }));
+    } catch (cause: unknown) {
+      this.error.set(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   protected async importFile(file: File): Promise<void> {

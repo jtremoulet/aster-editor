@@ -11,7 +11,9 @@ import type {
   AsterEvents,
   AsterOptions,
   CommandRegistry,
+  DocumentLayout,
   GetHtmlOptions,
+  PageViewOptions,
   VariableStore,
   I18n,
   Unsubscribe,
@@ -21,10 +23,12 @@ import { createStandardCommands } from '../commands/standard';
 import { createAsterExtensions } from '../extensions/aster-extensions';
 import { createImageUploadProps } from '../extensions/image-upload';
 import { resolveLinkPolicy } from '../extensions/link-safety';
+import { applyPageView, type PageViewHandle } from '../extensions/page-view';
 import { createPastePipelineProps } from '../extensions/paste-pipeline';
 import { collectShortcutBindings } from '../extensions/shortcuts';
 import { normalizeOutputHtml } from '../html/normalize-output';
 import { resolveVariablesHtml } from '../html/resolve-variables';
+import { serializeDocumentHtml } from '../html/serialize-html';
 import { createI18n } from '../i18n/create-i18n';
 import { createEventEmitter, type AsterEventEmitter } from './event-emitter';
 import { VARIABLE_NODE_NAME, createVariableStore, variableText } from './variable-store';
@@ -70,6 +74,8 @@ export class AsterEditorImpl implements AsterEditor {
   /** Document pour lequel `cachedHtml` a été calculé : identité, pas égalité. */
   private cachedDoc: ProseMirrorNode | null = null;
   private cachedHtml = '';
+  /** Vue page montée, `null` quand elle est inactive. */
+  private pageView: PageViewHandle | null = null;
 
   constructor(options: AsterOptions) {
     this.element = options.element;
@@ -134,8 +140,40 @@ export class AsterEditorImpl implements AsterEditor {
       onBlur: ({ event }) => this.emit('blur', { editor: this, event }),
     });
     this.contentElement = this.tiptap.view.dom;
+    if (options.pageView) {
+      // Une mise en page hostile (en-tête importé d'un .docx) ne doit jamais laisser un
+      // éditeur à moitié construit : la vue page est ignorée, l'éditeur reste utilisable.
+      try {
+        this.setPageView(options.pageView);
+      } catch (error) {
+        console.warn('[aster] vue page ignorée : mise en page invalide', error);
+      }
+    }
     // Microtâche : laisse l'appelant s'abonner à `ready` juste après `createEditor`.
     queueMicrotask(() => this.emit('ready', { editor: this }));
+  }
+
+  // --- Vue page (hors contrat `AsterEditor`, proposée en session 3) -------
+
+  /**
+   * Active, remplace ou désactive la vue page : classe `aster--page-view` et variables
+   * `--aster-page-*` sur l'hôte, conteneurs d'en-tête et de pied autour du corps. `true`
+   * vaut `{}` (A4 portrait, marges 25,4 mm), `false` retire tout. Indépendante de la
+   * lecture seule. Hors contrat : à proposer dans `api/editor.ts`.
+   */
+  setPageView(options: boolean | PageViewOptions): void {
+    this.pageView?.remove();
+    this.pageView = null;
+    if (options === false || this.destroyed) {
+      return;
+    }
+    const resolved: PageViewOptions = options === true ? {} : options;
+    this.pageView = applyPageView(this.element, this.contentElement, resolved);
+  }
+
+  /** Mise en page de la vue page active, `null` si elle est inactive. Hors contrat. */
+  getLayout(): DocumentLayout | null {
+    return this.pageView?.layout ?? null;
   }
 
   // --- Contenu -------------------------------------------------------------
@@ -159,13 +197,17 @@ export class AsterEditorImpl implements AsterEditor {
    * `getHTML()` à chaque `change`, et `normalizeOutputHtml` reparse tout le document
    * dès qu'il contient une table. Le document est immuable, toute transaction en
    * produit un nouveau : le cache s'invalide tout seul, sans compteur ni événement.
+   *
+   * La sérialisation n'est pas `tiptap.getHTML()` mais `serializeDocumentHtml` : les
+   * attributs `style` sortent tels que les extensions les écrivent (`#rrggbb`, ordre du
+   * contrat), pas réécrits par le moteur CSS.
    */
   private placeholdersHtml(): string {
     const { doc } = this.tiptap.state;
     if (doc === this.cachedDoc) {
       return this.cachedHtml;
     }
-    const html = normalizeOutputHtml(this.tiptap.getHTML());
+    const html = normalizeOutputHtml(serializeDocumentHtml(doc));
     this.cachedDoc = doc;
     this.cachedHtml = html;
     return html;
@@ -337,6 +379,8 @@ export class AsterEditorImpl implements AsterEditor {
     this.emit('destroy', { editor: this });
     this.destroyed = true;
     this.emitter.clear();
+    this.pageView?.remove();
+    this.pageView = null;
     this.tiptap.destroy();
     this.container.remove();
     this.cachedDoc = null;

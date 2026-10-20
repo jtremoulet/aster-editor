@@ -1,17 +1,24 @@
 import type { AsterEditor } from '@aster-editor/core';
+import { createCapsMenu } from '../components/caps';
 import { createColorPicker } from '../components/color-picker';
 import { createFontFamilyMenu, createFontSizeMenu } from '../components/font-menu';
 import { createFormatPainterButton } from '../components/format-painter-button';
 import { createFullscreenButton } from '../components/fullscreen';
 import { createHeadingMenu } from '../components/heading-menu';
 import { createImageDialog } from '../components/image-dialog';
+import { createLineSpacingMenu } from '../components/line-spacing';
 import { createLinkDialog } from '../components/link-dialog';
 import { createOutlinePanel } from '../components/outline-panel';
+import { createPageLayoutDialog } from '../components/page-layout-dialog';
+import { createParagraphBordersDialog } from '../components/paragraph-borders-dialog';
+import { createIndentButton } from '../components/paragraph-indent';
+import { createParagraphSpacingDialog } from '../components/paragraph-spacing-dialog';
 import { createPrintButton } from '../components/print';
 import { createSearchPanel } from '../components/search-panel';
 import { createSourceButton } from '../components/source-view';
 import { createSpecialChars } from '../components/special-chars';
 import { createTableGridPicker } from '../components/table-grid-picker';
+import { createUnderlineStyleMenu } from '../components/underline-style';
 import { createVariableMenu } from '../components/variable-menu';
 import type { ToolbarWidget, WidgetFactory } from '../types';
 
@@ -56,6 +63,24 @@ export const WIDGETS: Readonly<Record<string, WidgetDefinition>> = {
   fullscreen: { factory: createFullscreenButton, requires: [] },
   specialChars: { factory: createSpecialChars, requires: [] },
   print: { factory: (editor) => createPrintButton(editor), requires: [] },
+  // Mise en page (session 3, L26) : paragraphe (`paragraph.setLayout`), retraits (délèguent
+  // à `indent` / `outdent` dans une liste), casse et style de souligné (marques de run,
+  // commandes additives `text.*` de L23), mise en page du document (`setPageView`, détecté
+  // à l'exécution : le widget se désactive si le core ne l'expose pas).
+  lineSpacing: { factory: createLineSpacingMenu, requires: ['paragraph.setLayout'] },
+  paragraphSpacing: { factory: createParagraphSpacingDialog, requires: ['paragraph.setLayout'] },
+  indentIncrease: {
+    factory: (editor) => createIndentButton(editor, 'increase'),
+    requires: ['paragraph.setLayout', 'indent'],
+  },
+  indentDecrease: {
+    factory: (editor) => createIndentButton(editor, 'decrease'),
+    requires: ['paragraph.setLayout', 'outdent'],
+  },
+  paragraphBorders: { factory: createParagraphBordersDialog, requires: ['paragraph.setLayout'] },
+  caps: { factory: createCapsMenu, requires: ['text.setCaps'] },
+  underlineStyle: { factory: createUnderlineStyleMenu, requires: ['underline'] },
+  pageLayout: { factory: createPageLayoutDialog, requires: [] },
 };
 
 /**

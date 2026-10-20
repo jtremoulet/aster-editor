@@ -132,3 +132,77 @@ export {
   createPrintButton,
   printEditor,
 } from './components/print';
+// --- Lot L26 : mise en page (paragraphe, run, vue page)
+export type { NumberFieldOptions, ParsedNumber } from './components/paragraph-layout';
+export {
+  INDENT_STEP_PT,
+  MAX_BORDER_WIDTH_PT,
+  MAX_LINE_HEIGHT_MULTIPLE,
+  MAX_PARAGRAPH_PT,
+  MIN_BORDER_WIDTH_PT,
+  PARAGRAPH_LAYOUT_NODES,
+  canEditBlockLayout,
+  createCheckbox,
+  createNumberField,
+  currentBlockLayout,
+  formatNumber,
+  parseNumberInput,
+  setBlockLayout,
+  unsetBlockLayout,
+} from './components/paragraph-layout';
+export type { LineSpacingState } from './components/line-spacing';
+export {
+  LINE_SPACING_PRESETS,
+  createLineSpacingMenu,
+  currentLineSpacing,
+} from './components/line-spacing';
+export {
+  PARAGRAPH_SPACING_ATTRS,
+  createParagraphSpacingDialog,
+  hasParagraphSpacing,
+} from './components/paragraph-spacing-dialog';
+export type { IndentDirection } from './components/paragraph-indent';
+export {
+  createIndentButton,
+  currentIndentLeft,
+  isInList,
+  nextIndentLeft,
+} from './components/paragraph-indent';
+export {
+  BORDER_SIDES,
+  BORDER_STYLES,
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_WIDTH_PT,
+  DEFAULT_SHADING_COLOR,
+  createParagraphBordersDialog,
+  currentBorders,
+  hasBordersOrShading,
+  isBlockBorder,
+  toHexColor,
+} from './components/paragraph-borders-dialog';
+export type { CapsValue } from './components/caps';
+export {
+  CAPS_OPTIONS,
+  CAPS_SET_COMMAND,
+  CAPS_UNSET_COMMAND,
+  createCapsMenu,
+  currentCaps,
+} from './components/caps';
+export {
+  UNDERLINE_STYLES,
+  applyUnderlineStyle,
+  createUnderlineStyleMenu,
+  currentUnderlineStyle,
+} from './components/underline-style';
+export type { PageViewApi, ResolvedPageSetup } from './components/page-layout-dialog';
+export {
+  DEFAULT_PAGE_MARGIN_MM,
+  PAGE_SIZE_NAMES,
+  PAGE_VIEW_CLASS,
+  createPageLayoutDialog,
+  isPageViewActive,
+  pageViewApiOf,
+  resolvePageSetup,
+} from './components/page-layout-dialog';
+export type { ImageAttributes } from './components/image-dialog';
+export { heightForWidth, imageAspectRatio, widthForHeight } from './components/image-dialog';

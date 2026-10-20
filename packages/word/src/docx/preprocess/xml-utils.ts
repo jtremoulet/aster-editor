@@ -144,3 +144,13 @@ export class PartCollector {
     }
   }
 }
+
+/**
+ * Retire la déclaration `<?xml …?>` que certains sérialiseurs placent en tête : Chromium la
+ * réémet dans `XMLSerializer.serializeToString`, jsdom non. Toute partie réécrite reçoit sa
+ * déclaration d'origine devant la sortie nettoyée, jamais deux déclarations (XML invalide,
+ * constaté en navigateur sur le prétraitement des champs et sur la greffe du gabarit).
+ */
+export function stripXmlDeclaration(xml: string): string {
+  return xml.replace(/^\s*<\?xml[^>]*\?>\s*/u, '');
+}

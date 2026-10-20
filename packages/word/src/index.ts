@@ -6,11 +6,15 @@
  * - `paste/` : `normalizeWordHtml`, détecteurs et les neuf passes du collage Word ;
  * - `google/` : `normalizeGoogleDocsHtml`, pipeline court pour Google Docs ;
  * - `extension/` : `wordPasteTransformer`, branchement sur `pasteTransformers` du core ;
- * - `export/` : `exportDocx`, `downloadDocx`, `jsonToHtml`, HTML → .docx via `docx`.
+ * - `export/` : `exportDocx`, `downloadDocx`, `jsonToHtml`, HTML → .docx via `docx` ;
+ * - `docx/compare/` : `compareDocx`, rapport de fidélité original → résultat.
  */
 export type {
   DocxImportOptions,
   DocxImportResult,
+  DocxLostKind,
+  DocxLostObject,
+  DocxLostWhere,
   DocxImportWarning,
   DocxImportWarningCode,
   DocxInput,
@@ -49,5 +53,14 @@ export type {
   DocxVariableMode,
 } from './export/types';
 export { exportDocx, DOCX_MIME_TYPE } from './export/export-docx';
+export { compareDocx } from './docx/compare/compare-docx';
+export type {
+  CompareDocx,
+  CompareDocxOptions,
+  FidelityExample,
+  FidelityProperty,
+  FidelityPropertyGroup,
+  FidelityReport,
+} from './docx/compare/types';
 export { downloadDocx } from './export/download-docx';
 export { jsonToHtml } from './export/json-to-html';

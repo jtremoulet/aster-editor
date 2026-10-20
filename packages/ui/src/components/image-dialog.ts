@@ -15,16 +15,31 @@ function isAcceptableImageUrl(value: string): boolean {
 /** Alignement d'image, tel que le contrat `image.setAttributes` l'attend. */
 type ImageAlign = NonNullable<StandardCommandArgs['image.setAttributes']['align']>;
 
+/**
+ * Arguments d'édition : le contrat (`width`) plus `height`, que le core ignore tant que
+ * L23 ne l'expose pas (`toImageAttributes` ne lit que les clés connues) et appliquera
+ * ensuite sans changement côté UI.
+ */
+type ImageEditArgs = StandardCommandArgs['image.setAttributes'] & { height?: number };
+
 /** Attributs du nœud image tels que lus via `tiptap.getAttributes('image')`. */
-interface ImageAttributes {
+export interface ImageAttributes {
   src: string | null;
   alt: string | null;
   title: string | null;
   width: number | string | null;
+  height: number | string | null;
   align: string | null;
 }
 
-const NO_IMAGE: ImageAttributes = { src: null, alt: null, title: null, width: null, align: null };
+const NO_IMAGE: ImageAttributes = {
+  src: null,
+  alt: null,
+  title: null,
+  width: null,
+  height: null,
+  align: null,
+};
 
 /** Image sous la sélection, tolérant si l'extension manque (mock, core réduit). */
 function currentImage(editor: AsterEditor): ImageAttributes {
@@ -36,6 +51,7 @@ function currentImage(editor: AsterEditor): ImageAttributes {
       alt: readString(attrs, 'alt'),
       title: readString(attrs, 'title'),
       width: readNumberOrString(attrs, 'width'),
+      height: readNumberOrString(attrs, 'height'),
       align: readString(attrs, 'align'),
     };
   } catch {
@@ -52,12 +68,42 @@ function isImageSelected(editor: AsterEditor): boolean {
   }
 }
 
-/** Convertit une saisie de largeur en nombre : vide ou invalide → `null`. */
-function parseWidthInput(value: string): number | null {
+/** Convertit une saisie de largeur ou de hauteur en nombre : vide ou invalide → `null`. */
+function parseSizeInput(value: string): number | null {
   const trimmed = value.trim();
   if (trimmed === '') return null;
   const parsed = Number.parseInt(trimmed, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Ratio largeur / hauteur de l'image sélectionnée : depuis ses attributs si les deux
+ * sont connus, sinon depuis les dimensions naturelles de l'`<img>` rendu dans le contenu
+ * (`figure.aster-image` sélectionnée). `null` si rien n'est mesurable (jsdom, image non
+ * chargée) : le verrou n'a alors aucun effet.
+ */
+export function imageAspectRatio(editor: AsterEditor, current: ImageAttributes): number | null {
+  const width = parseSizeInput(String(current.width ?? ''));
+  const height = parseSizeInput(String(current.height ?? ''));
+  if (width !== null && height !== null) return width / height;
+  const img =
+    editor.contentElement.querySelector<HTMLImageElement>(
+      'figure.aster-image--selected img, figure.aster-image.ProseMirror-selectednode img, img.ProseMirror-selectednode',
+    ) ?? null;
+  if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    return img.naturalWidth / img.naturalHeight;
+  }
+  return null;
+}
+
+/** Hauteur déduite d'une largeur par le ratio, arrondie au pixel. */
+export function heightForWidth(width: number, ratio: number): number {
+  return Math.max(1, Math.round(width / ratio));
+}
+
+/** Largeur déduite d'une hauteur par le ratio, arrondie au pixel. */
+export function widthForHeight(height: number, ratio: number): number {
+  return Math.max(1, Math.round(height * ratio));
 }
 
 function isImageAlign(value: unknown): value is ImageAlign {
@@ -89,9 +135,12 @@ function field(
  *   `image.insert` puis `image.setAttributes` pour l'alignement, que `image.insert`
  *   ne prend pas.
  * - **édition** (image sélectionnée, ou événement `aster:image-edit` émis par le core
- *   au double-clic) : mêmes champs sans l'URL, préremplis depuis le nœud. OK →
- *   `image.setAttributes({ alt, title, width, align })`. Une largeur vide vaut `0`,
- *   que le core interprète comme « largeur automatique ».
+ *   au double-clic) : mêmes champs sans l'URL, plus la hauteur et un verrou de
+ *   proportions (coché par défaut : modifier l'un des deux champs recalcule l'autre selon
+ *   le ratio de l'image). OK → `image.setAttributes({ alt, title, width, align })`, avec
+ *   `height` seulement si le verrou est levé et une hauteur saisie (le core l'ignore tant
+ *   que L23 ne l'expose pas). Une largeur vide vaut `0`, que le core interprète comme
+ *   « largeur automatique ».
  */
 export function createImageDialog(editor: AsterEditor): ToolbarWidget {
   const dropdown: Dropdown = createDropdown({
@@ -150,10 +199,49 @@ function renderImagePanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dro
     step: '1',
     placeholder: t('ui.image.widthAuto'),
   });
+  const height = field(`aster-image-height-${suffix}`, t('ui.image.height'), {
+    type: 'number',
+    min: '1',
+    step: '1',
+    placeholder: t('ui.image.widthAuto'),
+  });
   alt.input.value = current.alt ?? '';
   title.input.value = current.title ?? '';
-  const currentWidth = parseWidthInput(String(current.width ?? ''));
+  const currentWidth = parseSizeInput(String(current.width ?? ''));
   width.input.value = currentWidth === null ? '' : String(currentWidth);
+
+  // Hauteur et verrou de proportions, en édition seulement : le ratio vient de l'image.
+  const ratio = editing ? imageAspectRatio(editor, current) : null;
+  const currentHeight = parseSizeInput(String(current.height ?? ''));
+  height.input.value =
+    currentHeight !== null
+      ? String(currentHeight)
+      : currentWidth !== null && ratio !== null
+        ? String(heightForWidth(currentWidth, ratio))
+        : '';
+  const lock = el('input', {
+    className: 'aster-dialog__checkbox aster-image-dialog__lock',
+    attrs: { type: 'checkbox' },
+  });
+  lock.checked = true;
+  const lockLabel = el('label', { className: 'aster-dialog__check' }, [
+    lock,
+    t('ui.image.lockRatio'),
+  ]);
+  width.input.addEventListener('input', () => {
+    if (!lock.checked || ratio === null) return;
+    const value = parseSizeInput(width.input.value);
+    height.input.value = value === null ? '' : String(heightForWidth(value, ratio));
+  });
+  height.input.addEventListener('input', () => {
+    if (!lock.checked || ratio === null) return;
+    const value = parseSizeInput(height.input.value);
+    width.input.value = value === null ? '' : String(widthForHeight(value, ratio));
+  });
+  const sizeRow = el('div', { className: 'aster-dialog__row aster-image-dialog__size' }, [
+    width.wrapper,
+    ...(editing ? [height.wrapper] : []),
+  ]);
 
   const alignGroup = el('div', {
     className: 'aster-dialog__field aster-image-dialog__align',
@@ -188,16 +276,19 @@ function renderImagePanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dro
   const submit = (): void => {
     const altValue = alt.input.value.trim();
     const titleValue = title.input.value.trim();
-    const widthValue = parseWidthInput(width.input.value);
+    const widthValue = parseSizeInput(width.input.value);
+    const heightValue = parseSizeInput(height.input.value);
     const align = selectedAlign();
 
     if (editing) {
-      editor.commands.run('image.setAttributes', {
+      const args: ImageEditArgs = {
         alt: altValue,
         title: titleValue,
         width: widthValue ?? 0,
         ...(align ? { align } : {}),
-      });
+        ...(!lock.checked && heightValue !== null ? { height: heightValue } : {}),
+      };
+      editor.commands.run('image.setAttributes', args);
     } else {
       const src = url.input.value.trim();
       if (!isAcceptableImageUrl(src)) {
@@ -220,7 +311,7 @@ function renderImagePanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dro
   };
   // Sur les inputs, pas sur `panel` : celui-ci est réutilisé à chaque ouverture et
   // accumulerait des écouteurs liés à des champs détachés.
-  for (const { input } of [url, alt, title, width]) {
+  for (const { input } of [url, alt, title, width, height]) {
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
@@ -270,5 +361,7 @@ function renderImagePanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dro
   }
 
   if (!editing) panel.append(url.wrapper);
-  panel.append(alt.wrapper, title.wrapper, width.wrapper, alignGroup, actions);
+  panel.append(alt.wrapper, title.wrapper, sizeRow);
+  if (editing) panel.append(el('div', { className: 'aster-dialog__field' }, [lockLabel]));
+  panel.append(alignGroup, actions);
 }

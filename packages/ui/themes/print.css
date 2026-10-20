@@ -110,4 +110,57 @@
   .aster-content .ProseMirror a {
     color: #000;
   }
+
+  /*
+   * Vue page (`page.css`) : la feuille devient la page imprimée. Le bureau, l'ombre et la
+   * largeur fixe disparaissent ; le padding de la feuille (= marges du document) est
+   * conservé, à combiner avec `@page { margin: 0 }` côté hôte. Pas de `@page` ici : ses
+   * descripteurs `size` et `margin` n'acceptent pas `var()` et une règle globale
+   * s'appliquerait à toute la page hôte.
+   */
+  .aster--page-view .aster-content {
+    padding: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .aster--page-view .aster-content .ProseMirror {
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: var(--aster-page-margin-top, 25.4mm) var(--aster-page-margin-right, 25.4mm)
+      var(--aster-page-margin-bottom, 25.4mm) var(--aster-page-margin-left, 25.4mm);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* En-tête et pied : affichés une fois, en flux, au-dessus et au-dessous du corps. */
+  .aster--page-view .aster-page-header,
+  .aster--page-view .aster-page-footer {
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    padding: 0 var(--aster-page-margin-right, 25.4mm) 0 var(--aster-page-margin-left, 25.4mm);
+    transform: none;
+    opacity: 1;
+    color: #000;
+  }
+
+  /*
+   * Saut de page explicite : vraie coupure d'impression, sans espace de bureau. En vue
+   * page, la règle écran de `page.css` (`.aster--page-view …`, (0,4,1)) est plus
+   * spécifique que celle-ci : `page.css` porte sa propre règle print, préfixée, à sa fin.
+   */
+  .aster-content .ProseMirror hr[data-page-break] {
+    height: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    visibility: hidden;
+    break-after: page;
+    page-break-after: always;
+  }
 }

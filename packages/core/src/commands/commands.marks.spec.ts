@@ -94,14 +94,10 @@ describe('commandes de marques et de style', () => {
 
   describe('style de texte', () => {
     it.each([
-      // Le CSSOM normalise les hex en rgb() à la sérialisation, en navigateur comme sous jsdom.
-      ['textColor', { color: '#ff0000' }, { color: null }, 'color: rgb(255, 0, 0)'],
-      [
-        'backgroundColor',
-        { color: '#00ff00' },
-        { color: null },
-        'background-color: rgb(0, 255, 0)',
-      ],
+      // Depuis la session 3, `getHTML` sérialise les `style` verbatim (plus de passage par
+      // le CSSOM, qui réécrivait les hex en rgb()) : la couleur ressort telle que posée.
+      ['textColor', { color: '#ff0000' }, { color: null }, 'color: #ff0000'],
+      ['backgroundColor', { color: '#00ff00' }, { color: null }, 'background-color: #00ff00'],
       ['fontFamily', { family: 'serif' }, { family: null }, 'font-family: serif'],
       ['fontSize', { size: '14px' }, { size: null }, 'font-size: 14px'],
     ] as const)('%s pose puis retire le style', (id, set, unset, css) => {

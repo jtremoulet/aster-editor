@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { replaceContentControls } from './content-controls';
 import { replaceComplexFields, replaceSimpleFields } from './fields';
 import { DEFAULT_VARIABLE_PATTERN, isVariableName } from './names';
-import { allNamed, PartCollector, type CollectedVariable } from './xml-utils';
+import { allNamed, PartCollector, stripXmlDeclaration, type CollectedVariable } from './xml-utils';
 
 /**
  * Prétraitement du .docx **avant** mammoth : mammoth perd les champs de fusion
@@ -154,7 +154,7 @@ export function transformVariablesXml(
   }
   collector.flushInto(variables);
   if (!changed) return null;
-  return xmlDeclaration(source) + codec.serialize(doc);
+  return xmlDeclaration(source) + stripXmlDeclaration(codec.serialize(doc));
 }
 
 /** Entités XML prédéfinies, les seules qu'un `w:t` peut contenir. */

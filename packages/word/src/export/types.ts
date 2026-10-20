@@ -1,5 +1,5 @@
-import type { AsterDocument, VariableValues } from '@aster-editor/core';
-import type { HtmlParser } from '../docx/types';
+import type { AsterDocument, DocumentLayout, VariableValues } from '@aster-editor/core';
+import type { DocxInput, HtmlParser } from '../docx/types';
 
 /**
  * Codes stables des avertissements d'export :
@@ -19,6 +19,17 @@ import type { HtmlParser } from '../docx/types';
  *   lignes, plafonds de Word.
  * - `page-margins-clamped` : marge de page négative (défaut appliqué) ou somme des marges
  *   qui ne laisse pas 1 cm utile (marges réduites).
+ * - `template-invalid` : `options.template` n'est pas un `.docx` lisible (archive ou
+ *   partie principale absente) ; export neuf à la place, jamais d'exception.
+ * - `template-numbering-fallback` : une liste portait `data-docx-num-id` mais cette
+ *   numérotation n'existe pas (ou plus) dans le gabarit ; numérotation neuve ajoutée.
+ * - `template-style-missing` : un bloc ou un run référence un style (`data-docx-style`,
+ *   `data-docx-run-style`) absent du gabarit et de l'export neuf, ou d'un autre type que
+ *   la référence (style de caractère sur un paragraphe…) ; seules ses propriétés directes
+ *   sont écrites. Les styles intégrés de Word (`TOC1`, `Hyperlink`, `ListParagraph`…)
+ *   ne sont jamais signalés : Word les matérialise à l'ouverture.
+ * - `template-section-missing` : le gabarit n'a pas de `w:sectPr` final, les en-têtes et
+ *   pieds de `layout` n'ont nulle part où s'accrocher et sont ignorés.
  */
 export type DocxExportWarningCode =
   | 'image-skipped'
@@ -28,7 +39,11 @@ export type DocxExportWarningCode =
   | 'footnote-not-allowed'
   | 'footnote-duplicate'
   | 'table-span-clamped'
-  | 'page-margins-clamped';
+  | 'page-margins-clamped'
+  | 'template-invalid'
+  | 'template-numbering-fallback'
+  | 'template-style-missing'
+  | 'template-section-missing';
 
 /**
  * Avertissement générique de la passerelle .docx, paramétré par le code. Les
@@ -171,9 +186,9 @@ export interface DocxExportOptions {
    * seules les data URL base64 sont embarquées, les autres remontent `image-skipped`.
    */
   fetchImage?: DocxImageFetcher;
-  /** Titre inscrit dans les propriétés du document (`docProps/core.xml`). */
+  /** Titre inscrit dans les propriétés du document (`docProps/core.xml`, `dc:title`), gabarit compris. */
   title?: string;
-  /** Auteur inscrit dans les propriétés du document. */
+  /** Auteur inscrit dans les propriétés du document (`dc:creator`), gabarit compris. */
   creator?: string;
   /** Format de page, `A4` par défaut. `page.size` prime. */
   pageSize?: DocxPageSize;
@@ -198,6 +213,34 @@ export interface DocxExportOptions {
   numberedHeadings?: boolean | DocxNumberedHeadingsOptions;
   /** Surcharges des styles de titres (couleur, taille…). Par défaut, titres de Word. */
   headingStyles?: DocxHeadingStyles;
+  /**
+   * Export dans le gabarit : le `.docx` donné (en général `DocxImportResult.template`) est
+   * conservé tel quel, seul son corps est régénéré depuis le contenu. Styles, numérotation,
+   * thème, polices, en-têtes, pieds, sections et propriétés restent identiques, à l'octet
+   * pour toute partie non touchée. Parties que la greffe peut réécrire : le corps et ses
+   * relations, `styles.xml` (ajouts), `numbering.xml` (ajouts), `footnotes.xml` (ajouts),
+   * `media/*` (ajouts), `[Content_Types].xml` (ajouts), les en-têtes et pieds (variables
+   * résolues ou `layout.headers` / `layout.footers` qui diffèrent : nouvelle partie, l'ancienne
+   * reste), `settings.xml` (`w:updateFields` avec `toc`, `w:evenAndOddHeaders` quand un
+   * en-tête ou pied `even` est greffé) et `docProps/core.xml` (`dc:title`, `dc:creator`
+   * quand `title` / `creator` sont fournis).
+   *
+   * Options **ignorées** avec un gabarit, parce qu'il les porte déjà : `page`, `pageSize`,
+   * `header`, `footer`, `defaultFont`, `lang`, `headingStyles`, ainsi que `layout.page`,
+   * `layout.columns`, `layout.titlePage`, `layout.defaultFont` et `layout.lang`. Options
+   * **appliquées** : `variables`, `toc`, `numberedHeadings` (numérotation posée en `w:numPr`
+   * direct sur chaque titre, les styles du gabarit n'étant pas modifiés), `title`, `creator`,
+   * `layout.headers` et `layout.footers`. Un gabarit sans `w:sectPr` final ne peut recevoir ni
+   * en-tête ni pied (`template-section-missing`). Un gabarit dont la partie principale dépasse
+   * 16 Mo est refusé comme illisible (`template-invalid`), jamais parsé.
+   */
+  template?: DocxInput;
+  /**
+   * Mise en page de l'export neuf (sans `template`) : englobe `page`, `header`, `footer`,
+   * `defaultFont` et `lang`, qui restent acceptés et priment champ par champ quand les deux
+   * sont donnés. En général `DocxImportResult.layout`, modifié ou non.
+   */
+  layout?: DocumentLayout;
   /**
    * Reçoit chaque avertissement au fil de la conversion. `exportDocx` rend un `Blob`
    * nu pour rester simple à brancher sur un bouton : c'est ici que remontent les

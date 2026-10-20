@@ -1,9 +1,20 @@
 import type { FileChild, IParagraphOptions, Paragraph } from 'docx';
-import { registerList, type ExportContext } from './context';
-import { parseAlignment, parseStyle, type ParagraphAlignment } from './css';
+import { registerList, resolveDocxStyle, type ExportContext } from './context';
+import {
+  parseAlignment,
+  parseBorder,
+  parseBorders,
+  parseColor,
+  parseLineHeight,
+  parsePoints,
+  parseStyle,
+  pointsToTwips,
+  type ParagraphAlignment,
+} from './css';
 import {
   BLOCK_TAGS,
   PAGE_BREAK_ATTRIBUTE,
+  XSD_INT_MAX,
   childElements,
   hasBlockChild,
   isElement,
@@ -13,8 +24,27 @@ import {
 } from './dom';
 import { inlineChildren, type InlineState } from './inline';
 import { sanitizeXmlText } from './sanitize';
-import { LIST_INDENT, STYLE_IDS, listKindFromType } from './styles';
+import {
+  DOCX_NUM_ID_ATTRIBUTE,
+  DOCX_STYLE_ATTRIBUTE,
+  HEADING_NUMBERING_REFERENCE,
+  LIST_INDENT,
+  NUM_INDENT_ATTRIBUTE,
+  STYLE_IDS,
+  borderOptions,
+  listKindFromType,
+  type ListKind,
+} from './styles';
 import { convertTable } from './tables';
+
+/** `data-keep-next` : garder avec le paragraphe suivant (`w:keepNext`). */
+const KEEP_NEXT_ATTRIBUTE = 'data-keep-next';
+
+/** `data-page-break-before` : propriété de paragraphe `w:pageBreakBefore`. */
+const PAGE_BREAK_BEFORE_ATTRIBUTE = 'data-page-break-before';
+
+/** `data-border-between` : bordure entre deux paragraphes bordés consécutifs. */
+const BORDER_BETWEEN_ATTRIBUTE = 'data-border-between';
 
 /** Position dans une liste : référence de numérotation dédiée à la liste et niveau Word. */
 export interface ListScope {
@@ -76,10 +106,82 @@ function hasPageBreakBefore(element: Element, style: ReadonlyMap<string, string>
   );
 }
 
+type MutableSpacing = {
+  -readonly [K in keyof NonNullable<IParagraphOptions['spacing']>]: NonNullable<
+    IParagraphOptions['spacing']
+  >[K];
+};
+type MutableIndent = {
+  -readonly [K in keyof NonNullable<IParagraphOptions['indent']>]: NonNullable<
+    IParagraphOptions['indent']
+  >[K];
+};
+type MutableBorders = {
+  -readonly [K in keyof NonNullable<IParagraphOptions['border']>]: NonNullable<
+    IParagraphOptions['border']
+  >[K];
+};
+
+/**
+ * Mise en page du contrat (`ParagraphLayoutAttrs`, sérialisée en `style` inline et
+ * `data-*`) → propriétés directes du paragraphe : interligne et espacements
+ * (`w:spacing`), retraits (`w:ind`, sauf `data-docx-num-indent` : la numérotation les
+ * porte), bordures (`w:pBdr`), fond (`w:shd`), `w:keepNext`, `w:pageBreakBefore`. Les
+ * longueurs sont lues en `pt` (ou toute unité absolue), les couleurs en `#hex` ou `rgb()`.
+ */
+function applyParagraphLayout(
+  options: MutableParagraphOptions,
+  element: Element,
+  style: ReadonlyMap<string, string>,
+): void {
+  const spacing: MutableSpacing = {};
+  const lineHeight = parseLineHeight(style.get('line-height'));
+  if (lineHeight?.kind === 'multiple') {
+    spacing.line = Math.round(lineHeight.value * 240);
+    spacing.lineRule = 'auto';
+  } else if (lineHeight?.kind === 'exact') {
+    spacing.line = pointsToTwips(lineHeight.points);
+    spacing.lineRule = 'exact';
+  }
+  const before = parsePoints(style.get('margin-top'));
+  if (before !== null && before >= 0) spacing.before = pointsToTwips(before);
+  const after = parsePoints(style.get('margin-bottom'));
+  if (after !== null && after >= 0) spacing.after = pointsToTwips(after);
+  if (Object.keys(spacing).length > 0) options.spacing = spacing;
+
+  if (!element.hasAttribute(NUM_INDENT_ATTRIBUTE)) {
+    const indent: MutableIndent = { ...options.indent };
+    const left = parsePoints(style.get('margin-left'));
+    if (left !== null) indent.left = pointsToTwips(left);
+    const right = parsePoints(style.get('margin-right'));
+    if (right !== null) indent.right = pointsToTwips(right);
+    const first = parsePoints(style.get('text-indent'));
+    if (first !== null && first < 0) indent.hanging = pointsToTwips(-first);
+    else if (first !== null && first > 0) indent.firstLine = pointsToTwips(first);
+    if (Object.keys(indent).length > 0) options.indent = indent;
+  }
+
+  const borders: MutableBorders = {};
+  const parsed = Array.from(parseBorders(style)).filter(([, border]) => border !== null);
+  const sides = new Set(parsed.map(([side]) => side));
+  for (const [side, border] of parsed) {
+    if (border) borders[side] = borderOptions(border, side, sides);
+  }
+  const between = parseBorder(element.getAttribute(BORDER_BETWEEN_ATTRIBUTE) ?? undefined);
+  if (between) borders.between = borderOptions(between, 'between', sides);
+  if (Object.keys(borders).length > 0) options.border = borders;
+
+  const shading = parseColor(style.get('background-color'));
+  if (shading) options.shading = { fill: shading, type: 'clear', color: 'auto' };
+  if (element.hasAttribute(KEEP_NEXT_ATTRIBUTE)) options.keepNext = true;
+  if (element.hasAttribute(PAGE_BREAK_BEFORE_ATTRIBUTE)) options.pageBreakBefore = true;
+}
+
 /**
  * Options de paragraphe communes : alignement lu sur `text-align` (ou celui du scope),
- * style `Quote` dans une citation ou style du scope, numérotation ou retrait dans une
- * liste, saut de page avant.
+ * style Word d'origine (`data-docx-style`, s'il est défini dans le document final), sinon
+ * `Quote` dans une citation ou style du scope, numérotation ou retrait dans une liste,
+ * mise en page du contrat, saut de page avant.
  */
 function paragraphOptions(
   element: Element | null,
@@ -91,7 +193,11 @@ function paragraphOptions(
   const style = parseStyle(element?.getAttribute('style') ?? null);
   const alignment = parseAlignment(style.get('text-align')) ?? scope.alignment;
   if (alignment) options.alignment = alignment;
-  if (scope.quote) options.style = STYLE_IDS.quote;
+  const docxStyle = element
+    ? resolveDocxStyle(ctx, element.getAttribute(DOCX_STYLE_ATTRIBUTE), 'paragraphe')
+    : null;
+  if (docxStyle) options.style = docxStyle;
+  else if (scope.quote) options.style = STYLE_IDS.quote;
   else if (scope.paragraphStyle) options.style = scope.paragraphStyle;
   if (scope.list) {
     if (numbered) {
@@ -100,6 +206,7 @@ function paragraphOptions(
       options.indent = { left: LIST_INDENT * (scope.list.level + 1) };
     }
   }
+  if (element) applyParagraphLayout(options, element, style);
   if (element && hasPageBreakBefore(element, style)) options.pageBreakBefore = true;
   return options;
 }
@@ -117,7 +224,17 @@ async function inlineParagraph(
   return new ctx.docx.Paragraph(options);
 }
 
-/** Titre `h1`..`h6`. Numéroté quand il ouvre un `li`, pour que la puce ne soit pas perdue. */
+/** Rang d'un titre `h1`..`h6` (0-5), `-1` pour tout autre tag. */
+function headingIndex(tag: string): number {
+  return /^h[1-6]$/.test(tag) ? Number(tag.slice(1)) - 1 : -1;
+}
+
+/**
+ * Titre `h1`..`h6`. Numéroté quand il ouvre un `li`, pour que la puce ne soit pas perdue.
+ * En export dans le gabarit avec `numberedHeadings`, la numérotation des titres est
+ * posée en `w:numPr` direct sur le paragraphe (`ctx.headingNumbering`) : les styles
+ * `Heading n` du gabarit ne sont jamais modifiés, elle ne peut pas y vivre.
+ */
 async function heading(
   element: Element,
   scope: BlockScope,
@@ -125,7 +242,13 @@ async function heading(
   numbered = false,
 ): Promise<Paragraph> {
   const options = paragraphOptions(element, scope, ctx, numbered);
-  options.heading = headingLevel(tagOf(element), ctx);
+  const tag = tagOf(element);
+  // Un style Word d'origine (`data-docx-style`) prime sur le style `Heading n` de l'export.
+  if (!options.style) options.heading = headingLevel(tag, ctx);
+  const index = headingIndex(tag);
+  if (!options.numbering && ctx.headingNumbering && index < ctx.headingNumbering.levels) {
+    options.numbering = { reference: HEADING_NUMBERING_REFERENCE, level: index };
+  }
   options.children = await inlineChildren(
     Array.from(element.childNodes),
     ctx,
@@ -217,6 +340,49 @@ async function listItem(
   return children;
 }
 
+/** Format de niveau du gabarit (contrat du lecteur) attendu pour un `<ol type>` / `<ul>`. */
+function expectedListFormat(kind: ListKind): string {
+  switch (kind) {
+    case 'bullet':
+      return 'bullet';
+    case 'lowerLetter':
+      return 'a';
+    case 'upperLetter':
+      return 'A';
+    case 'lowerRoman':
+      return 'i';
+    case 'upperRoman':
+      return 'I';
+    default:
+      return '1';
+  }
+}
+
+/**
+ * Niveau d'une liste qui réutilise une numérotation du gabarit. La profondeur HTML donne
+ * le niveau usuel ; mais une liste Word au niveau 1 sans parent est relue à plat, et son
+ * format (`type`, `data-bullet`) ne correspond alors pas au niveau 0. On prend le premier
+ * niveau de la définition dont le format (et la puce) correspond, sinon la profondeur.
+ */
+function templateListLevel(
+  element: Element,
+  templateNumId: string,
+  kind: ListKind,
+  depth: number,
+  ctx: ExportContext,
+): number {
+  const definition = ctx.templateNumbering?.definition(templateNumId);
+  if (!definition) return depth;
+  const format = expectedListFormat(kind);
+  const bullet = element.getAttribute('data-bullet');
+  const matches = (level: { format: string; text: string }): boolean =>
+    level.format === format && (format !== 'bullet' || bullet === null || level.text === bullet);
+  const current = definition.levels.find((level) => level.level === depth);
+  if (current && matches(current)) return depth;
+  const alternative = definition.levels.find(matches);
+  return alternative ? Math.min(alternative.level, 8) : depth;
+}
+
 /**
  * `<ul>`/`<ol>` : chaque liste, racine ou imbriquée, reçoit sa propre référence de
  * numérotation (donc son propre `abstractNum`) : la numérotation repart à 1 (ou au
@@ -225,11 +391,20 @@ async function listItem(
 async function list(element: Element, scope: BlockScope, ctx: ExportContext): Promise<FileChild[]> {
   const ordered = tagOf(element) === 'ol';
   const kind = ordered ? listKindFromType(element.getAttribute('type')) : 'bullet';
-  const level = Math.min(scope.list ? scope.list.level + 1 : 0, 8);
-  const start = ordered ? (positiveIntAttribute(element, 'start') ?? 1) : 1;
+  let level = Math.min(scope.list ? scope.list.level + 1 : 0, 8);
+  // `w:start` / `w:startOverride` sont des `ST_DecimalNumber` (xsd:int) : borné à 2^31 - 1.
+  const start = ordered ? (positiveIntAttribute(element, 'start', XSD_INT_MAX) ?? 1) : 1;
+  // `data-docx-num-id` : numérotation du gabarit à réutiliser (export dans le gabarit seulement).
+  const templateNumId = element.getAttribute(DOCX_NUM_ID_ATTRIBUTE)?.trim() || undefined;
+  if (templateNumId && ctx.template) {
+    level = templateListLevel(element, templateNumId, kind, level, ctx);
+  }
   const listScope: BlockScope = {
     ...scope,
-    list: { reference: registerList(ctx, kind, level, start), level },
+    list: {
+      reference: registerList(ctx, kind, level, start, ctx.template ? templateNumId : undefined),
+      level,
+    },
   };
   const children: FileChild[] = [];
   for (const child of childElements(element)) {

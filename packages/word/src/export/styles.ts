@@ -1,4 +1,6 @@
+import type { DocumentLayout, PageSizeName } from '@aster-editor/core';
 import type {
+  IBorderOptions,
   ICharacterStyleOptions,
   INumberingOptions,
   IParagraphStyleOptions,
@@ -6,7 +8,7 @@ import type {
   IStylesOptions,
 } from 'docx';
 import type { ListDefinition } from './context';
-import { parseColor } from './css';
+import { parseColor, type CssBorder } from './css';
 import type { DocxModule } from './docx-module';
 import { sanitizeXmlText } from './sanitize';
 import type {
@@ -20,6 +22,81 @@ import type {
 
 /** Police à chasse fixe des blocs et marques de code. */
 export const CODE_FONT = 'Consolas';
+
+/** Attribut du style Word d'origine d'un bloc ou d'un tableau (contrat `docxStyle`). */
+export const DOCX_STYLE_ATTRIBUTE = 'data-docx-style';
+
+/** Attribut de la numérotation Word d'origine d'une liste (`ListLayoutAttrs.docxNumId`). */
+export const DOCX_NUM_ID_ATTRIBUTE = 'data-docx-num-id';
+
+/**
+ * Posé par l'import sur un paragraphe de liste dont `margin-left` / `text-indent` viennent
+ * du niveau de numérotation : la numérotation Word les porte déjà, on ne les réécrit pas.
+ */
+export const NUM_INDENT_ATTRIBUTE = 'data-docx-num-indent';
+
+/**
+ * Espace texte-trait (`w:space`, en points) d'une bordure de paragraphe. Le contrat
+ * `BlockBorder` ne le porte pas et l'import ne le lit pas : on reprend la valeur que Word
+ * écrit lui-même. Par défaut **1 pt** sur chaque côté : c'est ce que Word donne à un
+ * encadré (bordure haute ou basse présente, fixture 12 : quatre côtés à `w:space="1"`),
+ * et un filet horizontal seul en a autant. Seul un filet vertical **seul** (barre de
+ * citation à gauche ou à droite, sans bordure haute ni basse) prend les **4 pt** du
+ * réglage par défaut de Word pour ce cas, faute d'original connu. `sides` est l'ensemble
+ * des côtés bordés du paragraphe.
+ */
+export function paragraphBorderSpace(side: string, sides: ReadonlySet<string>): number {
+  const vertical = side === 'left' || side === 'right';
+  return vertical && !sides.has('top') && !sides.has('bottom') ? 4 : 1;
+}
+
+/**
+ * Bordure CSS → `IBorderOptions` : épaisseur en huitièmes de point, couleur `RRGGBB`,
+ * espace texte-trait selon `paragraphBorderSpace` (`sides` = côtés bordés du bloc ; pour
+ * une cellule, un ensemble vide donne 1 pt partout). Le style `solid` du contrat est le
+ * `single` de Word.
+ */
+export function borderOptions(
+  border: CssBorder,
+  side: string,
+  sides: ReadonlySet<string> = new Set(),
+): IBorderOptions {
+  return {
+    style: border.style === 'solid' ? 'single' : border.style,
+    size: Math.max(2, Math.round(border.widthPt * 8)),
+    color: border.color,
+    space: paragraphBorderSpace(side, sides),
+  };
+}
+
+/**
+ * Identifiants des styles que l'export neuf définit toujours (ceux de `docx` plus ceux
+ * d'Aster) : un `data-docx-style` hors de cette liste n'est écrit que si le gabarit le
+ * définit. `TOCHeading` s'y ajoute avec une table des matières.
+ */
+export const GENERATED_STYLE_IDS: readonly string[] = [
+  'Normal',
+  'Title',
+  'Heading1',
+  'Heading2',
+  'Heading3',
+  'Heading4',
+  'Heading5',
+  'Heading6',
+  'Strong',
+  'ListParagraph',
+  'Hyperlink',
+  'FootnoteReference',
+  'FootnoteText',
+  'FootnoteTextChar',
+  'EndnoteReference',
+  'EndnoteText',
+  'EndnoteTextChar',
+  'TableNormal',
+  'Quote',
+  'HTMLPreformatted',
+  'Code',
+];
 
 /** Profondeur de liste couverte par chaque numérotation (Word en accepte 9). */
 export const LIST_LEVELS = 9;
@@ -111,12 +188,16 @@ function headingLevelText(level: number, format: HeadingNumbering['format']): st
  * le format à chaque niveau (`%1.`, `%2.`…) pour rester lisibles dans Word. Le `start`
  * de la liste est posé sur le niveau qu'elle occupe ; `docx` le recopie en
  * `startOverride` de l'instance quand c'est le niveau 0. S'y ajoute la numérotation
- * des titres, dont chaque niveau est lié au style `Heading n` (`w:pStyle`).
+ * des titres, dont chaque niveau est lié au style `Heading n` (`w:pStyle`) en export
+ * neuf ; en export dans le gabarit (`linkHeadingStyles` faux), les styles du gabarit ne
+ * sont pas modifiés et ses identifiants peuvent différer : les niveaux ne sont liés à
+ * aucun style, chaque titre porte sa numérotation en `w:numPr` direct.
  */
 export function buildNumbering(
   docx: DocxModule,
   lists: readonly ListDefinition[],
   headings: HeadingNumbering | null = null,
+  linkHeadingStyles = true,
 ): INumberingOptions {
   const { AlignmentType, LevelFormat } = docx;
   const formats: Record<ListKind, (typeof LevelFormat)[keyof typeof LevelFormat]> = {
@@ -153,7 +234,7 @@ export function buildNumbering(
         text: headingLevelText(level, headings.format),
         alignment: AlignmentType.LEFT,
         ...(headings.format === 'legal' ? { isLegalNumberingStyle: true } : {}),
-        style: { style: `Heading${String(level + 1)}` },
+        ...(linkHeadingStyles ? { style: { style: `Heading${String(level + 1)}` } } : {}),
       })),
     });
   }
@@ -271,10 +352,13 @@ export function buildDefaultStyles(
 ): DefaultStyles {
   const defaults: MutableDefaultStyles = {};
   const run: MutableRunStyle = {};
-  if (options.defaultFont?.family) run.font = sanitizeXmlText(options.defaultFont.family);
-  const sizePt = options.defaultFont?.sizePt;
+  // Les options explicites priment champ par champ sur `layout` (export neuf).
+  const family = options.defaultFont?.family ?? options.layout?.defaultFont?.family;
+  if (family) run.font = sanitizeXmlText(family);
+  const sizePt = options.defaultFont?.sizePt ?? options.layout?.defaultFont?.sizePt;
   if (sizePt !== undefined && sizePt > 0) run.size = Math.round(sizePt * 2);
-  if (options.lang) run.language = { value: sanitizeXmlText(options.lang) };
+  const lang = options.lang ?? options.layout?.lang;
+  if (lang) run.language = { value: sanitizeXmlText(lang) };
   if (Object.keys(run).length > 0) defaults.document = { run };
   HEADING_STYLE_KEYS.forEach((key, index) => {
     const override = options.headingStyles?.[HEADING_HTML_KEYS[index] ?? 'h1'];
@@ -301,6 +385,28 @@ export function pageDimensions(size: DocxPageSize): PageDimensions {
   return size === 'LETTER' ? { width: 12240, height: 15840 } : { width: 11906, height: 16838 };
 }
 
+/** Formats nommés du contrat de mise en page (`PageSizeName`), en twips portrait. */
+const NAMED_PAGE_SIZES: Readonly<Record<PageSizeName, PageDimensions>> = {
+  A3: { width: 16838, height: 23811 },
+  A4: { width: 11906, height: 16838 },
+  A5: { width: 8391, height: 11906 },
+  Letter: { width: 12240, height: 15840 },
+  Legal: { width: 12240, height: 20160 },
+};
+
+/** `DocumentLayout.page.size` → dimensions portrait en twips, `null` si absent ou invalide. */
+function layoutPageDimensions(
+  size: NonNullable<DocumentLayout['page']>['size'],
+): PageDimensions | null {
+  if (size === undefined) return null;
+  if (typeof size === 'string') return NAMED_PAGE_SIZES[size] ?? null;
+  const { widthMm, heightMm } = size;
+  if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm) || widthMm <= 0 || heightMm <= 0) {
+    return null;
+  }
+  return { width: mmToTwips(widthMm), height: mmToTwips(heightMm) };
+}
+
 /** Marge de page par défaut (1 pouce), en twips. */
 export const PAGE_MARGIN = 1440;
 
@@ -319,12 +425,19 @@ export interface PageMargins {
 
 /** Mise en page résolue : dimensions portrait (docx les inverse lui-même en paysage), marges, largeur utile. */
 export interface PageLayout extends PageDimensions {
+  /** Format nommé de l'option, `A4` pour un format du contrat (`A3`, `Legal`, libre…). */
   readonly size: DocxPageSize;
   readonly orientation: DocxPageOrientation;
   readonly margins: PageMargins;
+  /** Distance du bord à l'en-tête et au pied, en twips (708 par défaut, comme Word). */
+  readonly headerDistance: number;
+  readonly footerDistance: number;
   /** Largeur utile en pixels à 96 dpi, plafond des images et des tables. */
   readonly contentWidthPx: number;
 }
+
+/** Distance par défaut du bord de page à l'en-tête ou au pied, en twips (1,25 cm). */
+export const HEADER_DISTANCE = 708;
 
 /** Zone utile minimale laissée par les marges, en twips (1 cm), dans chaque sens. */
 export const MIN_CONTENT_EXTENT = mmToTwips(10);
@@ -373,32 +486,43 @@ function clampMargins(
   return [Math.floor(first * scale), Math.floor(second * scale)];
 }
 
+/** Distance d'en-tête ou de pied en twips depuis `layout.page.margins`, défaut si absente ou invalide. */
+function distanceTwips(mm: number | undefined): number {
+  if (mm === undefined || !Number.isFinite(mm) || mm < 0) return HEADER_DISTANCE;
+  return mmToTwips(mm);
+}
+
 /**
- * `options.page` (et `pageSize` en repli) → mise en page. En paysage, la largeur utile
- * est celle du grand côté : `docx` inverse `w:w`/`w:h` quand `w:orient="landscape"`,
- * on lui donne donc toujours les dimensions portrait. Les marges invalides ou qui ne
- * laissent pas 1 cm utile sont corrigées et signalées dans `warnings`.
+ * `options.page` (et `pageSize` en repli), complété champ par champ par `options.layout`
+ * (contrat `DocumentLayout`, en général celui de l'import) → mise en page. En paysage, la
+ * largeur utile est celle du grand côté : `docx` inverse `w:w`/`w:h` quand
+ * `w:orient="landscape"`, on lui donne donc toujours les dimensions portrait. Les marges
+ * invalides ou qui ne laissent pas 1 cm utile sont corrigées et signalées dans `warnings`.
  */
 export function resolvePageLayout(
   options: DocxExportOptions,
   warnings: DocxExportWarning[] = [],
 ): PageLayout {
+  const page = options.layout?.page;
   const size = options.page?.size ?? options.pageSize ?? 'A4';
-  const orientation = options.page?.orientation ?? 'portrait';
-  const { width, height } = pageDimensions(size);
+  const fromLayout =
+    options.page?.size || options.pageSize ? null : layoutPageDimensions(page?.size);
+  const orientation = options.page?.orientation ?? page?.orientation ?? 'portrait';
+  const { width, height } = fromLayout ?? pageDimensions(size);
   const horizontal = orientation === 'landscape' ? height : width;
   const vertical = orientation === 'landscape' ? width : height;
   const requested = options.page?.margins;
+  const layoutMargins = page?.margins;
   const [left, right] = clampMargins(
-    marginTwips('left', requested?.left, warnings),
-    marginTwips('right', requested?.right, warnings),
+    marginTwips('left', requested?.left ?? layoutMargins?.leftMm, warnings),
+    marginTwips('right', requested?.right ?? layoutMargins?.rightMm, warnings),
     horizontal,
     'gauche + droite',
     warnings,
   );
   const [top, bottom] = clampMargins(
-    marginTwips('top', requested?.top, warnings),
-    marginTwips('bottom', requested?.bottom, warnings),
+    marginTwips('top', requested?.top ?? layoutMargins?.topMm, warnings),
+    marginTwips('bottom', requested?.bottom ?? layoutMargins?.bottomMm, warnings),
     vertical,
     'haut + bas',
     warnings,
@@ -411,6 +535,8 @@ export function resolvePageLayout(
     width,
     height,
     margins,
+    headerDistance: distanceTwips(layoutMargins?.headerMm),
+    footerDistance: distanceTwips(layoutMargins?.footerMm),
     contentWidthPx: Math.max(1, Math.floor((usable / 1440) * 96)),
   };
 }

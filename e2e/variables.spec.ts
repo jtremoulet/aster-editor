@@ -103,7 +103,10 @@ test.describe('Playground vanilla — variables et parité', () => {
 
     const resolved = await getResolvedHtml(page);
     expect(resolved).not.toContain('data-aster-variable');
-    expect(resolved).toContain('<h1>Contrat de prestation — ACME SAS</h1>');
+    // Chemin stylé (L29) : `<h1 data-docx-style="Heading1"><span style="…">` autour du texte.
+    expect(resolved).toMatch(
+      /<h1[^>]*data-docx-style="Heading1"[^>]*>(?:<span[^>]*>)?Contrat de prestation — ACME SAS(?:<\/span>)?<\/h1>/,
+    );
     expect(resolved).toContain('<strong>Nebula</strong>');
     // Sans valeur, la variable garde sa syntaxe canonique.
     expect(resolved).toContain('{{lieu}}');
@@ -197,6 +200,13 @@ test.describe('Playground vanilla — variables et parité', () => {
   test("l'import de 09-variables-mergefields.docx convertit les 5 champs de fusion", async ({
     page,
   }) => {
+    // Bug lecteur (L32) : dans un vrai Chromium, le chemin stylé rend un HTML vide pour tout
+    // .docx dont une partie est réécrite par le prétraitement des champs de fusion.
+    // `transformVariablesXml` (`packages/word/src/docx/preprocess/variables.ts`) concatène
+    // `xmlDeclaration(source) + XMLSerializer.serializeToString(doc)` ; or le sérialiseur de
+    // Chromium émet déjà `<?xml …?>` (celui de jsdom non), d'où deux déclarations, un
+    // `parsererror` au parse par le lecteur OOXML et `result.html === ''` (avertissement
+    // `object-lost (unknown) : parsererror`). Le chemin `semantic` (mammoth) rend bien 5 puces.
     await importPlaygroundDocx(page, MERGEFIELDS_DOCX);
 
     await expect(editor(page).locator('.aster-variable')).toHaveCount(MERGEFIELDS_CHIPS);
@@ -204,7 +214,7 @@ test.describe('Playground vanilla — variables et parité', () => {
       await expect(chip(page, name)).toHaveCount(1);
     }
     const html = await getHtml(page);
-    expect(html).toContain('<h1>Courrier de relance</h1>');
+    expect(html).toMatch(/<h1[^>]*>(?:<span[^>]*>)?Courrier de relance/);
     expect(html).toContain('data-aster-variable="DateEcheance"');
     expect(html).not.toContain('MERGEFIELD');
   });

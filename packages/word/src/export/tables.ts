@@ -1,15 +1,31 @@
 import type {
   FileChild,
+  IBorderOptions,
+  ITableBordersOptions,
+  ITableCellBorders,
   ITableCellOptions,
   ITableOptions,
+  ITableWidthProperties,
   Paragraph,
   Table,
   TableCell,
 } from 'docx';
 import type { BlockScope } from './blocks';
-import { warn, type ExportContext } from './context';
-import { parsePixels, parseStyle } from './css';
+import { resolveDocxStyle, warn, type ExportContext } from './context';
+import {
+  CSS_BORDER_SIDES,
+  parseBorders,
+  parseColor,
+  parsePadding,
+  parsePixels,
+  parsePoints,
+  parseStyle,
+  pointsToTwips,
+  type CssBorder,
+  type CssBorderSide,
+} from './css';
 import { childElements, positiveIntAttribute, tagOf } from './dom';
+import { DOCX_STYLE_ATTRIBUTE, borderOptions } from './styles';
 
 /** Nombre maximal de colonnes d'une table Word : plafond de `colspan` et de `<col span>`. */
 export const MAX_TABLE_COLUMNS = 63;
@@ -169,12 +185,87 @@ function analyzeGrid(table: Element, rows: readonly TableRowInfo[], ctx: ExportC
 function columnWidthsTwips(
   columns: ReadonlyArray<number | null>,
   ctx: ExportContext,
+  fitToPage: boolean,
 ): number[] | null {
   if (columns.length === 0 || columns.some((width) => width === null)) return null;
   const px = columns.map((width) => width ?? 0);
   const total = px.reduce((sum, width) => sum + width, 0);
-  const scale = total > ctx.maxImageWidth ? ctx.maxImageWidth / total : 1;
+  const scale = fitToPage && total > ctx.maxImageWidth ? ctx.maxImageWidth / total : 1;
   return px.map((width) => Math.max(1, Math.round(width * scale * TWIPS_PER_PX)));
+}
+
+/** Bordure Word explicitement absente (`w:val="nil"`). */
+const NO_BORDER: IBorderOptions = { style: 'nil' };
+
+/** Bordure de cellule ou de tableau : CSS → `docx`, `nil` pour un côté déclaré sans trait. */
+function tableBorder(border: CssBorder | null, side: CssBorderSide): IBorderOptions {
+  return border ? borderOptions(border, side) : NO_BORDER;
+}
+
+type MutableCellBorders = { -readonly [K in keyof ITableCellBorders]: ITableCellBorders[K] };
+
+/** Arêtes d'une cellule qui sont des bords extérieurs du tableau. */
+interface CellEdges {
+  readonly top: boolean;
+  readonly right: boolean;
+  readonly bottom: boolean;
+  readonly left: boolean;
+}
+
+/**
+ * Propriétés de cellule du contrat (`CellLayoutAttrs`, en `style` inline) : bordures par
+ * côté (`w:tcBorders`), fond (`w:shd`), alignement vertical (`w:vAlign`), marges internes
+ * (`w:tcMar`, `padding` en points). En mode explicite (tableau venu de l'import), le HTML
+ * fait foi : un côté intérieur non déclaré est écrit `nil`, pour qu'un style de tableau du
+ * gabarit ne le redessine pas ; les bords extérieurs restent ceux du tableau.
+ */
+function cellLayout(
+  cell: Element,
+  ctx: ExportContext,
+  explicit: boolean,
+  edges: CellEdges,
+): Pick<ITableCellOptions, 'borders' | 'shading' | 'verticalAlign' | 'margins'> {
+  const style = parseStyle(cell.getAttribute('style'));
+  const result: {
+    -readonly [
+      K in keyof Pick<ITableCellOptions, 'borders' | 'shading' | 'verticalAlign' | 'margins'>
+    ]: ITableCellOptions[K];
+  } = {};
+  const borders: MutableCellBorders = {};
+  const declared = parseBorders(style);
+  for (const side of CSS_BORDER_SIDES) {
+    const border = declared.get(side);
+    if (border !== undefined) borders[side] = tableBorder(border, side);
+    else if (explicit && !edges[side]) borders[side] = NO_BORDER;
+  }
+  if (Object.keys(borders).length > 0) result.borders = borders;
+  const shading = parseColor(style.get('background-color'));
+  if (shading) result.shading = { fill: shading, type: 'clear', color: 'auto' };
+  switch (style.get('vertical-align')?.trim().toLowerCase()) {
+    case 'top':
+      result.verticalAlign = ctx.docx.VerticalAlignTable.TOP;
+      break;
+    case 'middle':
+      result.verticalAlign = ctx.docx.VerticalAlignTable.CENTER;
+      break;
+    case 'bottom':
+      result.verticalAlign = ctx.docx.VerticalAlignTable.BOTTOM;
+      break;
+    default:
+      break;
+  }
+  const padding = parsePadding(style.get('padding'));
+  if (padding) {
+    const [top, right, bottom, left] = padding;
+    result.margins = {
+      marginUnitType: ctx.docx.WidthType.DXA,
+      top: pointsToTwips(top),
+      right: pointsToTwips(right),
+      bottom: pointsToTwips(bottom),
+      left: pointsToTwips(left),
+    };
+  }
+  return result;
 }
 
 /**
@@ -190,6 +281,8 @@ async function convertCell(
   scope: BlockScope,
   ctx: ExportContext,
   convert: ChildrenConverter,
+  explicit: boolean,
+  edges: CellEdges,
 ): Promise<TableCell> {
   const header = tagOf(cell) === 'th';
   const cellScope: BlockScope = {
@@ -211,8 +304,61 @@ async function convertCell(
     ...(columnSpan > 1 ? { columnSpan } : {}),
     ...(rowSpan > 1 ? { rowSpan } : {}),
     ...(width !== null ? { width: { size: width, type: ctx.docx.WidthType.DXA } } : {}),
+    ...cellLayout(cell, ctx, explicit, edges),
   };
   return new ctx.docx.TableCell(options);
+}
+
+/**
+ * Largeur déclarée du tableau (`TableLayoutAttrs.width` : `100%` ou `450pt`), `null` sans
+ * déclaration lisible.
+ */
+function declaredTableWidth(
+  style: ReadonlyMap<string, string>,
+  ctx: ExportContext,
+): ITableWidthProperties | null {
+  const raw = style.get('width')?.trim();
+  if (!raw) return null;
+  const percent = /^([\d.]+)%$/.exec(raw);
+  if (percent) {
+    const value = Number(percent[1]);
+    return Number.isFinite(value) && value > 0
+      ? { size: Math.min(100, value), type: ctx.docx.WidthType.PERCENTAGE }
+      : null;
+  }
+  const points = parsePoints(raw);
+  return points !== null && points > 0
+    ? { size: pointsToTwips(points), type: ctx.docx.WidthType.DXA }
+    : null;
+}
+
+/** Vrai si un `<td>`/`<th>` du tableau déclare une bordure dans son `style`. */
+function anyCellDeclaresBorders(rows: readonly TableRowInfo[]): boolean {
+  return rows.some(({ cells }) =>
+    cells.some((cell) => parseBorders(parseStyle(cell.getAttribute('style'))).size > 0),
+  );
+}
+
+/**
+ * Bordures du tableau. Un tableau qui vient de l'éditeur sans aucune bordure déclarée
+ * garde le quadrillage simple de `docx` (lisible dans Word). Dès qu'une bordure est
+ * déclarée (sur `<table>` ou une cellule) ou qu'un style Word est référencé, le contrat
+ * fait foi : côtés extérieurs tels que déclarés, `nil` sinon, et aucun trait intérieur au
+ * niveau du tableau (les cellules portent les leurs).
+ */
+function tableBorders(
+  style: ReadonlyMap<string, string>,
+  explicit: boolean,
+): ITableBordersOptions | undefined {
+  const declared = parseBorders(style);
+  if (!explicit && declared.size === 0) return undefined;
+  const borders: { -readonly [K in keyof ITableBordersOptions]: ITableBordersOptions[K] } = {
+    insideHorizontal: NO_BORDER,
+    insideVertical: NO_BORDER,
+  };
+  for (const side of CSS_BORDER_SIDES)
+    borders[side] = tableBorder(declared.get(side) ?? null, side);
+  return borders;
 }
 
 /** Largeur en twips d'une cellule à partir des colonnes qu'elle couvre, `null` si l'une est inconnue. */
@@ -249,14 +395,28 @@ export async function convertTable(
   const { Table, TableLayoutType, TableRow, WidthType } = ctx.docx;
   const rowInfos = collectRows(table);
   const grid = analyzeGrid(table, rowInfos, ctx);
-  const twips = columnWidthsTwips(grid.columns, ctx);
+  const style = parseStyle(table.getAttribute('style'));
+  const tableStyle = resolveDocxStyle(ctx, table.getAttribute(DOCX_STYLE_ATTRIBUTE), 'tableau');
+  const declaredWidth = declaredTableWidth(style, ctx);
+  // Une largeur déclarée vient du document (contrat) : sa grille est reprise telle quelle.
+  const twips = columnWidthsTwips(grid.columns, ctx, declaredWidth === null);
+  const explicit =
+    tableStyle !== null || parseBorders(style).size > 0 || anyCellDeclaresBorders(rowInfos);
+  const borders = tableBorders(style, explicit);
   const rows = [];
-  for (const { header, cells: cellElements } of rowInfos) {
+  for (const [rowIndex, { header, cells: cellElements }] of rowInfos.entries()) {
     const cells = [];
     for (const cell of cellElements) {
       const position = grid.positions.get(cell);
       const width = cellWidthTwips(position, grid.columns, twips, ctx);
-      cells.push(await convertCell(cell, position, width, scope, ctx, convert));
+      const rowSpan = positiveIntAttribute(cell, 'rowspan', MAX_ROW_SPAN) ?? 1;
+      const edges: CellEdges = {
+        top: rowIndex === 0,
+        bottom: rowIndex + rowSpan >= rowInfos.length,
+        left: (position?.column ?? 0) === 0,
+        right: position === undefined || position.column + position.span >= grid.columns.length,
+      };
+      cells.push(await convertCell(cell, position, width, scope, ctx, convert, explicit, edges));
     }
     // `tableHeader` seulement quand vrai : mammoth lit la présence de `w:tblHeader`, pas sa valeur.
     const isHeader = header || isAllHeaderCells(cellElements);
@@ -271,13 +431,27 @@ export async function convertTable(
       }),
     );
   }
-  const options: ITableOptions = twips
+  // Largeur déclarée d'abord ; en mode explicite sans déclaration, `auto` (le tableau
+  // d'origine n'en avait pas) ; sinon la grille connue (disposition fixe) ou 100 %.
+  const fallbackWidth: ITableWidthProperties | null = explicit
+    ? { size: 0, type: WidthType.AUTO }
+    : null;
+  const sized: ITableOptions = twips
     ? {
         rows,
-        width: { size: twips.reduce((sum, width) => sum + width, 0), type: WidthType.DXA },
+        width: declaredWidth ??
+          fallbackWidth ?? {
+            size: twips.reduce((sum, width) => sum + width, 0),
+            type: WidthType.DXA,
+          },
         columnWidths: twips,
-        layout: TableLayoutType.FIXED,
+        ...(declaredWidth || fallbackWidth ? {} : { layout: TableLayoutType.FIXED }),
       }
-    : { rows, width: { size: 100, type: WidthType.PERCENTAGE } };
+    : { rows, width: declaredWidth ?? fallbackWidth ?? { size: 100, type: WidthType.PERCENTAGE } };
+  const options: ITableOptions = {
+    ...sized,
+    ...(tableStyle ? { style: tableStyle } : {}),
+    ...(borders ? { borders } : {}),
+  };
   return new Table(options);
 }

@@ -7,6 +7,9 @@ import {
   variablePatterns,
 } from './postprocess/variables';
 import { runPostprocess } from './postprocess/run-postprocess';
+import { stripEmptyParagraphs } from './postprocess/strip-empty-paragraphs';
+import { readDocx } from './reader';
+import { defaultXmlParse } from './reader/package';
 import type { CollectedVariable } from './preprocess/variables';
 import { preprocessVariables } from './preprocess/variables';
 import { buildStyleMap } from './style-map';
@@ -195,7 +198,6 @@ export async function importDocx(
 ): Promise<DocxImportResult> {
   const buffer = await resolveBuffer(input);
   const parser = resolveParser(options.parse);
-  const mammoth = await loadMammoth();
   const warnings: DocxImportWarning[] = [];
   const variableOptions = resolveDocxVariableOptions(options.variables);
 
@@ -214,6 +216,19 @@ export async function importDocx(
     });
   }
 
+  if (options.fidelity === 'styled') {
+    return importStyled(
+      buffer,
+      mammothBuffer,
+      collected,
+      variableOptions,
+      options,
+      parser,
+      warnings,
+    );
+  }
+
+  const mammoth = await loadMammoth();
   let raw: Awaited<ReturnType<Mammoth['convertToHtml']>>;
   try {
     raw = await mammoth.convertToHtml(toMammothInput(mammothBuffer), {
@@ -246,5 +261,66 @@ export async function importDocx(
     [createVariablesPass(patterns, collected)],
   );
 
-  return { html: doc.body.innerHTML, warnings, variables: collectResultVariables(doc, collected) };
+  return {
+    html: doc.body.innerHTML,
+    warnings,
+    variables: collectResultVariables(doc, collected),
+    layout: {},
+    template: buffer,
+    lost: [],
+  };
+}
+
+/**
+ * Chemin `fidelity: 'styled'` : le lecteur OOXML d'Aster remplace mammoth. Le HTML qu'il
+ * produit est déjà structuré, seules les passes des variables (et la suppression des
+ * paragraphes vides en mode `drop`) s'appliquent. Le gabarit retourné est le tampon
+ * d'origine, pas la version prétraitée.
+ */
+async function importStyled(
+  original: ArrayBuffer,
+  preprocessed: ArrayBuffer,
+  collected: ReadonlyMap<string, CollectedVariable>,
+  variableOptions: ReturnType<typeof resolveDocxVariableOptions>,
+  options: DocxImportOptions,
+  parser: HtmlParser,
+  warnings: DocxImportWarning[],
+): Promise<DocxImportResult> {
+  const parseXml = defaultXmlParse();
+  let read: Awaited<ReturnType<typeof readDocx>>;
+  try {
+    read = await readDocx(preprocessed, {
+      upload: options.upload,
+      footnotes: options.footnotes !== false,
+      emptyParagraphs: options.emptyParagraphs ?? 'keep',
+      parseXml,
+    });
+  } catch (error) {
+    throw invalidDocx(`le lecteur n'a pas pu lire le document : ${describeError(error)}`);
+  }
+  warnings.push(...read.warnings);
+
+  const doc = parser.parseFromString(
+    `<!doctype html><html><body>${read.html}</body></html>`,
+    'text/html',
+  );
+  const patterns = variablePatterns(variableOptions, collected);
+  const ctx = {
+    options: {
+      footnotes: options.footnotes !== false,
+      emptyParagraphs: options.emptyParagraphs ?? 'keep',
+    },
+    warnings,
+  };
+  createVariablesPass(patterns, collected)(doc, ctx);
+  if (ctx.options.emptyParagraphs === 'drop') stripEmptyParagraphs(doc, ctx);
+
+  return {
+    html: doc.body.innerHTML,
+    warnings,
+    variables: collectResultVariables(doc, collected),
+    layout: read.layout,
+    template: original,
+    lost: read.lost,
+  };
 }

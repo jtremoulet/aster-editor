@@ -33,6 +33,13 @@
  *   --aster-content-min-height hauteur minimale de la zone de contenu
  *   --aster-highlight          fond du mark `highlight` par défaut
  *   --aster-selection          fond de la sélection de texte
+ *   --aster-page-bg            fond de la feuille en vue page (`page.css`)
+ *   --aster-page-desk          fond du bureau autour de la feuille
+ *   --aster-page-shadow        ombre de la feuille
+ *   --aster-page-desk-padding  espace entre le bord du bureau et la feuille
+ *
+ * Les variables `--aster-page-width`, `--aster-page-height` et `--aster-page-margin-*`
+ * sont posées à chaud par le core depuis la mise en page du document, pas par un thème.
  */
 .aster[data-theme='light'] {
   --aster-surface: #ffffff;
@@ -66,5 +73,9 @@
   --aster-content-min-height: 200px;
   --aster-highlight: #fff176;
   --aster-selection: rgba(47, 91, 234, 0.22);
+  --aster-page-bg: #ffffff;
+  --aster-page-desk: #e3e5ea;
+  --aster-page-shadow: 0 2px 12px rgba(16, 20, 30, 0.18);
+  --aster-page-desk-padding: 24px;
   color-scheme: light;
 }

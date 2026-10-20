@@ -62,7 +62,15 @@ export const fr: AsterDictionary = {
   'command.search.clear': 'Effacer la recherche',
   'command.formatPainter.copy': 'Copier la mise en forme',
   'command.formatPainter.paste': 'Appliquer la mise en forme',
+  'command.paragraph.setLayout': 'Mise en page du paragraphe',
+  'command.paragraph.unsetLayout': 'Effacer la mise en page du paragraphe',
+  'command.text.setLetterSpacing': 'Espacement des caractères',
+  'command.text.setCaps': 'Casse',
+  'command.text.unsetCaps': 'Casse normale',
   'editor.placeholder': 'Commence à écrire…',
   'editor.words': '{count} mots',
   'editor.characters': '{count} caractères',
+  // Vue page, pagination approximative (L30) : libellé « Page n sur N » des coupures.
+  'pageView.page': 'Page',
+  'pageView.of': 'sur',
 };

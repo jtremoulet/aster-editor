@@ -13,6 +13,11 @@ export interface Dropdown extends ToolbarWidget {
   /** Ferme le panneau ; `focusTrigger` redonne le focus au déclencheur (Échap). */
   close(focusTrigger?: boolean): void;
   isOpen(): boolean;
+  /**
+   * Reconstruit le panneau ouvert sans condition (un `menu` qui bascule sur un formulaire,
+   * par exemple), le focus étant rendu à l'entrée de menu de même rang. Sans effet fermé.
+   */
+  rerender(): void;
 }
 
 /** Options de création d'un dropdown générique. */
@@ -26,6 +31,12 @@ export interface DropdownOptions {
   /** `menu` : navigation flèches entre `menuitem` ; `dialog` : formulaire avec Tab natif. */
   panelRole?: 'menu' | 'dialog';
   panelClass?: string;
+  /**
+   * Faut-il reconstruire le panneau ouvert à chaque `update()` ? Par défaut, oui pour un
+   * `menu` (retraduction, `aria-checked`), non pour un `dialog` (saisie en cours). Un
+   * `menu` qui affiche temporairement un formulaire renvoie `false` pendant ce temps.
+   */
+  shouldRerender?: () => boolean;
   /** Construit le contenu du panneau à chaque ouverture, pour refléter l'état courant. */
   renderPanel: (panel: HTMLElement, dropdown: Dropdown) => void;
   /** Déclencheur actif ? Réévalué à chaque `update()`. Par défaut : pas en lecture seule. */
@@ -45,7 +56,8 @@ export const PANEL_FLIP_CLASS = 'aster-dropdown__panel--flip';
  * sélection, navigation flèches haut/bas dans un panneau `menu`. Le contenu du panneau
  * est reconstruit à chaque ouverture par `renderPanel`, ce qui évite de synchroniser un
  * état interne ; un panneau `menu` ouvert est aussi reconstruit à chaque `update()`
- * (retraduction, `aria-checked`), le focus étant rendu à l'entrée de même rang.
+ * (retraduction, `aria-checked`), le focus étant rendu à l'entrée de même rang, sauf si
+ * `shouldRerender` s'y oppose (formulaire affiché dans un menu).
  */
 export function createDropdown(options: DropdownOptions): Dropdown {
   const { editor } = options;
@@ -126,12 +138,11 @@ export function createDropdown(options: DropdownOptions): Dropdown {
   };
 
   /**
-   * Reconstruit un panneau `menu` ouvert sans perdre la position du focus : l'entrée de
-   * même rang reprend le focus. Les panneaux `dialog` sont laissés tels quels, une saisie
-   * en cours (URL, recherche) ne doit pas être effacée par un `selectionChange`.
+   * Reconstruit le panneau ouvert sans perdre la position du focus : l'entrée de menu de
+   * même rang reprend le focus.
    */
   const rerender = (): void => {
-    if (!opened || panelRole !== 'menu') return;
+    if (!opened) return;
     const before = enabledElements(panel, MENU_ITEM_SELECTOR);
     const index = before.findIndex((item) => item === document.activeElement);
     clear(panel);
@@ -140,6 +151,16 @@ export function createDropdown(options: DropdownOptions): Dropdown {
     if (index < 0) return;
     const after = enabledElements(panel, MENU_ITEM_SELECTOR);
     (after[index] ?? after[after.length - 1])?.focus();
+  };
+
+  /**
+   * Reconstruction à `update()` : les `menu` seulement, sauf avis de `shouldRerender`. Un
+   * `dialog` est laissé tel quel, une saisie en cours (URL, recherche) ne doit pas être
+   * effacée par un `selectionChange`.
+   */
+  const rerenderOnUpdate = (): void => {
+    const wanted = options.shouldRerender ? options.shouldRerender() : panelRole === 'menu';
+    if (wanted) rerender();
   };
 
   const onTriggerClick = (): void => {
@@ -207,7 +228,7 @@ export function createDropdown(options: DropdownOptions): Dropdown {
         else trigger.focus();
       }
     } else {
-      rerender();
+      rerenderOnUpdate();
     }
     if (options.isActive) {
       const active = options.isActive();
@@ -223,6 +244,7 @@ export function createDropdown(options: DropdownOptions): Dropdown {
     open,
     close,
     isOpen: () => opened,
+    rerender,
     update,
     destroy: () => {
       close(false);

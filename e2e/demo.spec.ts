@@ -148,7 +148,8 @@ test.describe('Démo Angular', () => {
     // Même précaution que /import : le premier chargement de mammoth sous `ng serve` peut
     // recharger la page en plein import, on relance le bouton tant que rien n'est importé.
     await expect(async () => {
-      await dropzone.getByRole('button', { name: "Charger l'exemple" }).click();
+      // `exact` : « Charger l'exemple stylé » (session 3) partage le préfixe.
+      await dropzone.getByRole('button', { name: "Charger l'exemple", exact: true }).click();
       await expect(dropzone).toContainText('Importé : 08-variables-braces.docx', {
         timeout: 10_000,
       });

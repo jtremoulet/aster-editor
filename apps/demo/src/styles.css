@@ -365,3 +365,123 @@ aster-editor {
 .demo-resolved .ProseMirror {
   background: var(--demo-surface);
 }
+
+/* --- Fidélité Word (session 3) ---------------------------------------------- */
+
+.demo-dropzone__samples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.demo-layout-summary {
+  font-size: 0.85rem;
+  color: var(--demo-muted);
+}
+
+.demo-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--demo-surface);
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.demo-layout__item dt {
+  color: var(--demo-muted);
+}
+
+.demo-layout__item dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.demo-panel {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--demo-surface);
+  border: 1px solid var(--demo-border);
+  border-radius: 8px;
+}
+
+.demo-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.demo-panel__hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--demo-muted);
+}
+
+.demo-header-footer__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.demo-header-footer .demo-field aster-editor {
+  margin-bottom: 0;
+}
+
+.demo-header-footer .aster-content .ProseMirror {
+  min-height: 4rem;
+}
+
+.demo-fidelity__score {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  background: #fffaeb;
+  border: 1px solid #fedf89;
+  font-size: 0.9rem;
+}
+
+.demo-fidelity__score.is-ok {
+  background: #ecfdf3;
+  border-color: #abefc6;
+  color: var(--demo-ok);
+}
+
+.demo-fidelity__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.demo-fidelity__table th,
+.demo-fidelity__table td {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--demo-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.demo-fidelity__table tr.is-lost td {
+  background: #fffaeb;
+}
+
+.demo-fidelity__example {
+  color: var(--demo-muted);
+  word-break: break-word;
+}
+
+.demo-fidelity__parts {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.demo-lost ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
