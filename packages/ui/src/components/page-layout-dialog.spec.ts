@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { DocumentLayout, PaginatedPageViewOptions } from '@aster-editor/core';
+import type { DocumentLayout, PageSetup, PaginatedPageViewOptions } from '@aster-editor/core';
 import { applyPageView } from '@aster-editor/core';
 import { createMockEditor, type MockEditor, type MockEditorOptions } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
@@ -15,6 +15,9 @@ import {
   pageDimensionsOf,
   pageViewApiOf,
   resolvePageSetup,
+  sectionOfSelection,
+  sectionsOf,
+  withSectionPage,
 } from './page-layout-dialog';
 
 const LAYOUT: DocumentLayout = {
@@ -431,6 +434,146 @@ describe('createPageLayoutDialog', () => {
       };
       expect(editor.pageViewCalls).toEqual([expected]);
       expect(isOpen()).toBe(false);
+    });
+
+    it('L44 : sectionOfSelection, sectionsOf et withSectionPage (helpers)', () => {
+      expect(sectionOfSelection(createMockEditor())).toEqual({ index: 1, count: 1 });
+      expect(sectionOfSelection(createMockEditor({ sections: { count: 3, current: 2 } }))).toEqual({
+        index: 2,
+        count: 3,
+      });
+      expect(sectionOfSelection(createMockEditor({ sections: { count: 1, current: 1 } }))).toEqual({
+        index: 1,
+        count: 1,
+      });
+      // Sections connues complétées par le premier niveau (copie de la dernière section).
+      const layout: DocumentLayout = {
+        page: { size: 'A5' },
+        lang: 'fr-FR',
+        sections: [{ page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } }],
+      };
+      expect(sectionsOf(layout, 3)).toEqual([
+        { page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } },
+        { page: { size: 'A5' } },
+        { page: { size: 'A5' } },
+      ]);
+      expect(sectionsOf(null, 2)).toEqual([{}, {}]);
+      // Une seule section : seul `page` change, comme avant.
+      const page: PageSetup = { size: 'Legal', orientation: 'portrait' };
+      expect(withSectionPage(layout, { index: 1, count: 1 }, page)).toEqual({ ...layout, page });
+      expect(withSectionPage(null, { index: 1, count: 1 }, page)).toEqual({ page });
+      // Section intermédiaire : `sections` complété, `page` de premier niveau intact.
+      expect(withSectionPage(layout, { index: 2, count: 3 }, page)).toEqual({
+        ...layout,
+        sections: [
+          { page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } },
+          { page },
+          { page: { size: 'A5' } },
+        ],
+      });
+      // Dernière section : recopiée dans `page` (contrat `DocumentLayout.sections`).
+      expect(withSectionPage(layout, { index: 3, count: 3 }, page)).toEqual({
+        ...layout,
+        page,
+        sections: [
+          { page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } },
+          { page: { size: 'A5' } },
+          { page },
+        ],
+      });
+    });
+
+    it('L44 : « Section n sur N », page de la section du curseur préremplie et seule appliquée', () => {
+      widget.destroy();
+      host.remove();
+      const layout: DocumentLayout = {
+        ...LAYOUT,
+        sections: [
+          { page: { size: 'A4' }, footers: { default: { html: '<p>Pied 1</p>' } } },
+          { page: LAYOUT.page, headers: { default: { html: '<p>Tête 2</p>' } } },
+          { page: { size: 'A5', orientation: 'portrait', margins: { topMm: 10 } } },
+        ],
+      };
+      mount({ layout, pageView: true, sections: { count: 3, current: 2 } });
+      open();
+      const note = panel().querySelector('.aster-page-layout__section');
+      expect(note?.textContent).toBe('Section 2 of 3');
+      expect(panel().firstElementChild).toBe(note);
+      expect(size().value).toBe('Letter');
+      expect(orientation('landscape').checked).toBe(true);
+      expect(margin('topMm').value).toBe('20');
+      size().value = 'A3';
+      margin('topMm').value = '30';
+      button('Apply').click();
+      expect(editor.pageViewCalls).toEqual([
+        {
+          layout: {
+            ...layout,
+            sections: [
+              layout.sections?.[0],
+              {
+                ...layout.sections?.[1],
+                page: {
+                  size: 'A3',
+                  orientation: 'landscape',
+                  margins: { topMm: 30, rightMm: 15, bottomMm: 20, leftMm: 15, headerMm: 10 },
+                },
+              },
+              layout.sections?.[2],
+            ],
+          },
+        },
+      ]);
+      expect(editor.pageViewCalls[0]).toMatchObject({ layout: { page: LAYOUT.page } });
+      expect(isOpen()).toBe(false);
+      // Réouvert (le mock mémorise la mise en page) : la section 2 montre A3.
+      open();
+      expect(size().value).toBe('A3');
+      expect(margin('topMm').value).toBe('30');
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 sur 3',
+      );
+    });
+
+    it('L44 : dernière section du curseur recopiée dans page ; sans sections connues, complété', () => {
+      widget.destroy();
+      host.remove();
+      mount({
+        layout: { page: { size: 'A5' }, lang: 'fr-FR' },
+        sections: { count: 2, current: 2 },
+      });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 of 2',
+      );
+      expect(size().value).toBe('A5');
+      orientation('landscape').checked = true;
+      enabled().checked = true;
+      button('Apply').click();
+      const page: PageSetup = {
+        size: 'A5',
+        orientation: 'landscape',
+        margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+      };
+      expect(editor.pageViewCalls).toEqual([
+        {
+          layout: {
+            page,
+            lang: 'fr-FR',
+            sections: [{ page: { size: 'A5' } }, { page }],
+          },
+        },
+      ]);
+      // Sans saut de section dans le document, aucune mention de section.
+      widget.destroy();
+      host.remove();
+      mount({ layout: { sections: [{ page: { size: 'A3' } }] } });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')).toBeNull();
+      expect(size().value).toBe('A4');
     });
 
     it('préremplie depuis la vue page active du core (pagination: false) ; libellé fr', () => {

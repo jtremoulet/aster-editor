@@ -34,9 +34,27 @@ export {
   PAGE_GAP_CLASS,
   measureBlocks,
   measurePagination,
+  readPageVariables,
+  sectionSegments,
+  usableHeightOf,
   usablePageHeightPx,
   type MeasuredBlocks,
+  type MeasuredSectionBreak,
+  type SectionSegment,
 } from './pagination-measure';
+// Sections dans les coupures (session 4, L44).
+export {
+  PAGE_GAP_FOOTER_CLASS,
+  PAGE_GAP_HEADER_CLASS,
+  PAGE_GAP_SECTION_CLASS,
+  PAGE_GAP_SECTION_LABEL_CLASS,
+  PAGE_HEIGHT_TOTAL_CSS_VARIABLE,
+  PAGE_SECTION_ATTRIBUTE,
+  gapCssVariables,
+  pageHeightTotalMm,
+  previousPageSection,
+  sectionLabel,
+} from './pagination-sections';
 
 /** Nom de l'extension. */
 export const PAGINATION_EXTENSION_NAME = 'pagination';

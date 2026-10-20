@@ -5,6 +5,8 @@ import {
   cssLengthToPx,
   paginate,
   samePagination,
+  type PageSegment,
+  type PaginationResult,
 } from './pagination-layout';
 
 describe('paginate (calcul pur)', () => {
@@ -89,7 +91,135 @@ describe('paginate (calcul pur)', () => {
   });
 });
 
+describe('paginate par segment (sections, L44)', () => {
+  it('change de hauteur utile au premier bloc de chaque segment et numérote les sections', () => {
+    const segments: PageSegment[] = [
+      { start: 0, pageHeight: 100 },
+      { start: 2, pageHeight: 50 },
+    ];
+    // Saut de section = coupure forcée fournie par l'appelant ; le remplissage de la page
+    // qui se termine est calculé avec la hauteur de la section 1 (100 - 80).
+    const result = paginate([40, 40, 40, 40, 40], segments, [2]);
+    expect(result.pageCount).toBe(4);
+    expect(result.gaps).toEqual([
+      { index: 2, page: 2, fill: 20, section: 2 },
+      { index: 3, page: 3, fill: 10, section: 2 },
+      { index: 4, page: 4, fill: 10, section: 2 },
+    ]);
+    // Le compteur de pages est global, la section ne le remet pas à zéro.
+    expect(result.gaps.map((gap) => gap.page)).toEqual([2, 3, 4]);
+  });
+
+  it('section continuous : pas de coupure au saut, la hauteur change au bloc suivant', () => {
+    const segments: PageSegment[] = [
+      { start: 0, pageHeight: 100 },
+      { start: 3, pageHeight: 60 },
+    ];
+    const result = paginate([40, 40, 10, 40, 40], segments);
+    // 90 px déjà posés quand la section 2 (60 px) commence : le bloc 3 déborde et ouvre
+    // une page, remplissage nul (hauteur de la nouvelle section, approximation documentée).
+    expect(result.gaps).toEqual([
+      { index: 3, page: 2, fill: 0, section: 2 },
+      { index: 4, page: 3, fill: 20, section: 2 },
+    ]);
+    expect(result.pageCount).toBe(3);
+    // Trois sections, la dernière continue aussi : les pages portent la bonne section.
+    const three = paginate(
+      [40, 40, 40, 40, 40, 40],
+      [
+        { start: 0, pageHeight: 100 },
+        { start: 2, pageHeight: 100 },
+        { start: 4, pageHeight: 45 },
+      ],
+      [2],
+    );
+    expect(three.gaps.map((gap) => [gap.index, gap.section])).toEqual([
+      [2, 2],
+      [4, 3],
+      [5, 3],
+    ]);
+  });
+
+  it('une hauteur seule ne pose pas de section ; segments en désordre ou inexploitables', () => {
+    const plain = paginate([40, 40, 40], 100);
+    expect(plain.gaps).toEqual([{ index: 2, page: 2, fill: 20 }]);
+    expect(plain.gaps[0] && 'section' in plain.gaps[0]).toBe(false);
+    // Un seul segment équivaut à une hauteur seule, section 1 posée.
+    expect(paginate([40, 40, 40], [{ start: 0, pageHeight: 100 }]).gaps).toEqual([
+      { index: 2, page: 2, fill: 20, section: 1 },
+    ]);
+    // Liste en désordre : triée par `start`, numérotation d'origine conservée.
+    const unsorted = paginate(
+      [40, 40, 40, 40],
+      [
+        { start: 2, pageHeight: 50 },
+        { start: 0, pageHeight: 100 },
+      ],
+      [2],
+    );
+    expect(unsorted.gaps).toEqual([
+      { index: 2, page: 2, fill: 20, section: 1 },
+      { index: 3, page: 3, fill: 10, section: 1 },
+    ]);
+    // Hauteur inexploitable : héritée de la précédente (ou de la première exploitable).
+    expect(
+      paginate(
+        [40, 40, 40, 40],
+        [
+          { start: 0, pageHeight: 100 },
+          { start: 2, pageHeight: 0 },
+        ],
+        [2],
+      ).gaps,
+    ).toEqual([{ index: 2, page: 2, fill: 20, section: 2 }]);
+    expect(
+      paginate(
+        [40, 40, 40],
+        [
+          { start: 0, pageHeight: Number.NaN },
+          { start: 1, pageHeight: 50 },
+        ],
+      ).gaps,
+    ).toEqual([
+      { index: 1, page: 2, fill: 10, section: 2 },
+      { index: 2, page: 3, fill: 10, section: 2 },
+    ]);
+    // Un `start` absurde vaut 0 ; aucune hauteur exploitable : une seule page.
+    expect(paginate([40, 40, 40], [{ start: Number.NaN, pageHeight: 100 }]).gaps).toEqual([
+      { index: 2, page: 2, fill: 20, section: 1 },
+    ]);
+    expect(paginate([40, 40], [{ start: 0, pageHeight: -1 }])).toBe(EMPTY_PAGINATION);
+    expect(paginate([40, 40], [])).toBe(EMPTY_PAGINATION);
+  });
+});
+
 describe('samePagination', () => {
+  it('compare aussi les sections des coupures et les variables mesurées (L44)', () => {
+    const segments: PageSegment[] = [
+      { start: 0, pageHeight: 100 },
+      { start: 2, pageHeight: 50 },
+    ];
+    const sectioned = paginate([40, 40, 40], segments, [2]);
+    expect(samePagination(sectioned, paginate([40, 40, 40], 100, [2]))).toBe(false);
+    expect(samePagination(sectioned, paginate([40, 40, 40], segments, [2]))).toBe(true);
+    const variables = [{ '--aster-page-height': '297mm' }, { '--aster-page-height': '210mm' }];
+    const a: PaginationResult = { ...sectioned, sections: variables };
+    expect(samePagination(a, { ...sectioned, sections: [...variables] })).toBe(true);
+    expect(samePagination(a, sectioned)).toBe(false);
+    expect(
+      samePagination(a, {
+        ...sectioned,
+        sections: [variables[0] ?? {}, { '--aster-page-height': '200mm' }],
+      }),
+    ).toBe(false);
+    expect(
+      samePagination(a, {
+        ...sectioned,
+        sections: [variables[0] ?? {}, { '--aster-page-height': '210mm', extra: '1' }],
+      }),
+    ).toBe(false);
+  });
+
   it('compare coupures et nombre de pages, au pixel près pour le remplissage', () => {
     const a = paginate([40, 40, 40], 100);
     const b = paginate([40, 40, 40.2], 100);

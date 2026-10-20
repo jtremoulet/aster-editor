@@ -237,8 +237,11 @@ export function applyPageView(
   const headerHtml = showHeadersFooters
     ? sanitizeHeaderFooterHtml(first.headers?.default?.html ?? '')
     : '';
+  // Le pied en bas de la feuille est celui de la dernière section (la pagination affiche
+  // les pieds intermédiaires sur chaque coupure de section) ; l'en-tête, celui de la première.
+  const last = resolveSectionLayout(layout, layout.sections?.length ?? 1);
   const footerHtml = showHeadersFooters
-    ? sanitizeHeaderFooterHtml(first.footers?.default?.html ?? '')
+    ? sanitizeHeaderFooterHtml(last.footers?.default?.html ?? '')
     : '';
   const widthMaxMm = maxSectionWidthMm(layout);
 

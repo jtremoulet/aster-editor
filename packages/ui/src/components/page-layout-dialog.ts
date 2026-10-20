@@ -8,7 +8,9 @@ import type {
   PageSizeName,
   PageViewOptions,
   PaginatedPageViewOptions,
+  SectionLayout,
 } from '@aster-editor/core';
+import type { EditorState } from '@tiptap/pm/state';
 import { PAGE_SIZES_MM, getActivePageView, isPaginationEnabled } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
@@ -144,8 +146,8 @@ export interface ResolvedPageSetup {
     PageMargins;
 }
 
-/** Résout `layout.page` avec les défauts d'Aster (A4, portrait, 25,4 mm). */
-export function resolvePageSetup(layout: DocumentLayout | null): ResolvedPageSetup {
+/** Résout `layout.page` (document ou section) avec les défauts d'Aster (A4, portrait, 25,4 mm). */
+export function resolvePageSetup(layout: DocumentLayout | SectionLayout | null): ResolvedPageSetup {
   const page = layout?.page;
   const size = page?.size;
   const margins = page?.margins ?? {};
@@ -162,6 +164,82 @@ export function resolvePageSetup(layout: DocumentLayout | null): ResolvedPageSet
   };
 }
 
+/** Section du curseur (1-based) et nombre de sections du document (session 4, L44). */
+export interface SectionPosition {
+  readonly index: number;
+  readonly count: number;
+}
+
+/** Document d'une seule section : le comportement d'avant les sections. */
+const SINGLE_SECTION: SectionPosition = { index: 1, count: 1 };
+
+/** Nom du nœud de saut de section du core (`<hr data-section-break="n">`). */
+const SECTION_BREAK_NODE_NAME = 'sectionBreak';
+
+/**
+ * Section du curseur et nombre de sections, comptés sur les nœuds `sectionBreak` de
+ * premier niveau du document (numérotation positionnelle, comme `getSections` du core) :
+ * la section du curseur est le nombre de sauts avant son bloc, plus un ; un curseur sur
+ * un saut appartient à la section qui s'y termine. Sans état Tiptap (mock) ni saut :
+ * une seule section.
+ */
+export function sectionOfSelection(editor: AsterEditor): SectionPosition {
+  const state: EditorState | undefined = editor.tiptap.state;
+  if (!state) return SINGLE_SECTION;
+  const cursorIndex = state.selection.$from.index(0);
+  let count = 0;
+  let before = 0;
+  state.doc.forEach((node, _offset, index) => {
+    if (node.type.name !== SECTION_BREAK_NODE_NAME) return;
+    count += 1;
+    if (index < cursorIndex) before += 1;
+  });
+  return count === 0 ? SINGLE_SECTION : { index: before + 1, count: count + 1 };
+}
+
+/** Champs de premier niveau d'une mise en page, comme section de repli (`resolveSectionLayout` du core). */
+function topLevelSection(layout: DocumentLayout | null): SectionLayout {
+  const section: { -readonly [K in keyof SectionLayout]: SectionLayout[K] } = {};
+  if (layout?.page !== undefined) section.page = layout.page;
+  if (layout?.columns !== undefined) section.columns = layout.columns;
+  if (layout?.headers !== undefined) section.headers = layout.headers;
+  if (layout?.footers !== undefined) section.footers = layout.footers;
+  if (layout?.titlePage !== undefined) section.titlePage = layout.titlePage;
+  return section;
+}
+
+/**
+ * Les `count` sections d'une mise en page, dans l'ordre : `layout.sections` complété, au
+ * besoin, par les champs de premier niveau (la seule section d'un document sans
+ * `sections`, la copie de la dernière sinon), pour qu'un document dont le corps a plus
+ * de sauts que la mise en page ne décale rien.
+ */
+export function sectionsOf(layout: DocumentLayout | null, count: number): SectionLayout[] {
+  const known = layout?.sections ?? [];
+  const fallback = topLevelSection(layout);
+  return Array.from({ length: count }, (_, position) => known[position] ?? fallback);
+}
+
+/**
+ * Mise en page avec la page de la section `position.index` remplacée : `sections`
+ * complété à `position.count` entrées ; la dernière section reste recopiée dans `page`
+ * (contrat `DocumentLayout.sections`). Avec une seule section, seul `page` change.
+ */
+export function withSectionPage(
+  layout: DocumentLayout | null,
+  position: SectionPosition,
+  page: PageSetup,
+): DocumentLayout {
+  const base: DocumentLayout = layout ?? {};
+  if (position.count <= 1) {
+    return { ...base, page };
+  }
+  const sections = sectionsOf(layout, position.count).map((section, index) =>
+    index === position.index - 1 ? { ...section, page } : section,
+  );
+  return position.index === position.count ? { ...base, page, sections } : { ...base, sections };
+}
+
 /**
  * Widget `pageLayout` : dialogue « Mise en page » (format A4 / A3 / A5 / Letter / Legal,
  * orientation, marges en mm, case « Vue page »), prérempli depuis `editor.getLayout()`.
@@ -169,6 +247,10 @@ export function resolvePageSetup(layout: DocumentLayout | null): ResolvedPageSet
  * de la mise en page conservé (en-têtes, pieds, police…), ou `setPageView(false)` si la
  * case est décochée. Désactivé si le core n'expose pas ces méthodes ou en lecture seule ;
  * le déclencheur est « enfoncé » quand la vue page est active.
+ *
+ * Sections (session 4, L44) : dans un document à sauts de section, le dialogue affiche
+ * « Section n sur N », préremplit la page de la section du curseur et n'applique qu'elle
+ * (`layout.sections[n - 1].page`), les autres sections étant conservées.
  */
 export function createPageLayoutDialog(editor: AsterEditor): ToolbarWidget {
   return createDropdown({
@@ -187,10 +269,24 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   const t = (key: string): string => editor.i18n.t(key);
   const api = pageViewApiOf(editor);
   const layout = api?.getLayout() ?? null;
-  const current = resolvePageSetup(layout);
+  // Section du curseur (L44) : sa page est éditée ; sans saut, celle du document.
+  const position = sectionOfSelection(editor);
+  const current = resolvePageSetup(
+    position.count > 1 ? (sectionsOf(layout, position.count)[position.index - 1] ?? null) : layout,
+  );
   const suffix = fieldSuffix();
   panel.setAttribute('aria-label', t('ui.pageLayout.title'));
   const alert = createAlert();
+  const sectionNote =
+    position.count > 1
+      ? el('p', {
+          className: 'aster-page-layout__section',
+          text: editor.i18n.t('ui.pageLayout.section', {
+            index: position.index,
+            count: position.count,
+          }),
+        })
+      : null;
 
   // Format : les formats nommés, plus « Personnalisé » (dimensions libres) seulement si le
   // document en utilise un, conservé tel quel à l'application.
@@ -342,9 +438,10 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
       orientation: selectedOrientation(),
       margins: { ...current.margins, ...margins },
     };
+    const next = withSectionPage(layout, position, page);
     const options: PaginatedPageViewOptions = pagination.input.checked
-      ? { layout: { ...(layout ?? {}), page } }
-      : { layout: { ...(layout ?? {}), page }, pagination: false };
+      ? { layout: next }
+      : { layout: next, pagination: false };
     api.setPageView(options);
     dropdown.close(false);
     dropdown.update();
@@ -372,6 +469,7 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   });
   cancel.addEventListener('click', () => dropdown.close(true));
 
+  if (sectionNote) panel.append(sectionNote);
   panel.append(
     sizeField,
     orientationGroup,

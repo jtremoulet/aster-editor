@@ -15,6 +15,13 @@ import {
   type PaginationResult,
 } from './pagination-layout';
 import { PAGE_GAP_CLASS, measurePagination } from './pagination-measure';
+import {
+  PAGE_HEIGHT_TOTAL_CSS_VARIABLE,
+  decorateGapSection,
+  pageHeightTotalMm,
+  previousPageSection,
+  sectionSignature,
+} from './pagination-sections';
 
 /**
  * Contrôleur de la pagination approximative (session 3, L30, extrait de `pagination.ts`
@@ -97,19 +104,36 @@ function pageLabel(aster: AsterEditor | null, page: number, count: number): stri
   return `${aster.i18n.t('pageView.page')} ${page} ${aster.i18n.t('pageView.of')} ${count}`;
 }
 
-/** DOM d'une coupure : `div.aster-page-gap[data-page-number][data-page-count]` et son libellé. */
-function renderGap(gap: PageGap, count: number, label: string): HTMLElement {
+/** Ce qu'une coupure doit savoir de sa section (L44) : la page qui se termine et les options. */
+interface GapSectionContext {
+  readonly previous: number;
+  readonly options: PageViewOptions;
+}
+
+/**
+ * DOM d'une coupure : `div.aster-page-gap[data-page-number][data-page-count]` et son
+ * libellé ; avec des sections, `data-section`, les variables de la section et, sur la
+ * première coupure d'une section, son en-tête, le pied de la précédente et un libellé.
+ */
+function renderGap(
+  gap: PageGap,
+  result: PaginationResult,
+  label: string,
+  context: GapSectionContext,
+  aster: AsterEditor | null,
+): HTMLElement {
   const element = document.createElement('div');
   element.className = PAGE_GAP_CLASS;
   element.setAttribute('contenteditable', 'false');
   element.setAttribute('aria-hidden', 'true');
   element.setAttribute(PAGE_NUMBER_ATTRIBUTE, String(gap.page));
-  element.setAttribute(PAGE_COUNT_ATTRIBUTE, String(count));
+  element.setAttribute(PAGE_COUNT_ATTRIBUTE, String(result.pageCount));
   element.style.setProperty(PAGE_GAP_FILL_CSS_VARIABLE, `${Math.round(gap.fill)}px`);
   const number = document.createElement('span');
   number.className = PAGE_GAP_NUMBER_CLASS;
   number.textContent = label;
   element.append(number);
+  decorateGapSection(element, gap, context.previous, result, context.options, aster);
   return element;
 }
 
@@ -119,26 +143,30 @@ function buildDecorations(
   result: PaginationResult,
   locale: string,
   aster: AsterEditor | null,
+  options: PageViewOptions,
 ): DecorationSet {
   if (result.gaps.length === 0) {
     return DecorationSet.empty;
   }
-  const byIndex = new Map<number, PageGap>();
-  for (const gap of result.gaps) {
-    byIndex.set(gap.index, gap);
-  }
+  const byIndex = new Map<number, { gap: PageGap; previous: number }>();
+  result.gaps.forEach((gap, position) => {
+    byIndex.set(gap.index, { gap, previous: previousPageSection(result.gaps, position) });
+  });
   const decorations: Decoration[] = [];
   doc.forEach((_node, offset, index) => {
-    const gap = byIndex.get(index);
-    if (!gap) {
+    const entry = byIndex.get(index);
+    if (!entry) {
       return;
     }
+    const { gap, previous } = entry;
     const label = pageLabel(aster, gap.page, result.pageCount);
+    const context: GapSectionContext = { previous, options };
+    const section = sectionSignature(gap, previous, result, options);
     decorations.push(
-      Decoration.widget(offset, () => renderGap(gap, result.pageCount, label), {
+      Decoration.widget(offset, () => renderGap(gap, result, label, context, aster), {
         side: -1,
         // La clé porte tout ce qui change le rendu : ProseMirror réutilise le DOM à clé égale.
-        key: `${PAGE_GAP_CLASS}:${locale}:${gap.page}:${result.pageCount}:${Math.round(gap.fill)}`,
+        key: `${PAGE_GAP_CLASS}:${locale}:${gap.page}:${result.pageCount}:${Math.round(gap.fill)}:${section}`,
         ignoreSelection: true,
       }),
     );
@@ -163,6 +191,8 @@ export function paginationControllerOf(view: EditorView): PaginationController |
 export class PaginationController {
   result: PaginationResult = EMPTY_PAGINATION;
   private options: PageViewOptions | null = null;
+  /** Vrai entre une (ré)activation avec de nouvelles options et la mesure qui suit. */
+  private optionsChanged = false;
   private host: HTMLElement | null = null;
   /** Génération du rendu : avance à chaque mesure qui change quelque chose, locale ou arrêt. */
   private generation = 1;
@@ -220,7 +250,7 @@ export class PaginationController {
       holder.set =
         this.options === null
           ? DecorationSet.empty
-          : buildDecorations(state.doc, this.result, locale, this.aster);
+          : buildDecorations(state.doc, this.result, locale, this.aster, this.options);
       holder.generation = this.generation;
       this.builtDoc = state.doc;
     }
@@ -242,6 +272,9 @@ export class PaginationController {
       this.deactivate();
       return;
     }
+    // De nouvelles options (mise en page, en-têtes des sections) redessinent les coupures
+    // même à coupures égales : leur contenu en dépend (L44).
+    this.optionsChanged = this.options !== options;
     this.options = options;
     this.host = this.view.dom.closest<HTMLElement>(`.${PAGE_VIEW_CLASS}`);
     this.ensureObserver();
@@ -307,16 +340,28 @@ export class PaginationController {
     const result = measurePagination(this.view, this.options);
     const changed = !samePagination(result, this.result);
     this.result = result;
-    this.writePageCount(result.pageCount);
+    this.writePageCount(result);
     const drifted = result.gaps.length > 0 && this.builtDoc !== this.view.state.doc;
-    if (changed || drifted) {
+    const renewed = this.optionsChanged;
+    this.optionsChanged = false;
+    if (changed || drifted || renewed) {
       this.redraw();
     }
   }
 
-  /** Phase d'écriture : variable sur l'hôte et attribut du pied affiché. */
-  private writePageCount(count: number): void {
+  /**
+   * Phase d'écriture : variables sur l'hôte (nombre de pages ; avec des sections, somme
+   * des hauteurs de pages, L44) et attribut du pied affiché.
+   */
+  private writePageCount(result: PaginationResult): void {
+    const count = result.pageCount;
     this.host?.style.setProperty(PAGE_COUNT_CSS_VARIABLE, String(count));
+    const totalMm = pageHeightTotalMm(result);
+    if (totalMm === null) {
+      this.host?.style.removeProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE);
+    } else {
+      this.host?.style.setProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE, `${totalMm}mm`);
+    }
     this.footer()?.setAttribute(PAGE_COUNT_ATTRIBUTE, String(count));
   }
 
@@ -339,6 +384,7 @@ export class PaginationController {
     this.host = null;
     if (host) {
       host.style.removeProperty(PAGE_COUNT_CSS_VARIABLE);
+      host.style.removeProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE);
       if (host.getAttribute('style') === '') {
         host.removeAttribute('style');
       }

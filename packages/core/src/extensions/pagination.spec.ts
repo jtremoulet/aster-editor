@@ -1,29 +1,50 @@
+import { Node, mergeAttributes } from '@tiptap/core';
 import { DecorationSet, type Decoration } from '@tiptap/pm/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AsterEditor, AsterOptions, DocumentLayout, PageViewOptions } from '../api';
+import type { AsterEditor, AsterOptions, DocumentLayout, PageSetup, PageViewOptions } from '../api';
 import { AsterEditorImpl } from '../editor/aster-editor';
 import { en } from '../i18n/en';
 import { fr } from '../i18n/fr';
 import { mountEditor, type MountedEditor } from '../testing/mount';
-import { PAGE_FOOTER_CLASS, PAGE_VIEW_CLASS, getActivePageView } from './page-view';
+import {
+  PAGE_FOOTER_CLASS,
+  PAGE_VIEW_CLASS,
+  PAGE_WIDTH_MAX_CSS_VARIABLE,
+  getActivePageView,
+} from './page-view';
 import {
   PAGE_COUNT_ATTRIBUTE,
   PAGE_COUNT_CSS_VARIABLE,
   PAGE_GAP_CLASS,
   PAGE_GAP_FILL_CSS_VARIABLE,
+  PAGE_GAP_FOOTER_CLASS,
+  PAGE_GAP_HEADER_CLASS,
   PAGE_GAP_NUMBER_CLASS,
+  PAGE_GAP_SECTION_CLASS,
+  PAGE_GAP_SECTION_LABEL_CLASS,
+  PAGE_HEIGHT_TOTAL_CSS_VARIABLE,
   PAGE_NUMBER_ATTRIBUTE,
+  PAGE_SECTION_ATTRIBUTE,
   PAGINATION_DEBOUNCE_MS,
+  gapCssVariables,
   getPaginationResult,
   isPaginationEnabled,
   measureBlocks,
   measurePagination,
+  pageHeightTotalMm,
   paginateNow,
   paginationPluginKey,
+  previousPageSection,
+  sectionLabel,
   usablePageHeightPx,
   type PaginatedPageViewOptions,
 } from './pagination';
-import { EMPTY_PAGINATION, MM_TO_PX } from './pagination-layout';
+import {
+  EMPTY_PAGINATION,
+  MM_TO_PX,
+  paginate,
+  type SectionCssVariables,
+} from './pagination-layout';
 
 /** Hauteur d'un bloc sans hauteur déclarée, en px. */
 const DEFAULT_BLOCK_HEIGHT = 40;
@@ -540,7 +561,11 @@ describe('pagination (plugin)', () => {
     const { editor } = mount({ content: paragraphs(3), pageView: { layout: SMALL_PAGE } });
     const view = editor.tiptap.view;
     setHeights([10, 20, 30]);
-    expect(measureBlocks(view)).toEqual({ heights: [10, 20, 30], breaks: new Set() });
+    expect(measureBlocks(view)).toEqual({
+      heights: [10, 20, 30],
+      breaks: new Set(),
+      sectionBreaks: [],
+    });
     // Un élément étranger au premier niveau : le compte ne colle plus, on passe par nodeDOM.
     const stranger = document.createElement('div');
     stranger.className = 'integrator-overlay';
@@ -575,4 +600,308 @@ describe('pagination (plugin)', () => {
       `[L30] 4000 paragraphes : mesure + calcul ${computeMs.toFixed(1)} ms, pose ${applyMs.toFixed(1)} ms, ${applied.pageCount} pages`,
     );
   });
+
+  describe('sections (L44)', () => {
+    /** Section 2 : 100 × 20 mm sans marges, 75,59 px utiles, un bloc de 40 px par page. */
+    const SECTION_2_PAGE: PageSetup = {
+      size: { widthMm: 100, heightMm: 20 },
+      margins: { topMm: 0, bottomMm: 0 },
+    };
+    const SECTION_2_PX = 20 * MM_TO_PX;
+    const SECTIONS: DocumentLayout = {
+      page: SECTION_2_PAGE,
+      sections: [
+        { page: SMALL_PAGE.page, footers: { default: { html: '<p>Pied 1</p>' } } },
+        {
+          page: SECTION_2_PAGE,
+          headers: { default: { html: '<p>Tête 2</p><script>alert(1)</script>' } },
+        },
+      ],
+    };
+    const TWO_SECTIONS = '<p>a</p><p>b</p><hr data-section-break="1"><p>c</p><p>d</p><p>e</p>';
+
+    const sectionGap = (editor: AsterEditor): HTMLElement | undefined =>
+      gaps(editor).find((gap) => gap.classList.contains(PAGE_GAP_SECTION_CLASS));
+
+    it('i18n : les clés de section existent en fr et en en', () => {
+      expect(fr['pageView.section']).toBe('Section');
+      expect(fr['pageView.landscape']).toBe('paysage');
+      expect(en['pageView.section']).toBe('Section');
+      expect(en['pageView.portrait']).toBe('portrait');
+    });
+
+    it('un saut de section force la coupure et la section suivante a sa propre hauteur utile', () => {
+      const { editor, element } = mount({
+        content: TWO_SECTIONS,
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: SECTIONS },
+      });
+      const htmlBefore = editor.getHTML();
+      expect(htmlBefore).toContain('<hr data-section-break="1">');
+      const measured = measureBlocks(editor.tiptap.view);
+      expect(measured.sectionBreaks.map((brk) => brk.index)).toEqual([2]);
+      expect(measured.sectionBreaks[0]?.element?.tagName).toBe('HR');
+
+      const result = paginateNow(editor);
+      expect(result.pageCount).toBe(4);
+      expect(result.gaps.map((gap) => [gap.index, gap.page, gap.section])).toEqual([
+        [3, 2, 2],
+        [4, 3, 2],
+        [5, 4, 2],
+      ]);
+      // Remplissage de la page 1 avec la hauteur de la section 1, des suivantes avec la section 2.
+      expect(result.gaps[0]?.fill).toBeCloseTo(SMALL_PAGE_PX - 80, 6);
+      expect(result.gaps[1]?.fill).toBeCloseTo(SECTION_2_PX - 40, 6);
+      expect(result.sections?.map((section) => section['--aster-page-height'])).toEqual([
+        '30mm',
+        '20mm',
+      ]);
+
+      // Chaque coupure porte sa section ; seule la première ouvre la section 2.
+      const posed = gaps(editor);
+      expect(posed.map((gap) => gap.getAttribute(PAGE_SECTION_ATTRIBUTE))).toEqual(['2', '2', '2']);
+      expect(posed.map((gap) => gap.classList.contains(PAGE_GAP_SECTION_CLASS))).toEqual([
+        true,
+        false,
+        false,
+      ]);
+      expect(posed.map((gap) => gap.getAttribute(PAGE_NUMBER_ATTRIBUTE))).toEqual(['2', '3', '4']);
+      const opening = posed[0];
+      expect(opening?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)?.textContent).toBe(
+        'Section 2 · 100 × 20 mm paysage',
+      );
+      // En-tête de la section 2 assaini, pied de la section 1, en lecture seule.
+      const header = opening?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`);
+      expect(header?.innerHTML).toBe('<p>Tête 2</p>');
+      expect(header?.getAttribute('contenteditable')).toBe('false');
+      expect(opening?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 1</p>');
+      expect(posed[1]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)).toBeNull();
+      expect(posed[1]?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)).toBeNull();
+      // Variables de la coupure : marge basse de la section qui se termine, le reste de
+      // celle qui commence ; jamais les marges horizontales (la feuille garde celles de l'hôte).
+      expect(opening?.style.getPropertyValue('--aster-page-height')).toBe('20mm');
+      expect(opening?.style.getPropertyValue('--aster-page-width')).toBe('100mm');
+      expect(opening?.style.getPropertyValue('--aster-page-margin-top')).toBe('0mm');
+      expect(opening?.style.getPropertyValue('--aster-page-margin-bottom')).toBe('0mm');
+      expect(opening?.style.getPropertyValue('--aster-page-margin-footer')).toBe('12.7mm');
+      expect(opening?.style.getPropertyValue('--aster-page-margin-left')).toBe('');
+      expect(posed[1]?.style.getPropertyValue('--aster-page-height')).toBe('20mm');
+      // Hôte : largeur de la plus large section et somme des hauteurs de pages (30 + 3 × 20).
+      expect(element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('100mm');
+      expect(element.style.getPropertyValue(PAGE_HEIGHT_TOTAL_CSS_VARIABLE)).toBe('90mm');
+      // Le saut lui-même mesure 0 (remplacé par la coupure) ; le document est intact.
+      expect(editor.getHTML()).toBe(htmlBefore);
+      expect(paginateNow(editor)).toEqual(result);
+      expect(gapIndexes(editor)).toEqual([3, 4, 5]);
+    });
+
+    it('section continuous : pas de coupure au saut, hauteur changée au bloc suivant, hr mesuré', () => {
+      const continuous: DocumentLayout = {
+        ...SECTIONS,
+        sections: [
+          SECTIONS.sections?.[0] ?? {},
+          { ...SECTIONS.sections?.[1], start: 'continuous' },
+        ],
+      };
+      const { editor } = mount({
+        content: TWO_SECTIONS.replace('<hr', '<hr data-section-start="continuous"'),
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: continuous },
+      });
+      setHeights([40, 40, 4, 40, 40, 40]);
+      expect(measureBlocks(editor.tiptap.view).heights).toEqual([40, 40, 4, 40, 40, 40]);
+      const result = paginateNow(editor);
+      // 84 px posés quand la section 2 (75,59 px) commence : « c » déborde, remplissage nul.
+      expect(result.gaps.map((gap) => [gap.index, gap.page, gap.section])).toEqual([
+        [3, 2, 2],
+        [4, 3, 2],
+        [5, 4, 2],
+      ]);
+      expect(result.gaps[0]?.fill).toBe(0);
+      expect(result.gaps[1]?.fill).toBeCloseTo(SECTION_2_PX - 40, 6);
+      // La première coupure de la section, même par débordement, en porte le libellé et l'en-tête.
+      const opening = sectionGap(editor);
+      expect(opening).toBe(gaps(editor)[0]);
+      expect(opening?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
+      // Sans `data-section-start`, le `start` de la section fait foi.
+      editor.setHTML(TWO_SECTIONS, false);
+      setHeights([40, 40, 4, 40, 40, 40]);
+      expect(paginateNow(editor).gaps[0]?.fill).toBe(0);
+    });
+
+    it('les variables posées sur le hr priment sur la mise en page de la section', () => {
+      const { editor, element } = mount({
+        content: TWO_SECTIONS,
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: SECTIONS },
+      });
+      const hr = editor.contentElement.querySelector<HTMLElement>('hr[data-section-break]');
+      expect(hr).not.toBeNull();
+      hr?.style.setProperty('--aster-page-height', '40mm');
+      const result = paginateNow(editor);
+      // 151 px utiles : c, d, e (120 px) tiennent sur la page 2.
+      expect(result.gaps.map((gap) => [gap.index, gap.page, gap.section])).toEqual([[3, 2, 2]]);
+      expect(result.sections?.[1]?.['--aster-page-height']).toBe('40mm');
+      expect(gaps(editor)[0]?.style.getPropertyValue('--aster-page-height')).toBe('40mm');
+      expect(gaps(editor)[0]?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)?.textContent).toBe(
+        'Section 2 · 100 × 40 mm paysage',
+      );
+      expect(element.style.getPropertyValue(PAGE_HEIGHT_TOTAL_CSS_VARIABLE)).toBe('70mm');
+      // Une variable illisible sur le hr retombe sur la section.
+      hr?.style.setProperty('--aster-page-height', 'auto');
+      expect(paginateNow(editor).pageCount).toBe(4);
+    });
+
+    it('showHeadersFooters: false retire en-têtes et pieds des coupures, pas le libellé', () => {
+      const { editor } = mount({
+        content: TWO_SECTIONS,
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: SECTIONS, showHeadersFooters: false },
+      });
+      paginateNow(editor);
+      const opening = sectionGap(editor);
+      expect(opening).toBeDefined();
+      expect(opening?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)).toBeNull();
+      expect(opening?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)).toBeNull();
+      expect(opening?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)?.textContent).toBe(
+        'Section 2 · 100 × 20 mm paysage',
+      );
+      expect(editor.contentElement.querySelectorAll(`.${PAGE_GAP_HEADER_CLASS}`)).toHaveLength(0);
+    });
+
+    it('libellé « Section n · Format orientation » i18n, format nommé reconnu en paysage', () => {
+      const letter: DocumentLayout = {
+        sections: [
+          { page: SMALL_PAGE.page },
+          {
+            page: { size: 'Letter', orientation: 'landscape', margins: { topMm: 0, bottomMm: 0 } },
+          },
+        ],
+      };
+      const { editor, element } = mount({
+        content: TWO_SECTIONS,
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: letter },
+      });
+      paginateNow(editor);
+      const label = (): string | undefined =>
+        sectionGap(editor)?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)?.textContent ??
+        undefined;
+      expect(label()).toBe('Section 2 · Letter paysage');
+      expect(element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('279.4mm');
+      editor.i18n.setLocale('en');
+      expect(label()).toBe('Section 2 · Letter landscape');
+      expect(
+        sectionLabel(null, { '--aster-page-width': '210mm', '--aster-page-height': '297mm' }, 3),
+      ).toBe('Section 3 · A4 portrait');
+      expect(sectionLabel(null, { '--aster-page-width': 'auto' }, 3)).toBe('Section 3');
+      expect(sectionLabel(null, undefined, 1)).toBe('Section 1');
+    });
+
+    it('une nouvelle mise en page redessine les coupures même à coupures égales ; retrait complet', () => {
+      const { editor, element } = mount({
+        content: TWO_SECTIONS,
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: SECTIONS },
+      });
+      paginateNow(editor);
+      expect(sectionGap(editor)?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe(
+        '<p>Tête 2</p>',
+      );
+      const renamed: DocumentLayout = {
+        ...SECTIONS,
+        sections: [
+          SECTIONS.sections?.[0] ?? {},
+          { page: SECTION_2_PAGE, headers: { default: { html: '<p>Autre</p>' } } },
+        ],
+      };
+      impl(editor).setPageView({ layout: renamed });
+      paginateNow(editor);
+      expect(sectionGap(editor)?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe(
+        '<p>Autre</p>',
+      );
+      impl(editor).setPageView(false);
+      expect(gaps(editor)).toEqual([]);
+      expect(element.getAttribute('style')).toBeNull();
+      expect(getPaginationResult(editor)).toBe(EMPTY_PAGINATION);
+    });
+
+    it('helpers : previousPageSection, gapCssVariables et pageHeightTotalMm', () => {
+      const result = paginate(
+        [40, 40, 40, 40],
+        [
+          { start: 0, pageHeight: 100 },
+          { start: 2, pageHeight: 50 },
+        ],
+        [2],
+      );
+      expect(
+        result.gaps.map((_gap, position) => previousPageSection(result.gaps, position)),
+      ).toEqual([1, 2]);
+      const sections: SectionCssVariables[] = [
+        {
+          '--aster-page-height': '297mm',
+          '--aster-page-margin-bottom': '10mm',
+          '--aster-page-margin-footer': '5mm',
+        },
+        {
+          '--aster-page-height': '210mm',
+          '--aster-page-margin-top': '20mm',
+          '--aster-page-width': '297mm',
+        },
+      ];
+      expect(gapCssVariables(sections, 1, 2)).toEqual({
+        '--aster-page-margin-bottom': '10mm',
+        '--aster-page-margin-footer': '5mm',
+        '--aster-page-height': '210mm',
+        '--aster-page-margin-top': '20mm',
+        '--aster-page-width': '297mm',
+      });
+      expect(gapCssVariables(sections, 1, 3)).toEqual({});
+      expect(pageHeightTotalMm({ ...result, sections })).toBe(297 + 210 + 210);
+      expect(pageHeightTotalMm(result)).toBeNull();
+      expect(pageHeightTotalMm({ ...result, sections: [sections[0] ?? {}, {}] })).toBeNull();
+    });
+  });
+});
+
+/**
+ * Saut de section simulé pour les tests : tout bloc rendu `hr[data-section-break]`
+ * (nœud `sectionBreak` de L41 ou autre) doit être reconnu. Les variables de la section
+ * suivante viennent ici de `layout.sections` (repli), ou du style inline posé par le test.
+ */
+const SimulatedSectionBreak = Node.create({
+  name: 'simulatedSectionBreak',
+  group: 'block',
+  atom: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      section: {
+        default: 1,
+        parseHTML: (element: HTMLElement) =>
+          Number.parseInt(element.getAttribute('data-section-break') ?? '1', 10) || 1,
+        renderHTML: (attributes: Record<string, unknown>) => ({
+          'data-section-break': String(attributes['section']),
+        }),
+      },
+      start: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-section-start'),
+        renderHTML: (attributes: Record<string, unknown>) =>
+          typeof attributes['start'] === 'string'
+            ? { 'data-section-start': attributes['start'] }
+            : {},
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'hr[data-section-break]', priority: 60 }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['hr', mergeAttributes(HTMLAttributes)];
+  },
 });
