@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { exportDocx } from '../../export/export-docx';
 import { importDocx } from '../import-docx';
 import { compareDocx } from './compare-docx';
+import type { FidelityReport } from './types';
 
 const DIR = join(import.meta.env.ASTER_FIXTURES, 'docx');
 const CLIENT = join(DIR, 'client', 'Modele_Demo_DER.docx');
@@ -17,19 +18,103 @@ const LAYOUT_FIXTURES = [
   '17-objets-perdus.docx',
 ];
 
+/** Cible de l'aller-retour dans le gabarit (critère d'acceptation de la session 3). */
+const TEMPLATE_TARGET_SCORE = 0.98;
+
 /** Seuil bas de l'aller-retour sans gabarit : l'export neuf perd volontairement les parties annexes. */
 const ROUNDTRIP_MIN_SCORE = 0.3;
+
+/** Fixtures qui atteignent la cible dans le gabarit (score 1 mesuré le 20/10/2026). */
+const TEMPLATE_AT_TARGET = ['11-styles-inline.docx', '13-styles-nommes.docx'];
+
+/**
+ * Fixtures sous la cible dans le gabarit, avec le score mesuré le 20/10/2026 (L28b). Les
+ * parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
+ * viennent du lecteur (`reader/**`) ou du writer (`writer/**`, `export/**`), hors
+ * périmètre du comparateur :
+ * - `12-paragraphes` (0,970) : `paragraph.text` ×3 — `w:tab` lu comme un espace par
+ *   l'import (« paragraphe\ttexte » → « paragraphe texte ») ; `w:br w:type="page"` en fin
+ *   de paragraphe réécrit comme paragraphe séparé (`<hr data-page-break>`).
+ * - `14-tableaux-riches` (0,930) : `table.cellBorders` ×22, `table.borders` ×3,
+ *   `table.cellWidth` ×4, `table.align` ×1 — le writer distribue `insideH`/`insideV` du
+ *   tableau sur les `tcBorders` de chaque cellule (rendu identique, propriété déplacée),
+ *   ajoute une largeur (60 pt) aux cellules du tableau imbriqué et perd le centrage du
+ *   tableau 2 (`w:jc center`).
+ * - `15-listes-numerotation` (0,917) : `table.borders` ×1, `table.cellBorders` ×2,
+ *   `table.cellWidth` ×2, `table.columnWidths` ×1 — même distribution des bordures, et
+ *   largeurs 225,65 pt → 225,75 pt (passage par des pixels entiers).
+ * - `16-sections` (0,756) : `section.count` 2 → 1, `section.pgSz`, `section.pgMar`,
+ *   `section.cols`, `section.type`, `section.titlePg`, `header.*`, `footer.*` — l'import ne
+ *   restitue que la dernière section (`layout`), le `w:sectPr` de la section 1 disparaît et
+ *   ses en-têtes/pieds avec lui (les parties `header*.xml`/`footer*.xml` restent, mais
+ *   référencées par la seule section restante).
+ * - `17-objets-perdus` (0,944) : `paragraph.text` ×6 — espace final des paragraphes retiré
+ *   à l'export (« Forme (wps:wsp sans texte) : » → « … : »), texte de la zone de texte
+ *   réinjecté dans le paragraphe porteur, texte de l'équation (`x2+1=0`) absent.
+ *
+ * La valeur est un **plancher de non-régression** (score mesuré moins une marge), pas un
+ * seuil : la cible reste `TEMPLATE_TARGET_SCORE`, assertée en `it.fails` jusqu'à ce que
+ * ces lots corrigent le writer ou le lecteur. Quand une fixture atteint la cible, le test
+ * `it.fails` échoue : la déplacer dans `TEMPLATE_AT_TARGET`.
+ */
+const TEMPLATE_BELOW_TARGET: Readonly<Record<string, number>> = {
+  '12-paragraphes.docx': 0.96,
+  '14-tableaux-riches.docx': 0.92,
+  '15-listes-numerotation.docx': 0.9,
+  '16-sections.docx': 0.74,
+  '17-objets-perdus.docx': 0.93,
+};
+
+/**
+ * Document client dans le gabarit : 0,830 mesuré le 20/10/2026. Pertes : `paragraph.text`
+ * ×39 (espaces finaux retirés, champs `MERGEFIELD` « «Nom» » réécrits en `{{Nom}}` par le
+ * mode `placeholders`), `run.*` ×23 sur ces mêmes paragraphes (runs non alignables),
+ * `table.cellWidth` ×41 et `table.columnWidths` ×8 (93,95 pt → 93,75 pt, pixels entiers),
+ * `table.borders` ×7 et `table.cellBorders` ×10 (bordures intérieures distribuées),
+ * `section.count` 3 → 1 et `section.pgMar` (distance du pied 22,85 pt → 0), `run.runStyle`
+ * / `run.underline` ajoutés sur un lien (`Lienhypertexte`). Toutes hors périmètre du
+ * comparateur (lecteur, writer).
+ */
+const CLIENT_TEMPLATE_FLOOR = 0.8;
 
 function fixture(name: string): ArrayBuffer {
   const bytes = readFileSync(join(DIR, name));
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-/** Import stylé puis export neuf avec `layout` : le gabarit (L27) n'est pas encore branché. */
+/** Import stylé puis export neuf avec `layout` : ce que l'export reconstruit sans le gabarit. */
 async function roundTrip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   const imported = await importDocx(buffer, { fidelity: 'styled' });
   const blob = await exportDocx(imported.html, { layout: imported.layout });
   return blob.arrayBuffer();
+}
+
+/** Import stylé puis export dans le gabarit (L27), sans modification du contenu. */
+async function templateRoundTrip(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  const imported = await importDocx(buffer, { fidelity: 'styled' });
+  const blob = await exportDocx(imported.html, {
+    template: imported.template,
+    layout: imported.layout,
+  });
+  return blob.arrayBuffer();
+}
+
+/** Rapports de l'aller-retour dans le gabarit, mémorisés : plusieurs tests lisent le même. */
+const templateReports = new Map<string, Promise<FidelityReport>>();
+
+function templateReport(name: string): Promise<FidelityReport> {
+  let report = templateReports.get(name);
+  if (!report) {
+    const original = fixture(name);
+    report = templateRoundTrip(original).then((result) => compareDocx(original, result));
+    templateReports.set(name, report);
+  }
+  return report;
+}
+
+/** Parties changées hors ajouts (une image ou une numérotation ajoutée n'est pas une perte). */
+function changedNotAdded(report: FidelityReport): readonly { path: string; summary: string }[] {
+  return report.changedParts.filter((part) => part.summary !== 'ajoutée');
 }
 
 describe('compareDocx sur les fixtures de mise en page', () => {
@@ -62,14 +147,79 @@ describe('compareDocx sur les fixtures de mise en page', () => {
     expect(text && text.kept / text.total).toBeGreaterThanOrEqual(0.7);
   });
 
-  // TODO L27 : activer quand `exportDocx({ template })` est intégré.
-  it.skip.each(LAYOUT_FIXTURES)('%s aller-retour dans le gabarit : score >= 0,98', async (name) => {
-    const original = fixture(name);
+  it.each(LAYOUT_FIXTURES)(
+    '%s aller-retour dans le gabarit : parties annexes identiques à l’octet',
+    async (name) => {
+      const report = await templateReport(name);
+      expect(changedNotAdded(report)).toEqual([]);
+      expect(report.identicalParts).toContain('word/styles.xml');
+      expect(report.identicalParts).toContain('word/settings.xml');
+      expect(report.identicalParts).toContain('word/theme/theme1.xml');
+      expect(report.properties.filter((p) => p.group === 'package-part' && p.lost > 0)).toEqual([]);
+    },
+  );
+
+  it.each(TEMPLATE_AT_TARGET)('%s aller-retour dans le gabarit : score >= 0,98', async (name) => {
+    const report = await templateReport(name);
+    expect(report.score).toBeGreaterThanOrEqual(TEMPLATE_TARGET_SCORE);
+    expect(report.properties.filter((p) => p.lost > 0)).toEqual([]);
+  });
+
+  // Cible non atteinte, causes hors périmètre du comparateur : voir TEMPLATE_BELOW_TARGET.
+  it.fails.each(Object.keys(TEMPLATE_BELOW_TARGET))(
+    '%s aller-retour dans le gabarit : score >= 0,98 (TODO lecteur/writer)',
+    async (name) => {
+      const report = await templateReport(name);
+      expect(report.score).toBeGreaterThanOrEqual(TEMPLATE_TARGET_SCORE);
+    },
+  );
+
+  it.each(Object.entries(TEMPLATE_BELOW_TARGET))(
+    '%s aller-retour dans le gabarit : pas de régression sous %d',
+    async (name, floor) => {
+      const report = await templateReport(name);
+      expect(report.score).toBeGreaterThanOrEqual(floor);
+      expect(report.score).toBeLessThan(TEMPLATE_TARGET_SCORE);
+      // Les pertes sont dans le corps (texte, tableaux, sections), jamais dans les parties.
+      const lostGroups = new Set(report.properties.filter((p) => p.lost > 0).map((p) => p.group));
+      expect(lostGroups.has('package-part')).toBe(false);
+      expect(lostGroups.size).toBeGreaterThan(0);
+    },
+  );
+
+  it('13-styles-nommes modifié localement : seul paragraph.text diffère, une occurrence', async () => {
+    const original = fixture('13-styles-nommes.docx');
     const imported = await importDocx(original, { fidelity: 'styled' });
-    const blob = await exportDocx(imported.html, { template: imported.template });
+    const before = 'Retour au paragraphe Normal';
+    expect(imported.html).toContain(before);
+    const html = imported.html.replace(before, 'Retour au paragraphe Final');
+    const blob = await exportDocx(html, { template: imported.template, layout: imported.layout });
     const report = await compareDocx(original, await blob.arrayBuffer());
-    expect(report.score).toBeGreaterThanOrEqual(0.98);
-    expect(report.changedParts.filter((part) => part.summary !== 'ajoutée')).toEqual([]);
+
+    const text = report.properties.find((p) => p.name === 'paragraph.text');
+    expect(text?.total).toBe(8);
+    expect(text?.lost).toBe(1);
+    expect(text?.examples).toEqual([
+      { where: 'paragraphe 8', expected: before, actual: 'Retour au paragraphe Final' },
+    ]);
+    // Le mot changé ne désaligne ni le paragraphe ni ses runs : rien d'autre n'est perdu.
+    expect(report.properties.filter((p) => p.lost > 0).map((p) => p.name)).toEqual([
+      'paragraph.text',
+    ]);
+    // Les parties hors corps du gabarit ressortent identiques.
+    expect(report.changedParts).toEqual([]);
+    expect(report.identicalParts).toEqual(
+      expect.arrayContaining([
+        'word/styles.xml',
+        'word/numbering.xml',
+        'word/settings.xml',
+        'word/fontTable.xml',
+        'word/theme/theme1.xml',
+      ]),
+    );
+    // Un paragraphe sur huit modifié : le score reflète la modification (0,971), pas une perte.
+    expect(report.score).toBeLessThan(1);
+    expect(report.score).toBeGreaterThan(0.95);
   });
 
   it('17-objets-perdus : les objets non représentables sont listés', async () => {
@@ -96,6 +246,18 @@ describe.skipIf(!existsSync(CLIENT))('compareDocx sur le document client', () =>
     return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   }
 
+  let clientTemplateReport: Promise<FidelityReport> | undefined;
+
+  function templateReportOfClient(): Promise<FidelityReport> {
+    if (!clientTemplateReport) {
+      const original = client();
+      clientTemplateReport = templateRoundTrip(original).then((result) =>
+        compareDocx(original, result),
+      );
+    }
+    return clientTemplateReport;
+  }
+
   it('comparé à lui-même : score 1', async () => {
     const buffer = client();
     const report = await compareDocx(buffer, buffer.slice(0));
@@ -115,5 +277,24 @@ describe.skipIf(!existsSync(CLIENT))('compareDocx sur le document client', () =>
         `client fidelity score ${String(report.score)}\n${JSON.stringify(report.properties.map((p) => [p.name, p.total, p.kept]))}\n`,
       );
     }
+  });
+
+  it('aller-retour dans le gabarit : parties annexes identiques, pas de régression', async () => {
+    const report = await templateReportOfClient();
+    expect(changedNotAdded(report)).toEqual([]);
+    expect(report.identicalParts).toEqual(
+      expect.arrayContaining(['word/styles.xml', 'word/numbering.xml', 'word/footer1.xml']),
+    );
+    expect(report.score).toBeGreaterThanOrEqual(CLIENT_TEMPLATE_FLOOR);
+    // Le texte reste très majoritairement conservé : les pertes sont des espaces finaux
+    // et des champs de fusion réécrits, pas des paragraphes manquants.
+    const text = report.properties.find((p) => p.name === 'paragraph.text');
+    expect(text && text.kept / text.total).toBeGreaterThanOrEqual(0.75);
+  });
+
+  // Cible non atteinte, causes hors périmètre du comparateur : voir CLIENT_TEMPLATE_FLOOR.
+  it.fails('aller-retour dans le gabarit : score >= 0,98 (TODO lecteur/writer)', async () => {
+    const report = await templateReportOfClient();
+    expect(report.score).toBeGreaterThanOrEqual(TEMPLATE_TARGET_SCORE);
   });
 });

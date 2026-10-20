@@ -48,20 +48,22 @@ Les fichiers `01` à `03` viennent de `scripts/generate-fixtures.ts`, `04` à `0
 
 ## 📏 Score de fidélité attendu
 
-> Mesuré par `node scripts/fidelity-report.ts <fixture>` (import `styled` → export → `compareDocx`), le 20/10/2026 pendant la vague 2. Colonne « sans gabarit » = export neuf avec `layout` : les parties annexes (styles, numérotation, en-têtes, sections) sont régénérées, ce qui plafonne le score. La colonne « gabarit » se remplit quand `exportDocx({ template })` (L27) est intégré ; cible ≥ 0,98 (`compare-fixtures.spec.ts`, test en `it.skip` jusque-là). Un document comparé à lui-même vaut toujours 1.
+> Mesuré par `node scripts/fidelity-report.ts <fixture>` (import `styled` → export → `compareDocx`), le 20/10/2026 pendant la vague 2 (L28b, après intégration de L27). Colonne « Gabarit » = export dans le gabarit (`exportDocx({ template, layout })`, mode par défaut du script) : seul le corps est régénéré, les parties annexes ressortent identiques à l'octet. Colonne « Sans gabarit » = `--no-template`, export neuf avec `layout` : styles, numérotation, en-têtes et sections sont régénérés, ce qui plafonne le score. Cible ≥ 0,98 dans le gabarit (`compare-fixtures.spec.ts`) ; les fixtures sous la cible y sont en `it.fails` documenté avec un plancher de non-régression. Un document comparé à lui-même vaut toujours 1.
 
-| Fixture                       | Sans gabarit | Gabarit (L27) | Ce qui manque sans gabarit                                                                 |
-| ----------------------------- | -----------: | ------------: | ------------------------------------------------------------------------------------------ |
-| `11-styles-inline.docx`       |        0,986 |             — | `styles.xml` réécrit                                                                       |
-| `12-paragraphes.docx`         |        0,958 |             — | paragraphes coupés par le saut de page et la tabulation, `styles.xml`                      |
-| `13-styles-nommes.docx`       |        0,946 |             — | styles perso `Citation` / `Important` ramenés à `Normal`, `styles.xml`                     |
-| `14-tableaux-riches.docx`     |        0,881 |             — | style `TableGrid`, fonds et alignement vertical des cellules, largeurs en pt au lieu de %  |
-| `15-listes-numerotation.docx` |        0,877 |             — | `numId` renumérotés, format `%1)` → `%1.`, `numbering.xml` régénéré                        |
-| `16-sections.docx`            |        0,696 |             — | seconde section, en-têtes `first` / `even`, pieds, `w:cols`, parties d'en-tête             |
-| `17-objets-perdus.docx`       |        0,881 |             — | `comments.xml`, objet incorporé, texte de la zone de texte réinjecté                       |
-| `client/Modele_Demo_DER.docx` |        0,569 |             — | 3 sections → 1, pied de page, styles perso, bordures et fonds de cellules, `numbering.xml` |
+| Fixture                       | Sans gabarit | Gabarit | Ce qui manque dans le gabarit (toutes parties identiques)                                                                                  |
+| ----------------------------- | -----------: | ------: | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `11-styles-inline.docx`       |        0,986 |   **1** | rien                                                                                                                                       |
+| `12-paragraphes.docx`         |        0,958 |   0,970 | `paragraph.text` ×3 : `w:tab` lu comme un espace, `w:br type="page"` en fin de paragraphe réécrit en paragraphe séparé                     |
+| `13-styles-nommes.docx`       |        0,946 |   **1** | rien                                                                                                                                       |
+| `14-tableaux-riches.docx`     |        0,916 |   0,930 | bordures intérieures `insideH`/`insideV` distribuées sur chaque cellule, largeur ajoutée au tableau imbriqué, centrage du tableau 2        |
+| `15-listes-numerotation.docx` |        0,877 |   0,917 | bordures intérieures distribuées sur les cellules, largeurs 225,65 → 225,75 pt (pixels entiers)                                            |
+| `16-sections.docx`            |        0,696 |   0,756 | une seule section restituée : `w:sectPr` de la section 1 perdu, en-têtes et pieds réaffectés à la section restante                         |
+| `17-objets-perdus.docx`       |        0,887 |   0,944 | `paragraph.text` ×6 : espaces finaux retirés, texte de zone de texte réinjecté, texte d'équation absent                                    |
+| `client/Modele_Demo_DER.docx` |        0,571 |   0,830 | 3 sections → 1, espaces finaux, `MERGEFIELD` → `{{nom}}`, largeurs de cellules arrondies, bordures intérieures, distance du pied 22,85 → 0 |
 
 Le seuil bas du test d'aller-retour sans gabarit est 0,3 (`ROUNDTRIP_MIN_SCORE`) : il garantit l'absence de plantage et un texte conservé à ≥ 70 %, pas la fidélité.
+
+Pour voir le détail d'une fixture : `node scripts/fidelity-report.ts fixtures/docx/14-tableaux-riches.docx --keep /tmp/14.docx` (rapport Markdown sur la sortie standard, `--out` pour l'écrire, `--no-template` pour l'export neuf).
 
 ## 🧪 Comment les tester à la main
 

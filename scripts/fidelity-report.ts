@@ -1,17 +1,19 @@
 /**
  * Rapport de fidélité d'un `.docx` (session 3, lot L28) :
  *
- *   node scripts/fidelity-report.ts <fichier.docx> [--out rapport.md] [--keep sortie.docx] [--threshold 0.98]
+ *   node scripts/fidelity-report.ts <fichier.docx> [--out rapport.md] [--keep sortie.docx]
+ *                                    [--threshold 0.98] [--no-template]
  *
- * Importe le document en mode `styled`, le réexporte sans modification, compare l'original
- * et le résultat avec `compareDocx` et imprime un tableau Markdown (groupe, propriété,
- * total, conservé, perdu, exemples), les parties changées, les objets perdus et le score.
- * Code de sortie 1 si le score est sous le seuil (0,98 par défaut).
+ * Importe le document en mode `styled`, le réexporte sans modification **dans son gabarit**
+ * (`exportDocx({ template, layout })`, L27 : les parties annexes du paquet sont conservées,
+ * seul le corps est régénéré), compare l'original et le résultat avec `compareDocx` et
+ * imprime un tableau Markdown (groupe, propriété, total, conservé, perdu, exemples), les
+ * parties changées, les objets perdus et le score. Code de sortie 1 si le score est sous le
+ * seuil (0,98 par défaut).
  *
- * État L27 : `exportDocx({ template })` n'est pas encore intégré, l'export est un **export
- * neuf** avec `layout` ; les parties annexes (styles, numérotation, en-têtes…) sont donc
- * régénérées et le score reste loin du seuil. Quand L27 est intégré, remplacer
- * `{ layout }` par `{ template: imported.template }` dans `roundTrip` (voir TODO L27).
+ * `--no-template` : export **neuf** avec `layout` seul (styles, numérotation, en-têtes…
+ * régénérés). Sert à mesurer ce que l'export neuf sait reconstruire ; le score y est
+ * structurellement plus bas et le seuil s'y applique quand même (ajuster `--threshold`).
  *
  * Chargement des sources : le paquet `word` importe `@aster-editor/core` et ses modules
  * sans extension, ce que Node ne résout pas seul ; on bundle `packages/word/src/index.ts`
@@ -37,6 +39,8 @@ interface CliOptions {
   readonly out?: string;
   readonly keep?: string;
   readonly threshold: number;
+  /** `false` avec `--no-template` : export neuf avec `layout` seul. */
+  readonly template: boolean;
 }
 
 interface FidelityExampleLike {
@@ -77,13 +81,20 @@ interface ImportResultLike {
 /** Surface du bundle utilisée ici, typée à la main : le bundle est du JavaScript. */
 interface WordModule {
   importDocx(input: ArrayBuffer, options: { fidelity: 'styled' }): Promise<ImportResultLike>;
-  exportDocx(html: string, options: { layout?: object; template?: ArrayBuffer }): Promise<Blob>;
+  exportDocx(
+    html: string,
+    options: {
+      layout?: object;
+      template?: ArrayBuffer;
+      onWarning?: (warning: { readonly code: string; readonly message: string }) => void;
+    },
+  ): Promise<Blob>;
   compareDocx(original: ArrayBuffer, result: ArrayBuffer): Promise<FidelityReportLike>;
 }
 
 function usage(): never {
   console.error(
-    'Usage : node scripts/fidelity-report.ts <fichier.docx> [--out rapport.md] [--keep sortie.docx] [--threshold 0.98]',
+    'Usage : node scripts/fidelity-report.ts <fichier.docx> [--out rapport.md] [--keep sortie.docx] [--threshold 0.98] [--no-template]',
   );
   process.exit(2);
 }
@@ -93,6 +104,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let out: string | undefined;
   let keep: string | undefined;
   let threshold = DEFAULT_THRESHOLD;
+  let template = true;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] ?? '';
     const next = (): string => {
@@ -104,12 +116,13 @@ function parseArgs(argv: readonly string[]): CliOptions {
     if (arg === '--out') out = next();
     else if (arg === '--keep') keep = next();
     else if (arg === '--threshold') threshold = Number(next());
+    else if (arg === '--no-template') template = false;
     else if (arg.startsWith('--')) usage();
     else if (input === undefined) input = arg;
     else usage();
   }
   if (input === undefined || !Number.isFinite(threshold)) usage();
-  return { input, out, keep, threshold };
+  return { input, out, keep, threshold, template };
 }
 
 /** Expose le DOM de jsdom en global : le lecteur et l'export en ont besoin (`DOMParser`, `document`). */
@@ -172,17 +185,28 @@ async function readDocx(path: string): Promise<ArrayBuffer> {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-/** Import stylé puis export sans modification. TODO L27 : `{ template: imported.template }`. */
+/**
+ * Import stylé puis export sans modification : dans le gabarit (`template` + `layout`, la
+ * mise en page est alors portée par le gabarit) ou, avec `--no-template`, export neuf avec
+ * `layout` seul. Les avertissements d'import et d'export sont collectés ensemble.
+ */
 async function roundTrip(
   word: WordModule,
   original: ArrayBuffer,
+  useTemplate: boolean,
 ): Promise<{ result: ArrayBuffer; warnings: readonly string[] }> {
   const imported = await word.importDocx(original, { fidelity: 'styled' });
-  const blob = await word.exportDocx(imported.html, { layout: imported.layout });
-  return {
-    result: await blob.arrayBuffer(),
-    warnings: imported.warnings.map((warning) => `${warning.code} : ${warning.message}`),
+  const warnings = imported.warnings.map((w) => `import \`${w.code}\` : ${w.message}`);
+  const onWarning = (w: { readonly code: string; readonly message: string }): void => {
+    warnings.push(`export \`${w.code}\` : ${w.message}`);
   };
+  const blob = await word.exportDocx(
+    imported.html,
+    useTemplate
+      ? { template: imported.template, layout: imported.layout, onWarning }
+      : { layout: imported.layout, onWarning },
+  );
+  return { result: await blob.arrayBuffer(), warnings };
 }
 
 function cell(text: string): string {
@@ -202,12 +226,16 @@ function renderMarkdown(
   report: FidelityReportLike,
   warnings: readonly string[],
   threshold: number,
+  useTemplate: boolean,
 ): string {
   const lines: string[] = [];
   const verdict = report.score >= threshold ? 'OK' : 'KO';
+  const mode = useTemplate
+    ? 'export dans le gabarit (`template` + `layout`)'
+    : 'export neuf avec `layout` (`--no-template`)';
   lines.push(`# Rapport de fidélité — ${name}`, '');
   lines.push(
-    `**Score : ${String(report.score)}** (seuil ${String(threshold)}, ${verdict}) — export neuf avec \`layout\` (gabarit L27 non intégré).`,
+    `**Score : ${String(report.score)}** (seuil ${String(threshold)}, ${verdict}) — ${mode}.`,
     '',
   );
   lines.push('| Groupe | Propriété | Total | Conservé | Perdu | Taux | Exemples |');
@@ -242,7 +270,7 @@ function renderMarkdown(
     lines.push('');
   }
   if (warnings.length > 0) {
-    lines.push("## Avertissements d'import", '');
+    lines.push("## Avertissements d'import et d'export", '');
     for (const warning of warnings) lines.push(`- ${warning}`);
     lines.push('');
   }
@@ -257,10 +285,16 @@ async function main(): Promise<void> {
   installDom();
   const word = await loadWord();
   const original = await readDocx(options.input);
-  const { result, warnings } = await roundTrip(word, original);
+  const { result, warnings } = await roundTrip(word, original, options.template);
   if (options.keep) await writeFile(options.keep, new Uint8Array(result));
   const report = await word.compareDocx(original, result);
-  const markdown = renderMarkdown(basename(options.input), report, warnings, options.threshold);
+  const markdown = renderMarkdown(
+    basename(options.input),
+    report,
+    warnings,
+    options.threshold,
+    options.template,
+  );
   if (options.out) {
     await writeFile(options.out, markdown, 'utf8');
     console.log(`Rapport écrit dans ${options.out}`);
