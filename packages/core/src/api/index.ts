@@ -46,6 +46,8 @@ export type {
   TabAlign,
   TabAttrs,
   TabLeader,
+  TableLook,
+  TableLookFlag,
   TableLayoutAttrs,
 } from './layout';
 export { PARAGRAPH_LAYOUT_ATTR_NAMES } from './layout';
@@ -69,3 +71,4 @@ export type {
   ToolbarPreset,
   ToolbarWidgetItem,
 } from './toolbar';
+export { TABLE_LOOK_FLAGS } from './layout';

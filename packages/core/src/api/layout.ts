@@ -234,6 +234,21 @@ export interface ListLayoutAttrs {
   readonly docxNumId?: string | null;
 }
 
+/** Drapeaux `w:tblLook` ; les six noms sont ceux d'ECMA-376 §17.4.56. */
+export const TABLE_LOOK_FLAGS = [
+  'firstRow',
+  'lastRow',
+  'firstColumn',
+  'lastColumn',
+  'noHBand',
+  'noVBand',
+] as const;
+
+export type TableLookFlag = (typeof TABLE_LOOK_FLAGS)[number];
+
+/** Jeu de drapeaux `w:tblLook` : un drapeau absent vaut faux. */
+export type TableLook = Readonly<Partial<Record<TableLookFlag, boolean>>>;
+
 /** Alignement vertical du contenu d'une cellule. */
 export type CellVerticalAlign = 'top' | 'middle' | 'bottom';
 
@@ -249,6 +264,16 @@ export interface TableLayoutAttrs {
   readonly docxStyle?: string | null;
   /** Alignement horizontal du tableau (`w:jc`), sérialisé en `data-align`. */
   readonly align?: 'left' | 'center' | 'right' | null;
+  /**
+   * Drapeaux `w:tblLook` du style de tableau conditionnel (session 4, vague 3) : quels
+   * formats conditionnels le document active. Sérialisé en `data-docx-look` avec les
+   * drapeaux à vrai, dans l'ordre de `TABLE_LOOK_FLAGS`, séparés par un espace
+   * (`data-docx-look="firstRow firstColumn noVBand"`) ; absent = pas de `w:tblLook`
+   * (le lecteur applique alors le défaut de Word, `0x04A0`, mais ne sérialise rien).
+   * Le writer dans le gabarit réécrit `w:tblLook` depuis ce jeu de drapeaux et retire
+   * les propriétés directes posées par le lecteur pour refléter le style conditionnel.
+   */
+  readonly look?: TableLook | null;
 }
 
 export interface CellLayoutAttrs {
