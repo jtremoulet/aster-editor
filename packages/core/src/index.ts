@@ -117,6 +117,109 @@ export {
   type ImageEditEventDetail,
 } from './extensions/image';
 export { toImageAttributes, type ImageAttributeUpdate } from './commands/images';
+
+// --- Mise en page (session 3) --------------------------------------------
+export {
+  PARAGRAPH_LAYOUT_COMMANDS,
+  TEXT_LAYOUT_COMMANDS,
+  TEXT_LAYOUT_COMMAND_IDS,
+  hasLayoutBlockInSelection,
+  type SetCapsArgs,
+  type SetLetterSpacingArgs,
+  type TextLayoutCommandId,
+} from './commands/layout';
+export {
+  BORDER_BETWEEN_ATTRIBUTE,
+  DOCX_STYLE_ATTRIBUTE,
+  KEEP_NEXT_ATTRIBUTE,
+  PAGE_BREAK_BEFORE_ATTRIBUTE,
+  PARAGRAPH_LAYOUT_EXTENSION_NAME,
+  PARAGRAPH_LAYOUT_TYPES,
+  ParagraphLayout,
+  normalizeParagraphLayoutValue,
+  paragraphLayoutDeclarations,
+  parseLineHeight,
+  parseParagraphLayout,
+  renderParagraphLayout,
+} from './extensions/paragraph-layout';
+export {
+  AsterTextStyle,
+  AsterUnderline,
+  DECORATED_MARK_TYPES,
+  DECORATION_STYLES,
+  DOCX_RUN_STYLE_ATTRIBUTE,
+  RUN_CAPS,
+  RUN_LAYOUT_EXTENSION_NAME,
+  RunLayout,
+  decorationStyleFromShorthand,
+  isCaps,
+  isDecorationStyle,
+  parseCaps,
+  parseDecorationStyle,
+  type RunCaps,
+} from './extensions/run-layout';
+export {
+  BULLET_ATTRIBUTE,
+  DOCX_NUM_ID_ATTRIBUTE,
+  LIST_LAYOUT_EXTENSION_NAME,
+  ListLayout,
+} from './extensions/list-layout';
+export {
+  AsterTable,
+  AsterTableCell,
+  AsterTableHeader,
+  AsterTableView,
+  CELL_VERTICAL_ALIGNS,
+  TABLE_OPTIONS,
+  cellLayoutDeclarations,
+  createTableExtensions,
+  isCellPadding,
+  isCellVerticalAlign,
+  parseCellPadding,
+  parseTableWidth,
+  tableLayoutDeclarations,
+  tableLayoutHtmlAttributes,
+  type CellPadding,
+} from './extensions/table-layout';
+export {
+  createRawStyleSerializer,
+  renderRawSpec,
+  serializeDocumentHtml,
+} from './html/serialize-html';
+export {
+  DEFAULT_PAGE_MARGIN_MM,
+  PAGE_FOOTER_CLASS,
+  PAGE_HEADER_CLASS,
+  PAGE_SIZES_MM,
+  PAGE_VIEW_CLASS,
+  PAGE_VIEW_CSS_VARIABLES,
+  applyPageView,
+  pageViewCssValues,
+  resolvePageMetrics,
+  sanitizeHeaderFooterHtml,
+  type PageMetrics,
+  type PageViewHandle,
+} from './extensions/page-view';
+export {
+  CSS_BORDER_SIDES,
+  borderDeclarations,
+  formatBorderValue,
+  formatNumber,
+  formatPt,
+  isBlockBorder,
+  isBorderSide,
+  isBorderStyle,
+  joinDeclarations,
+  normalizeColor,
+  parseBorderValue,
+  parsePt,
+  parseSideBorders,
+  parseStyleDeclarations,
+  readStyleProperty,
+  roundLayoutNumber,
+  sanitizeBorders,
+  type CssBorderSide,
+} from './extensions/layout-css';
 export { normalizeOutputHtml } from './html/normalize-output';
 export { CONTENT_CLASS } from './editor/aster-editor';
 export {

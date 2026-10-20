@@ -5,6 +5,7 @@ import { BLOCK_COMMANDS } from './blocks';
 import { FORMAT_PAINTER_COMMANDS } from './format-painter';
 import { HISTORY_COMMANDS } from './history';
 import { createImageCommands } from './images';
+import { PARAGRAPH_LAYOUT_COMMANDS, TEXT_LAYOUT_COMMANDS } from './layout';
 import { createLinkCommands } from './links';
 import { LIST_COMMANDS } from './lists';
 import { MARK_COMMANDS } from './marks';
@@ -21,9 +22,10 @@ export interface StandardCommandsContext {
 
 /**
  * Toutes les commandes de `STANDARD_COMMAND_IDS`, dans l'ordre du contrat, suivies
- * des commandes supplémentaires `search.*` (hors contrat figé, mais fournies par le
- * core). Les liens et images sont fabriqués par éditeur puisqu'ils dépendent de sa
- * politique et de son hook d'upload ; le reste est partagé et sans état.
+ * des commandes supplémentaires `search.*`, `formatPainter.*` et `text.*` (hors contrat
+ * figé, mais fournies par le core). Les liens et images sont fabriqués par éditeur
+ * puisqu'ils dépendent de sa politique et de son hook d'upload ; le reste est partagé
+ * et sans état.
  */
 export function createStandardCommands(context: StandardCommandsContext): AsterCommand[] {
   return [
@@ -36,8 +38,10 @@ export function createStandardCommands(context: StandardCommandsContext): AsterC
     ...TABLE_COMMANDS,
     ...TEXT_STYLE_COMMANDS,
     ...VARIABLE_COMMANDS,
+    ...PARAGRAPH_LAYOUT_COMMANDS,
     ...HISTORY_COMMANDS,
     ...SEARCH_COMMANDS,
     ...FORMAT_PAINTER_COMMANDS,
+    ...TEXT_LAYOUT_COMMANDS,
   ];
 }

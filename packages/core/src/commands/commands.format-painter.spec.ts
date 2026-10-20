@@ -64,17 +64,17 @@ describe('format painter', () => {
     selectRange(mounted.editor, 1, 3);
     const format = readFormat(mounted.editor);
     expect(format.marks.map((mark) => mark.type.name).sort()).toEqual(['bold', 'italic']);
-    expect(format.block).toEqual({
-      type: 'heading',
-      attrs: { level: 2, textAlign: 'center' },
-    });
+    // Les attributs de mise en page (session 3) sont présents à `null` : on vérifie le
+    // type, les attributs de mise en forme et l'absence d'`id`, pas la liste exacte.
+    expect(format.block?.type).toBe('heading');
+    expect(format.block?.attrs).toMatchObject({ level: 2, textAlign: 'center' });
+    expect(format.block?.attrs).not.toHaveProperty('id');
     const link = findNodePos(mounted.editor, 'paragraph') + 7;
     selectRange(mounted.editor, link, link + 2);
     expect(readFormat(mounted.editor).marks).toEqual([]);
-    expect(readFormat(mounted.editor).block).toEqual({
-      type: 'paragraph',
-      attrs: { textAlign: null },
-    });
+    const paragraph = readFormat(mounted.editor).block;
+    expect(paragraph?.type).toBe('paragraph');
+    expect(paragraph?.attrs).toMatchObject({ textAlign: null });
   });
 
   it('copy charge le presse-papier (isActive), paste n’est exécutable qu’ensuite', () => {
@@ -104,8 +104,8 @@ describe('format painter', () => {
     selectRange(mounted.editor, paragraph + 1, paragraph + 17);
     expect(mounted.editor.commands.run('formatPainter.paste')).toBe(true);
     expect(bodyHtml(mounted.editor)).toBe(
-      '<h2 style="text-align: center;"><strong><em>Titre</em></strong></h2>' +
-        '<h2 style="text-align: center;"><strong><em>plain </em></strong>' +
+      '<h2 style="text-align: center"><strong><em>Titre</em></strong></h2>' +
+        '<h2 style="text-align: center"><strong><em>plain </em></strong>' +
         '<a href="https://a.dev/"><strong><em>lien</em></strong></a>' +
         '<strong><em> suite</em></strong></h2>',
     );
@@ -125,9 +125,9 @@ describe('format painter', () => {
     selectRange(mounted.editor, 1, 16);
     expect(mounted.editor.commands.run('formatPainter.paste')).toBe(true);
     expect(bodyHtml(mounted.editor)).toBe(
-      '<h2 style="text-align: right;"><strong>souligné</strong></h2>' +
-        '<h2 style="text-align: right;" id="aster-h-1"><strong>Cible</strong></h2>' +
-        '<h2 style="text-align: right;"><strong>gras</strong></h2>',
+      '<h2 style="text-align: right"><strong>souligné</strong></h2>' +
+        '<h2 style="text-align: right" id="aster-h-1"><strong>Cible</strong></h2>' +
+        '<h2 style="text-align: right"><strong>gras</strong></h2>',
     );
   });
 
@@ -146,7 +146,7 @@ describe('format painter', () => {
     });
     expect(mounted.editor.commands.run('formatPainter.paste')).toBe(true);
     expect(bodyHtml(mounted.editor)).toContain(
-      '<h2 style="text-align: center;"><strong><em>plain</em></strong> <a href=',
+      '<h2 style="text-align: center"><strong><em>plain</em></strong> <a href=',
     );
   });
 
