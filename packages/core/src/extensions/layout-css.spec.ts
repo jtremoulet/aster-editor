@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LAYOUT_NUMBER_LIMIT,
   betweenBorder,
   borderDeclarations,
   formatBorderValue,
   formatNumber,
   formatPt,
   isBlockBorder,
+  isLayoutNumber,
   joinDeclarations,
   normalizeColor,
   parseBorderValue,
@@ -27,6 +29,30 @@ describe('layout-css', () => {
     expect(formatNumber(1.15)).toBe('1.15');
     expect(formatNumber(1.5)).toBe('1.5');
     expect(roundLayoutNumber(2.999)).toBe(3);
+  });
+
+  it('R23-05 : borne les nombres à ±100 000, jamais Infinity ni NaN en sortie', () => {
+    expect(LAYOUT_NUMBER_LIMIT).toBe(100_000);
+    expect(formatPt(1e307)).toBe('100000pt');
+    expect(formatPt(-1e307)).toBe('-100000pt');
+    expect(formatNumber(Number.POSITIVE_INFINITY)).toBe('100000');
+    expect(roundLayoutNumber(1e307)).toBe(100_000);
+    expect(isLayoutNumber(100_000)).toBe(true);
+    expect(isLayoutNumber(-100_000)).toBe(true);
+    expect(isLayoutNumber(100_000.01)).toBe(false);
+    expect(isLayoutNumber(1e307)).toBe(false);
+    expect(isLayoutNumber(Number.NaN)).toBe(false);
+    expect(isLayoutNumber(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isLayoutNumber('6')).toBe(false);
+    expect(parsePt('100000000pt')).toBeNull();
+    expect(parsePt('100000pt')).toBe(100_000);
+    expect(parsePt('200000px')).toBeNull();
+    expect(isBlockBorder({ side: 'top', style: 'solid', widthPt: 1e307, color: '#000' })).toBe(
+      false,
+    );
+    expect(
+      sanitizeBorders([{ side: 'top', style: 'solid', widthPt: 1e307, color: '#000' }]),
+    ).toBeNull();
   });
 
   it('lit les longueurs en pt, px (×0,75) et 0 sans unité, refuse le reste', () => {

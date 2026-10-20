@@ -11,7 +11,7 @@ import {
   formatBorderValue,
   formatNumber,
   formatPt,
-  isFiniteNumber,
+  isLayoutNumber,
   joinDeclarations,
   normalizeColor,
   parseBorderValue,
@@ -46,9 +46,18 @@ const PT_PROPERTIES: readonly [ParagraphLayoutAttrName, string][] = [
   ['indentFirstLinePt', 'text-indent'],
 ];
 
-/** Nombre fini ou `null` : tout le reste (chaîne, `NaN`) est traité comme absent. */
+/**
+ * Nombre de mise en page (fini, borné) ou `null` : tout le reste (chaîne, `NaN`, `1e307`)
+ * est traité comme absent, pour ne jamais sérialiser `Infinitypt`.
+ */
 function numberOrNull(value: unknown): number | null {
-  return isFiniteNumber(value) ? roundLayoutNumber(value) : null;
+  return isLayoutNumber(value) ? roundLayoutNumber(value) : null;
+}
+
+/** Nombre lu dans un `style` : `null` si hors bornes ou illisible. */
+function parsedNumber(text: string): number | null {
+  const number = Number.parseFloat(text);
+  return isLayoutNumber(number) ? roundLayoutNumber(number) : null;
 }
 
 /** Chaîne non vide ou `null`. */
@@ -70,12 +79,13 @@ export function parseLineHeight(value: string | null): {
   const trimmed = value.trim();
   const multiple = /^(\d+(?:\.\d+)?)$/.exec(trimmed);
   if (multiple?.[1] !== undefined) {
-    return { lineHeight: roundLayoutNumber(Number.parseFloat(multiple[1])), lineHeightPt: null };
+    return { lineHeight: parsedNumber(multiple[1]), lineHeightPt: null };
   }
   const percent = /^(\d+(?:\.\d+)?)%$/.exec(trimmed);
   if (percent?.[1] !== undefined) {
+    const ratio = parsedNumber(percent[1]);
     return {
-      lineHeight: roundLayoutNumber(Number.parseFloat(percent[1]) / 100),
+      lineHeight: ratio === null ? null : roundLayoutNumber(ratio / 100),
       lineHeightPt: null,
     };
   }
@@ -179,7 +189,13 @@ export function renderParagraphLayout(attributes: Record<string, unknown>): Reco
 
 /**
  * Normalise une valeur d'attribut telle que `setLayout` la reçoit : nombres arrondis,
- * bordures filtrées, couleurs normalisées, booléens stricts. `undefined` = inchangé.
+ * bordures filtrées, couleurs normalisées, booléens stricts.
+ *
+ * Trois issues, à ne pas confondre : `null` efface l'attribut (demande explicite : `null`,
+ * `false`, chaîne vide, tableau vide) ; `undefined` signifie « ignorer » (attribut absent,
+ * ou valeur **invalide** : `'abc'` pour un nombre, `NaN`, `1e307`, un mot qui n'est pas une
+ * couleur, des bordures toutes mal formées). Une valeur invalide ne doit jamais effacer ce
+ * que le bloc portait.
  */
 export function normalizeParagraphLayoutValue(
   name: ParagraphLayoutAttrName,
@@ -193,16 +209,25 @@ export function normalizeParagraphLayoutValue(
   }
   switch (name) {
     case 'borders':
-      return sanitizeBorders(value);
+      if (!Array.isArray(value)) {
+        return undefined;
+      }
+      return value.length === 0 ? null : (sanitizeBorders(value) ?? undefined);
     case 'shading':
-      return normalizeColor(stringOrNull(value));
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+      return value === '' ? null : (normalizeColor(value) ?? undefined);
     case 'docxStyle':
-      return stringOrNull(value);
+      return typeof value === 'string' ? stringOrNull(value) : undefined;
     case 'keepWithNext':
     case 'pageBreakBefore':
-      return value === true ? true : null;
+      if (typeof value !== 'boolean') {
+        return undefined;
+      }
+      return value ? true : null;
     default:
-      return numberOrNull(value);
+      return numberOrNull(value) ?? undefined;
   }
 }
 

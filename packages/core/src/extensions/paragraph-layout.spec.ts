@@ -135,14 +135,36 @@ describe('ParagraphLayout', () => {
 
     it('normalizeParagraphLayoutValue normalise chaque famille d’attribut', () => {
       expect(normalizeParagraphLayoutValue('spacingBeforePt', 6.789)).toBe(6.79);
-      expect(normalizeParagraphLayoutValue('spacingBeforePt', '6')).toBeNull();
       expect(normalizeParagraphLayoutValue('shading', '#ABC')).toBe('#aabbcc');
-      expect(normalizeParagraphLayoutValue('docxStyle', '')).toBeNull();
-      expect(normalizeParagraphLayoutValue('keepWithNext', 1)).toBeNull();
       expect(normalizeParagraphLayoutValue('keepWithNext', true)).toBe(true);
-      expect(normalizeParagraphLayoutValue('borders', [])).toBeNull();
       expect(normalizeParagraphLayoutValue('borders', null)).toBeNull();
       expect(normalizeParagraphLayoutValue('borders', undefined)).toBeUndefined();
+    });
+
+    it('R23-06 : null, false, vide effacent ; une valeur invalide est ignorée (undefined)', () => {
+      // Effacement explicite.
+      expect(normalizeParagraphLayoutValue('spacingBeforePt', null)).toBeNull();
+      expect(normalizeParagraphLayoutValue('docxStyle', '')).toBeNull();
+      expect(normalizeParagraphLayoutValue('shading', '')).toBeNull();
+      expect(normalizeParagraphLayoutValue('keepWithNext', false)).toBeNull();
+      expect(normalizeParagraphLayoutValue('borders', [])).toBeNull();
+      // Invalide : à ignorer, jamais à effacer.
+      expect(normalizeParagraphLayoutValue('spacingBeforePt', '6')).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('lineHeight', 'abc')).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('lineHeight', Number.NaN)).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('lineHeight', 1e307)).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('shading', 'pas-une-couleur')).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('shading', 12)).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('docxStyle', 5)).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('keepWithNext', 1)).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('borders', [{}])).toBeUndefined();
+      expect(normalizeParagraphLayoutValue('borders', 'x')).toBeUndefined();
+    });
+
+    it('R23-05 : parseLineHeight refuse un multiple hors bornes', () => {
+      expect(parseLineHeight('99999999999')).toEqual({ lineHeight: null, lineHeightPt: null });
+      expect(parseLineHeight('99999999999%')).toEqual({ lineHeight: null, lineHeightPt: null });
+      expect(parseLineHeight('100000000pt')).toEqual({ lineHeight: null, lineHeightPt: null });
     });
   });
 
@@ -313,6 +335,66 @@ describe('ParagraphLayout', () => {
       mounted.editor.commands.run('paragraph.setLayout', { spacingBeforePt: 6 });
       expect(mounted.editor.commands.run('undo')).toBe(true);
       expect(mounted.editor.getHTML()).toBe('<p>x</p>');
+    });
+
+    it('R23-06 : une valeur invalide est ignorée et ne vide pas l’attribut existant', () => {
+      const html = '<p style="margin-top: 6pt; line-height: 1.5">x</p>';
+      mounted.editor.setHTML(html);
+      selectFirstBlock(mounted.editor);
+      const expected = '<p style="line-height: 1.5; margin-top: 6pt">x</p>';
+      expect(mounted.editor.getHTML()).toBe(expected);
+      for (const args of [
+        { lineHeight: 'abc' },
+        { lineHeight: Number.NaN },
+        { lineHeight: 1e307 },
+        { shading: 'pas-une-couleur' },
+        { borders: [{}] },
+        { spacingBeforePt: '12' },
+      ] as unknown as ParagraphLayoutAttrs[]) {
+        expect(
+          mounted.editor.commands.canRun('paragraph.setLayout', args),
+          JSON.stringify(args),
+        ).toBe(false);
+        expect(mounted.editor.commands.run('paragraph.setLayout', args), JSON.stringify(args)).toBe(
+          false,
+        );
+        expect(mounted.editor.getHTML()).toBe(expected);
+      }
+      // Un argument invalide à côté d'un valide : le valide s'applique, l'invalide est ignoré.
+      expect(
+        mounted.editor.commands.run('paragraph.setLayout', {
+          lineHeight: 'abc',
+          spacingAfterPt: 3,
+        } as unknown as ParagraphLayoutAttrs),
+      ).toBe(true);
+      expect(mounted.editor.getHTML()).toBe(
+        '<p style="line-height: 1.5; margin-top: 6pt; margin-bottom: 3pt">x</p>',
+      );
+      // `null` seul efface, comme avant ; `{}` reste sondable par la toolbar.
+      expect(mounted.editor.commands.canRun('paragraph.setLayout', {})).toBe(true);
+      expect(mounted.editor.commands.run('paragraph.setLayout', { lineHeight: null })).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p style="margin-top: 6pt; margin-bottom: 3pt">x</p>');
+    });
+
+    it('R23-05 : un nombre hors bornes est refusé, jamais sérialisé en Infinity', () => {
+      selectFirstBlock(mounted.editor);
+      expect(mounted.editor.commands.run('paragraph.setLayout', { spacingBeforePt: 1e307 })).toBe(
+        false,
+      );
+      expect(mounted.editor.getHTML()).toBe('<p>x</p>');
+      // Posé en force par `setJSON` : rien d'émis plutôt qu'`Infinitypt`.
+      mounted.editor.setJSON({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { spacingBeforePt: 1e307, lineHeight: Number.POSITIVE_INFINITY },
+            content: [{ type: 'text', text: 'x' }],
+          },
+        ],
+      });
+      expect(mounted.editor.getHTML()).toBe('<p>x</p>');
+      expect(mounted.editor.getHTML()).not.toContain('Infinity');
     });
   });
 

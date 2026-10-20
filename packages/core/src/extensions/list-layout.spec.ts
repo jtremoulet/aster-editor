@@ -9,17 +9,20 @@ function expectIdempotent(mounted: MountedEditor): string {
   return html;
 }
 
-/** Attributs du premier nœud du type donné. */
+/** Attributs du premier nœud du type donné (le parcours s'arrête au premier trouvé). */
 function attrsOf(mounted: MountedEditor, typeName: string): Record<string, unknown> {
-  let found: Record<string, unknown> = {};
+  let found: Record<string, unknown> | null = null;
   mounted.editor.tiptap.state.doc.descendants((node) => {
+    if (found) {
+      return false;
+    }
     if (node.type.name === typeName) {
       found = node.attrs;
       return false;
     }
     return true;
   });
-  return found;
+  return found ?? {};
 }
 
 describe('ListLayout', () => {
@@ -80,6 +83,24 @@ describe('ListLayout', () => {
       '<ol data-docx-num-id="1"><li><p>a</p><ul data-bullet="•" data-docx-num-id="1"><li><p>b</p></li></ul></li></ol>';
     mounted.editor.setHTML(html);
     expect(expectIdempotent(mounted)).toBe(html);
+  });
+
+  it('R25 (relais) : data-docx-num-indent sur un paragraphe d’item est conservé et resérialisé', () => {
+    // Forme produite par le lecteur Word (fixture 15) : `style`, `data-docx-style`, puis le drapeau.
+    const html =
+      '<ol data-docx-num-id="1"><li><p style="margin-left: 36pt; text-indent: -18pt" data-docx-style="ListParagraph" data-docx-num-indent="">x</p></li></ol>';
+    mounted.editor.setHTML(html);
+    expect(attrsOf(mounted, 'paragraph')).toMatchObject({ docxNumIndent: true });
+    expect(bodyHtml(mounted.editor)).toBe(html);
+    expectIdempotent(mounted);
+    // Attribut nu (sans `=""`) et sur un titre : même lecture.
+    mounted.editor.setHTML('<h2 data-docx-num-indent>T</h2>');
+    expect(attrsOf(mounted, 'heading')).toMatchObject({ docxNumIndent: true });
+    expect(bodyHtml(mounted.editor)).toBe('<h2 data-docx-num-indent="">T</h2>');
+    // Absent : `null`, rien d'émis.
+    mounted.editor.setHTML('<p>x</p>');
+    expect(attrsOf(mounted, 'paragraph')['docxNumIndent']).toBeNull();
+    expect(bodyHtml(mounted.editor)).toBe('<p>x</p>');
   });
 
   it('les commandes de liste fonctionnent toujours et ne posent aucun attribut', () => {

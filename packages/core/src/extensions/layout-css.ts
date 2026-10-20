@@ -45,9 +45,22 @@ const COLOR_KEYWORDS: ReadonlySet<string> = new Set([
   'yellow',
 ]);
 
-/** Arrondit à deux décimales au plus, sans zéro superflu (`6` → `6`, `6.5` → `6.5`). */
+/**
+ * Borne absolue des nombres de mise en page (points, multiples d'interligne) : ±100 000.
+ * Word plafonne bien plus bas (retraits ≤ 1 584 pt, espacements ≤ 1 584 pt), une valeur
+ * au-delà vient d'une erreur ou d'une attaque ; surtout, `value * 100` déborde vers
+ * `Infinity` dès 1e307 et finirait sérialisé en `Infinitypt` que personne ne relit.
+ */
+export const LAYOUT_NUMBER_LIMIT = 100_000;
+
+/**
+ * Arrondit à deux décimales au plus, sans zéro superflu (`6` → `6`, `6.5` → `6.5`), en
+ * bornant d'abord à ±`LAYOUT_NUMBER_LIMIT` : jamais `Infinity` en sortie. Un `NaN` ressort
+ * `NaN` — c'est aux appelants de garder `isLayoutNumber` en amont.
+ */
 export function roundLayoutNumber(value: number): number {
-  return Math.round(value * 100) / 100;
+  const clamped = Math.max(-LAYOUT_NUMBER_LIMIT, Math.min(LAYOUT_NUMBER_LIMIT, value));
+  return Math.round(clamped * 100) / 100;
 }
 
 /** Formate une longueur en points : `6pt`, `6.5pt`, jamais plus de deux décimales. */
@@ -66,8 +79,18 @@ export function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
+ * Vrai pour un nombre de mise en page acceptable : fini et dans ±`LAYOUT_NUMBER_LIMIT`.
+ * C'est la garde à poser avant tout `roundLayoutNumber` / `formatPt` sur une valeur qui
+ * vient de l'extérieur (arguments de commande, attributs posés par `setJSON`, HTML).
+ */
+export function isLayoutNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && Math.abs(value) <= LAYOUT_NUMBER_LIMIT;
+}
+
+/**
  * Lit une longueur CSS en points. Accepte `pt`, `px` (converti), `0` sans unité ; refuse
- * tout le reste (`em`, `%`, `auto`) : on ne sait pas les convertir sans contexte.
+ * tout le reste (`em`, `%`, `auto`) : on ne sait pas les convertir sans contexte. Une
+ * longueur hors de ±`LAYOUT_NUMBER_LIMIT` est refusée comme une valeur illisible.
  */
 export function parsePt(value: string | null | undefined): number | null {
   if (!value) {
@@ -78,17 +101,15 @@ export function parsePt(value: string | null | undefined): number | null {
     return null;
   }
   const number = Number.parseFloat(match[1]);
-  if (!Number.isFinite(number)) {
-    return null;
-  }
   const unit = (match[2] ?? '').toLowerCase();
-  if (unit === 'px') {
-    return roundLayoutNumber(number * PT_PER_PX);
+  const pt = unit === 'px' ? number * PT_PER_PX : number;
+  if (!isLayoutNumber(pt)) {
+    return null;
   }
   if (unit === '' && number !== 0) {
     return null;
   }
-  return roundLayoutNumber(number);
+  return roundLayoutNumber(pt);
 }
 
 /**
@@ -181,7 +202,7 @@ export function isBlockBorder(value: unknown): value is BlockBorder {
   return (
     isBorderSide(candidate['side']) &&
     isBorderStyle(candidate['style']) &&
-    isFiniteNumber(candidate['widthPt']) &&
+    isLayoutNumber(candidate['widthPt']) &&
     typeof candidate['color'] === 'string'
   );
 }

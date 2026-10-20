@@ -14,7 +14,7 @@ import { DOCX_STYLE_ATTRIBUTE } from './paragraph-layout';
 import {
   borderDeclarations,
   formatPt,
-  isFiniteNumber,
+  isLayoutNumber,
   joinDeclarations,
   normalizeColor,
   parsePt,
@@ -27,6 +27,27 @@ import {
 /** Options de table partagées par le jeu d'Aster. */
 export const TABLE_OPTIONS = { resizable: true, cellMinWidth: 48 } as const;
 
+/**
+ * Bornes de `colspan` et `rowspan` à l'analyse HTML : Word plafonne une table à 63
+ * colonnes, et 1 000 lignes fusionnées couvrent tout usage réel. Au-delà, prosemirror-tables
+ * alloue une grille proportionnelle au produit des fusions : un `colspan="1000000"` dans
+ * un `.docx` (revue R25) tuait l'onglet à 4 Go de tas.
+ */
+export const MAX_COLSPAN = 63;
+export const MAX_ROWSPAN = 1000;
+
+/**
+ * Lit un `colspan` / `rowspan` HTML : entier dans `[1, max]`, tout le reste (vide, texte,
+ * zéro, négatif, trop grand) ramené à 1 ou à la borne.
+ */
+export function parseSpan(value: string | null, max: number): number {
+  const span = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(span) || span < 1) {
+    return 1;
+  }
+  return Math.min(span, max);
+}
+
 /** Alignements verticaux de cellule reconnus. */
 export const CELL_VERTICAL_ALIGNS: readonly CellVerticalAlign[] = ['top', 'middle', 'bottom'];
 
@@ -38,9 +59,9 @@ export function isCellVerticalAlign(value: unknown): value is CellVerticalAlign 
   return typeof value === 'string' && (CELL_VERTICAL_ALIGNS as readonly string[]).includes(value);
 }
 
-/** Vrai pour un quadruplet de nombres finis. */
+/** Vrai pour un quadruplet de nombres de mise en page (finis, bornés). */
 export function isCellPadding(value: unknown): value is CellPadding {
-  return Array.isArray(value) && value.length === 4 && value.every(isFiniteNumber);
+  return Array.isArray(value) && value.length === 4 && value.every(isLayoutNumber);
 }
 
 /**
@@ -184,29 +205,60 @@ function tableLayoutAttributes(): Record<string, Attribute> {
   };
 }
 
+/** Vrai si au moins une cellule de la première ligne porte un `colwidth` (colonne redimensionnée). */
+function hasResizedColumn(node: ProseMirrorNode): boolean {
+  const row = node.firstChild;
+  if (!row) {
+    return false;
+  }
+  for (let index = 0; index < row.childCount; index += 1) {
+    const colwidth: unknown = row.child(index).attrs['colwidth'];
+    if (Array.isArray(colwidth) && colwidth.some((width) => width !== null)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Vue de table en édition (mode redimensionnable) : celle de Tiptap, qui ne reçoit aucun
  * attribut rendu de `columnResizing`, complétée par le `style` et le `data-docx-style`
- * de mise en page, resynchronisés à chaque mise à jour du nœud. La largeur de mise en
- * page reste écrasée par celle que Tiptap calcule depuis les colonnes (`updateColumns`),
- * les bordures sont visibles.
+ * de mise en page, resynchronisés à la construction et à chaque mise à jour du nœud.
+ *
+ * Largeur : tant qu'aucune colonne n'est redimensionnée, la largeur du contrat
+ * (`width: 100%`, `width: 450pt`) est celle affichée, comme dans `getHTML()` ; dès qu'une
+ * colonne porte un `colwidth`, c'est la largeur que Tiptap calcule depuis les colonnes
+ * (`updateColumns`) qui prime, sinon le redimensionnement ne se verrait pas. Le
+ * `min-width` de Tiptap est conservé dans les deux cas.
  */
 export class AsterTableView extends TableView {
   constructor(node: ProseMirrorNode, cellMinWidth: number, view?: EditorView) {
     super(node, cellMinWidth, view, tableLayoutHtmlAttributes(node.attrs));
+    this.syncLayout(node);
   }
 
   override update(node: ProseMirrorNode): boolean {
     if (!super.update(node)) {
       return false;
     }
+    this.syncLayout(node);
+    return true;
+  }
+
+  /** Réapplique `style` et `data-docx-style` de mise en page après `updateColumns`. */
+  private syncLayout(node: ProseMirrorNode): void {
     const rendered = tableLayoutHtmlAttributes(node.attrs);
     const style = rendered['style'];
-    const width = this.table.style.width;
+    const computedWidth = this.table.style.width;
     const minWidth = this.table.style.minWidth;
+    const layoutWidth = parseTableWidth(
+      typeof node.attrs['width'] === 'string' ? node.attrs['width'] : null,
+    );
     this.table.style.cssText = style ?? '';
-    // `updateColumns` vient de poser la largeur calculée : on la garde.
-    this.table.style.width = width;
+    if (!layoutWidth || hasResizedColumn(node)) {
+      // `updateColumns` vient de poser la largeur calculée : on la garde.
+      this.table.style.width = computedWidth;
+    }
     this.table.style.minWidth = minWidth;
     const docxStyle = rendered[DOCX_STYLE_ATTRIBUTE];
     if (docxStyle === undefined) {
@@ -214,17 +266,26 @@ export class AsterTableView extends TableView {
     } else {
       this.table.setAttribute(DOCX_STYLE_ATTRIBUTE, docxStyle);
     }
-    return true;
   }
 }
 
 /**
  * Attributs de `CellLayoutAttrs`, ajoutés après ceux de Tiptap (`colspan`, `rowspan`,
  * `colwidth`, `align`) : le `text-align` de Tiptap vient donc en premier dans le `style`.
- * `borders` émet tout le `style` de mise en page.
+ * `borders` émet tout le `style` de mise en page. `colspan` et `rowspan` remplacent ceux de
+ * Tiptap (qui lisait l'attribut tel quel) pour les borner à l'analyse ; leur rendu reste
+ * celui de Tiptap, qui omet la valeur par défaut `1`.
  */
 function cellLayoutAttributes(): Record<string, Attribute> {
   return {
+    colspan: {
+      default: 1,
+      parseHTML: (element) => parseSpan(element.getAttribute('colspan'), MAX_COLSPAN),
+    },
+    rowspan: {
+      default: 1,
+      parseHTML: (element) => parseSpan(element.getAttribute('rowspan'), MAX_ROWSPAN),
+    },
     borders: {
       default: null,
       parseHTML: (element) => {

@@ -1,10 +1,12 @@
-import type { Transaction } from '@tiptap/pm/state';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import type { Selection, Transaction } from '@tiptap/pm/state';
 import {
   PARAGRAPH_LAYOUT_ATTR_NAMES,
   type AsterCommand,
   type AsterEditor,
   type ParagraphLayoutAttrName,
 } from '../api';
+import { isLayoutNumber } from '../extensions/layout-css';
 import {
   PARAGRAPH_LAYOUT_TYPES,
   normalizeParagraphLayoutValue,
@@ -33,19 +35,50 @@ export type TextLayoutCommandId = (typeof TEXT_LAYOUT_COMMAND_IDS)[number];
 
 const LAYOUT_TYPES: readonly string[] = PARAGRAPH_LAYOUT_TYPES;
 
+/**
+ * Parcourt chaque paragraphe et titre de la sélection, **plage par plage** : une
+ * `CellSelection` (prosemirror-tables) n'a pour `from`/`to` que la cellule d'ancrage et
+ * porte les autres cellules dans `selection.ranges` ; ne lire que `from`/`to` n'appliquerait
+ * la commande qu'à une cellule sur quatre. Les plages peuvent se recouvrir (sélection de
+ * texte simple : une seule plage ; cellules fusionnées) : chaque bloc n'est visité qu'une
+ * fois, par position. Renvoyer `false` depuis `visit` arrête le parcours.
+ */
+function forEachLayoutBlock(
+  doc: ProseMirrorNode,
+  selection: Selection,
+  visit: (node: ProseMirrorNode, pos: number) => boolean | undefined,
+): void {
+  const seen = new Set<number>();
+  let stopped = false;
+  for (const { $from, $to } of selection.ranges) {
+    if (stopped) {
+      return;
+    }
+    doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
+      if (stopped) {
+        return false;
+      }
+      if (!LAYOUT_TYPES.includes(node.type.name)) {
+        return true;
+      }
+      if (!seen.has(pos)) {
+        seen.add(pos);
+        if (visit(node, pos) === false) {
+          stopped = true;
+        }
+      }
+      return false;
+    });
+  }
+}
+
 /** Vrai si la sélection touche au moins un paragraphe ou un titre. */
 export function hasLayoutBlockInSelection(editor: AsterEditor): boolean {
   const { selection, doc } = editor.tiptap.state;
   let found = false;
-  doc.nodesBetween(selection.from, selection.to, (node) => {
-    if (found) {
-      return false;
-    }
-    if (LAYOUT_TYPES.includes(node.type.name)) {
-      found = true;
-      return false;
-    }
-    return true;
+  forEachLayoutBlock(doc, selection, () => {
+    found = true;
+    return false;
   });
   return found;
 }
@@ -59,15 +92,11 @@ function updateLayoutBlocks(
   tr: Transaction,
   update: (attrs: Record<string, unknown>) => Record<string, unknown>,
 ): boolean {
-  const { selection } = tr;
   const targets: { pos: number; attrs: Record<string, unknown> }[] = [];
-  tr.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
-    if (LAYOUT_TYPES.includes(node.type.name)) {
-      const attrs = update({ ...node.attrs });
-      if (!sameAttrs(node.attrs, attrs)) {
-        targets.push({ pos, attrs });
-      }
-      return false;
+  forEachLayoutBlock(tr.doc, tr.selection, (node, pos) => {
+    const attrs = update({ ...node.attrs });
+    if (!sameAttrs(node.attrs, attrs)) {
+      targets.push({ pos, attrs });
     }
     return true;
   });
@@ -89,7 +118,11 @@ function sameAttrs(a: Record<string, unknown>, b: Record<string, unknown>): bool
   return true;
 }
 
-/** Ne garde des arguments que les attributs du contrat, normalisés ; `undefined` ignoré. */
+/**
+ * Ne garde des arguments que les attributs du contrat, normalisés. Une valeur invalide
+ * (`normalizeParagraphLayoutValue` → `undefined`) est **ignorée**, pas transformée en
+ * effacement : seul `null` efface.
+ */
 function layoutChanges(args: unknown): Partial<Record<ParagraphLayoutAttrName, unknown>> {
   const changes: Partial<Record<ParagraphLayoutAttrName, unknown>> = {};
   if (typeof args !== 'object' || args === null) {
@@ -105,6 +138,18 @@ function layoutChanges(args: unknown): Partial<Record<ParagraphLayoutAttrName, u
     }
   }
   return changes;
+}
+
+/**
+ * Vrai si les arguments de `setLayout` sont acceptables pour `canRun` : aucun argument
+ * (la toolbar sonde la commande avec `{}` ou rien), ou au moins une valeur valide. Des
+ * arguments non vides sans aucune valeur valide (`{ lineHeight: 'abc' }`) sont refusés.
+ */
+function hasUsableLayoutArgs(args: unknown): boolean {
+  if (typeof args !== 'object' || args === null || Object.keys(args).length === 0) {
+    return true;
+  }
+  return Object.keys(layoutChanges(args)).length > 0;
 }
 
 /** Noms d'attributs à effacer d'après les arguments de `unsetLayout` : tous par défaut. */
@@ -126,7 +171,8 @@ function unsetNames(args: unknown): readonly ParagraphLayoutAttrName[] {
  * Commandes standard de mise en page des paragraphes.
  *
  * - `paragraph.setLayout` fusionne les attributs donnés dans chaque paragraphe et titre de
- *   la sélection ; `null` efface un attribut, un attribut absent est laissé tel quel.
+ *   la sélection ; `null` efface un attribut, un attribut absent est laissé tel quel, une
+ *   valeur invalide est ignorée (et `run` rend `false` s'il ne reste rien de valide).
  *   Les valeurs sont normalisées (nombres arrondis, couleurs `#rrggbb`, bordures filtrées).
  * - `paragraph.unsetLayout` efface les attributs nommés dans `attrs`, ou tous sans argument.
  *
@@ -146,7 +192,7 @@ export const PARAGRAPH_LAYOUT_COMMANDS: readonly AsterCommand[] = [
         .command(({ tr }) => updateLayoutBlocks(tr, (attrs) => ({ ...attrs, ...changes })))
         .run();
     },
-    canRun: (editor) => hasLayoutBlockInSelection(editor),
+    canRun: (editor, args) => hasUsableLayoutArgs(args) && hasLayoutBlockInSelection(editor),
   }),
   defineStandardCommand('paragraph.unsetLayout', {
     run: (editor, args) => {
@@ -214,7 +260,8 @@ export const TEXT_LAYOUT_COMMANDS: readonly AsterCommand[] = [
           .removeEmptyTextStyle()
           .run();
       }
-      if (typeof pt !== 'number' || !Number.isFinite(pt)) {
+      // Borné comme tout nombre de mise en page : `1e307` donnerait `Infinitypt`.
+      if (!isLayoutNumber(pt)) {
         return false;
       }
       return editor.tiptap.chain().focus().setMark('textStyle', { letterSpacingPt: pt }).run();
@@ -222,7 +269,7 @@ export const TEXT_LAYOUT_COMMANDS: readonly AsterCommand[] = [
     canRun: (editor, args) => {
       const pt: unknown = readArgs(args)['pt'];
       return (
-        (pt === null || (typeof pt === 'number' && Number.isFinite(pt))) &&
+        (pt === null || isLayoutNumber(pt)) &&
         editor.tiptap.can().setMark('textStyle', { letterSpacingPt: pt })
       );
     },

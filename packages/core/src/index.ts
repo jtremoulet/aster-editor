@@ -143,6 +143,8 @@ export {
   renderParagraphLayout,
 } from './extensions/paragraph-layout';
 export {
+  AsterHighlight,
+  AsterStrike,
   AsterTextStyle,
   AsterUnderline,
   DECORATED_MARK_TYPES,
@@ -154,6 +156,7 @@ export {
   decorationStyleFromShorthand,
   isCaps,
   isDecorationStyle,
+  normalizeStyleColors,
   parseCaps,
   parseDecorationStyle,
   type RunCaps,
@@ -161,6 +164,7 @@ export {
 export {
   BULLET_ATTRIBUTE,
   DOCX_NUM_ID_ATTRIBUTE,
+  DOCX_NUM_INDENT_ATTRIBUTE,
   LIST_LAYOUT_EXTENSION_NAME,
   ListLayout,
 } from './extensions/list-layout';
@@ -170,18 +174,22 @@ export {
   AsterTableHeader,
   AsterTableView,
   CELL_VERTICAL_ALIGNS,
+  MAX_COLSPAN,
+  MAX_ROWSPAN,
   TABLE_OPTIONS,
   cellLayoutDeclarations,
   createTableExtensions,
   isCellPadding,
   isCellVerticalAlign,
   parseCellPadding,
+  parseSpan,
   parseTableWidth,
   tableLayoutDeclarations,
   tableLayoutHtmlAttributes,
   type CellPadding,
 } from './extensions/table-layout';
 export {
+  SUSPICIOUS_SPEC_MESSAGE,
   createRawStyleSerializer,
   renderRawSpec,
   serializeDocumentHtml,
@@ -234,6 +242,7 @@ export {
 } from './extensions/pagination-layout';
 export {
   CSS_BORDER_SIDES,
+  LAYOUT_NUMBER_LIMIT,
   borderDeclarations,
   formatBorderValue,
   formatNumber,
@@ -241,6 +250,7 @@ export {
   isBlockBorder,
   isBorderSide,
   isBorderStyle,
+  isLayoutNumber,
   joinDeclarations,
   normalizeColor,
   parseBorderValue,

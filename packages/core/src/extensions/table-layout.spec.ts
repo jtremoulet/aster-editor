@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  MAX_COLSPAN,
+  MAX_ROWSPAN,
   cellLayoutDeclarations,
   isCellPadding,
   isCellVerticalAlign,
   parseCellPadding,
+  parseSpan,
   parseTableWidth,
   tableLayoutDeclarations,
 } from './table-layout';
@@ -17,17 +20,20 @@ function expectIdempotent(mounted: MountedEditor): string {
   return html;
 }
 
-/** Attributs du premier nœud du type donné. */
+/** Attributs du premier nœud du type donné (le parcours s'arrête au premier trouvé). */
 function attrsOf(mounted: MountedEditor, typeName: string): Record<string, unknown> {
-  let found: Record<string, unknown> = {};
+  let found: Record<string, unknown> | null = null;
   mounted.editor.tiptap.state.doc.descendants((node) => {
+    if (found) {
+      return false;
+    }
     if (node.type.name === typeName) {
       found = node.attrs;
       return false;
     }
     return true;
   });
-  return found;
+  return found ?? {};
 }
 
 const BORDER = { side: 'top', style: 'solid', widthPt: 1, color: '#000000' } as const;
@@ -89,6 +95,24 @@ describe('TableLayout', () => {
         'padding: 2pt 4pt 2pt 4pt',
       ]);
       expect(cellLayoutDeclarations({ verticalAlign: 'nope', paddingPt: [1] })).toEqual([]);
+      // R23-05 : un padding hors bornes n'est pas émis.
+      expect(cellLayoutDeclarations({ paddingPt: [1e307, 0, 0, 0] })).toEqual([]);
+    });
+
+    it('parseSpan borne colspan à 63 et rowspan à 1000, 1 pour tout ce qui n’est pas un entier', () => {
+      expect(MAX_COLSPAN).toBe(63);
+      expect(MAX_ROWSPAN).toBe(1000);
+      expect(parseSpan('2', MAX_COLSPAN)).toBe(2);
+      expect(parseSpan('63', MAX_COLSPAN)).toBe(63);
+      expect(parseSpan('64', MAX_COLSPAN)).toBe(63);
+      expect(parseSpan('1000000', MAX_COLSPAN)).toBe(63);
+      expect(parseSpan('5000', MAX_ROWSPAN)).toBe(1000);
+      expect(parseSpan('0', MAX_COLSPAN)).toBe(1);
+      expect(parseSpan('-3', MAX_COLSPAN)).toBe(1);
+      expect(parseSpan('abc', MAX_COLSPAN)).toBe(1);
+      expect(parseSpan('', MAX_COLSPAN)).toBe(1);
+      expect(parseSpan(null, MAX_COLSPAN)).toBe(1);
+      expect(parseSpan('2.9', MAX_COLSPAN)).toBe(2);
     });
   });
 
@@ -187,6 +211,86 @@ describe('TableLayout', () => {
       expect(updated?.style.borderTop).toBe('');
       expect(updated?.style.borderBottom).toContain('dashed');
       expect(updated?.getAttribute('data-docx-style')).toBe('TableGrid');
+    });
+
+    it('R23-10 : le DOM d’édition garde la largeur du contrat tant qu’aucune colonne n’est redimensionnée', () => {
+      const editedTable = (): HTMLElement | null =>
+        mounted.editor.contentElement.querySelector<HTMLElement>('.tableWrapper table');
+      mounted.editor.setHTML(
+        '<table style="width: 100%; border-top: 1pt solid #000000"><tbody><tr><td><p>a</p></td><td><p>b</p></td></tr></tbody></table>',
+      );
+      expect(editedTable()?.style.width).toBe('100%');
+      expect(editedTable()?.style.borderTop).toContain('solid');
+      expect(editedTable()?.style.minWidth).toBe('96px');
+      mounted.editor.setHTML(
+        '<table style="width: 450pt"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expect(editedTable()?.style.width).toBe('450pt');
+      // Dès qu'une colonne porte un `colwidth`, la largeur calculée par Tiptap prime.
+      mounted.editor.setHTML(
+        '<table style="width: 450pt"><tbody><tr><td colwidth="100"><p>a</p></td></tr></tbody></table>',
+      );
+      expect(editedTable()?.style.width).toBe('100px');
+      // Et le passage de l'un à l'autre par une mise à jour du nœud suit la même règle.
+      mounted.editor.commands.run('selectAll');
+      const pos = findNodePos(mounted.editor, 'table');
+      const node = mounted.editor.tiptap.state.doc.nodeAt(pos);
+      mounted.editor.tiptap.view.dispatch(
+        mounted.editor.tiptap.state.tr.setNodeMarkup(pos, undefined, {
+          ...node?.attrs,
+          width: '80%',
+        }),
+      );
+      expect(editedTable()?.style.width).toBe('100px');
+      // Sans largeur de contrat, rien ne change par rapport à Tiptap.
+      mounted.editor.setHTML('<table><tbody><tr><td><p>a</p></td></tr></tbody></table>');
+      expect(editedTable()?.style.width).toBe('');
+      expect(editedTable()?.style.minWidth).toBe('48px');
+      // `getHTML()` reste celui du contrat dans tous les cas.
+      mounted.editor.setHTML(
+        '<table style="width: 100%"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table style="width: 100%"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+    });
+
+    it('R25-01 (relais) : colspan et rowspan sont bornés à l’analyse, un colspan géant ne tue plus le processus', () => {
+      const started = performance.now();
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td colspan="1000000" rowspan="5000"><p>a</p></td></tr></tbody></table>',
+      );
+      const elapsed = performance.now() - started;
+      expect(elapsed).toBeLessThan(200);
+      // `rowspan` est borné à 1 000 à l'analyse (voir `parseSpan`), puis prosemirror-tables
+      // le ramène au nombre de lignes de la table (`fixTables`) : une ligne ici.
+      expect(attrsOf(mounted, 'tableCell')).toMatchObject({ colspan: 63, rowspan: 1 });
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table><tbody><tr><td colspan="63"><p>a</p></td></tr></tbody></table>',
+      );
+      expectIdempotent(mounted);
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td rowspan="5000"><p>a</p></td><td><p>b</p></td></tr><tr><td><p>c</p></td></tr></tbody></table>',
+      );
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table><tbody><tr><td rowspan="2"><p>a</p></td><td><p>b</p></td></tr><tr><td><p>c</p></td></tr></tbody></table>',
+      );
+      // Valeurs non numériques, nulles ou négatives : 1 (attribut omis au rendu).
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td colspan="abc" rowspan="0"><p>a</p></td><th colspan="-2"><p>b</p></th></tr></tbody></table>',
+      );
+      expect(attrsOf(mounted, 'tableCell')).toMatchObject({ colspan: 1, rowspan: 1 });
+      expect(attrsOf(mounted, 'tableHeader')).toMatchObject({ colspan: 1, rowspan: 1 });
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table><tbody><tr><td><p>a</p></td><th><p>b</p></th></tr></tbody></table>',
+      );
+      // Une fusion ordinaire reste intacte.
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td colspan="2"><p>a</p></td></tr><tr><td><p>b</p></td><td><p>c</p></td></tr></tbody></table>',
+      );
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table><tbody><tr><td colspan="2"><p>a</p></td></tr><tr><td><p>b</p></td><td><p>c</p></td></tr></tbody></table>',
+      );
     });
   });
 

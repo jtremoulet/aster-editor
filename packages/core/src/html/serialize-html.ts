@@ -40,14 +40,57 @@ function isAttributes(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Tableaux `[string, …]` trouvés dans un objet d'attributs, à n'importe quelle profondeur :
+ * même parcours que `suspiciousAttributes` de prosemirror-model. Un `toDOM` d'intégrateur
+ * qui renvoie `node.attrs.payload` tel quel laisserait un document (JSON stocké, `.docx`)
+ * décrire librement un `<img onerror>` : ProseMirror lève dans ce cas, nous aussi.
+ */
+const suspiciousArraysCache = new WeakMap<object, readonly unknown[]>();
+
+function suspiciousArrays(attrs: Readonly<Record<string, unknown>>): readonly unknown[] {
+  const cached = suspiciousArraysCache.get(attrs);
+  if (cached) {
+    return cached;
+  }
+  const found: unknown[] = [];
+  const scan = (value: unknown): void => {
+    if (typeof value !== 'object' || value === null) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (typeof value[0] === 'string') {
+        found.push(value);
+      } else {
+        value.forEach(scan);
+      }
+      return;
+    }
+    Object.values(value).forEach(scan);
+  };
+  scan(attrs);
+  suspiciousArraysCache.set(attrs, found);
+  return found;
+}
+
+/** Message levé quand un spec est un tableau sorti tel quel des attributs (même texte que ProseMirror). */
+export const SUSPICIOUS_SPEC_MESSAGE =
+  'Using an array from an attribute object as a DOM spec. This may be an attempted cross site scripting attack';
+
+/**
  * Rend un `DOMOutputSpec` en DOM, comme `DOMSerializer.renderSpec`, mais en posant chaque
  * attribut avec `setAttribute` (le `style` reste verbatim). Le trou `0` désigne le
  * `contentDOM`, un espace dans le nom de balise introduit un espace de noms XML.
+ *
+ * `blockArraysIn` : attributs du nœud ou de la marque rendu ; tout tableau de spec qui en
+ * provient (identité) est refusé, comme le fait ProseMirror. Les deux autres gardes de
+ * `renderSpec` sont portées aussi : un trou de contenu doit être seul dans son parent, et
+ * il ne peut y en avoir qu'un par spec.
  */
 export function renderRawSpec(
   doc: Document,
   spec: DOMOutputSpec,
   xmlNS: string | null = null,
+  blockArraysIn: Readonly<Record<string, unknown>> | null = null,
 ): Rendered {
   if (typeof spec === 'string') {
     return { dom: doc.createTextNode(spec) };
@@ -57,6 +100,12 @@ export function renderRawSpec(
   }
   if (isRenderedSpec(spec)) {
     return spec;
+  }
+  if (!Array.isArray(spec) || typeof spec[0] !== 'string') {
+    throw new RangeError('Invalid array passed to renderRawSpec');
+  }
+  if (blockArraysIn && suspiciousArrays(blockArraysIn).includes(spec)) {
+    throw new RangeError(SUSPICIOUS_SPEC_MESSAGE);
   }
   const [rawTag, ...rest] = spec as readonly [string, ...unknown[]];
   let tagName = rawTag;
@@ -86,17 +135,23 @@ export function renderRawSpec(
     }
   }
   let contentDOM: HTMLElement | undefined;
-  for (const child of children) {
+  children.forEach((child) => {
     if (child === 0) {
+      if (children.length > 1) {
+        throw new RangeError('Content hole must be the only child of its parent node');
+      }
       contentDOM = dom;
-      continue;
+      return;
     }
-    const rendered = renderRawSpec(doc, child as DOMOutputSpec, namespace);
+    const rendered = renderRawSpec(doc, child as DOMOutputSpec, namespace, blockArraysIn);
     dom.appendChild(rendered.dom);
     if (rendered.contentDOM) {
+      if (contentDOM) {
+        throw new RangeError('Multiple content holes');
+      }
       contentDOM = rendered.contentDOM;
     }
-  }
+  });
   return contentDOM ? { dom, contentDOM } : { dom };
 }
 
@@ -121,11 +176,12 @@ export function createRawStyleSerializer(schema: Schema): DOMSerializer {
   const base = DOMSerializer.fromSchema(schema);
   const nodes: Record<string, (node: ProseMirrorNode) => DOMOutputSpec> = {};
   for (const [name, toDOM] of Object.entries(base.nodes)) {
-    nodes[name] = (node) => toSpec(renderRawSpec(document, toDOM(node)));
+    nodes[name] = (node) => toSpec(renderRawSpec(document, toDOM(node), null, node.attrs));
   }
   const marks: Record<string, (mark: Mark, inline: boolean) => DOMOutputSpec> = {};
   for (const [name, toDOM] of Object.entries(base.marks)) {
-    marks[name] = (mark, inline) => toSpec(renderRawSpec(document, toDOM(mark, inline)));
+    marks[name] = (mark, inline) =>
+      toSpec(renderRawSpec(document, toDOM(mark, inline), null, mark.attrs));
   }
   const serializer = new DOMSerializer(nodes, marks);
   serializers.set(schema, serializer);
