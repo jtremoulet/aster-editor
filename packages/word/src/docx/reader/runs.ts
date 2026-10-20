@@ -4,6 +4,7 @@ import { escapeAttr, escapeHtml, pt, styleAttr } from './html';
 import { detectLostInline } from './lost';
 import { docDefaultsOf } from './styles';
 import type { ConverterContext, ResolvedParagraphProps, ResolvedRunProps } from './types';
+import { cssFontFamily, fontName } from './units';
 
 /** Enfants d'un `w:p` sans contenu ni objet : jamais signalés. */
 const IGNORED_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([
@@ -87,14 +88,17 @@ export function renderRunTags(props: ResolvedRunProps, baseline: ResolvedRunProp
   const differs = <K extends keyof ResolvedRunProps>(key: K): ResolvedRunProps[K] | undefined =>
     props[key] !== undefined && props[key] !== baseline[key] ? props[key] : undefined;
   const fontSize = differs('fontSizePt');
+  const fontFamily = differs('fontFamily');
   const spacing = differs('letterSpacingPt');
   const caps = differs('caps');
   const style = styleAttr([
     // Ordre des déclarations = celui que le core sérialise (attributs de `textStyle`), pour
-    // que `setHTML(getHTML())` dans l'éditeur rende exactement ce HTML.
+    // que `setHTML(getHTML())` dans l'éditeur rende exactement ce HTML. La police est
+    // citée quand elle contient un espace (`"Wingdings 2"`) : le core relit la valeur
+    // telle quelle (`getStyleProperty`) et la ré-émet à l'identique, guillemets compris.
     ['background-color', differs('highlight')],
     ['color', differs('color')],
-    ['font-family', differs('fontFamily')],
+    ['font-family', fontFamily === undefined ? undefined : cssFontFamily(fontFamily)],
     ['font-size', fontSize === undefined ? undefined : pt(fontSize)],
     ['letter-spacing', spacing === undefined ? undefined : pt(spacing)],
     ['text-transform', caps === 'all' ? 'uppercase' : undefined],
@@ -165,14 +169,64 @@ interface WalkState {
   linkDepth: number;
 }
 
-/** Cible d'une instruction `HYPERLINK "url"` ou `HYPERLINK \l "signet"`, sinon `null`. */
+/** Jeton d'instruction de champ : chaîne entre guillemets ou mot. */
+const FIELD_TOKEN = /"([^"]*)"|(\S+)/g;
+
+/** Commutateurs de `HYPERLINK` qui prennent un argument, hors `\l` (traité à part). */
+const HYPERLINK_SWITCHES_WITH_ARGUMENT: ReadonlySet<string> = new Set(['o', 't']);
+
+/**
+ * Cible d'une instruction `HYPERLINK` : la première chaîne (citée ou non) qui n'est pas
+ * l'argument d'un commutateur est l'URL ; `\l "x"` ajoute le fragment `#x` (seul, c'est
+ * un signet interne `#x`). `HYPERLINK "https://x.io/p" \l "sec2"` → `https://x.io/p#sec2`.
+ * `null` pour un autre champ ou une instruction sans cible.
+ */
 export function hyperlinkTarget(instr: string): string | null {
-  const trimmed = instr.trim();
-  if (!/^HYPERLINK\b/i.test(trimmed)) return null;
-  const quoted = /"([^"]*)"/.exec(trimmed);
-  const target = quoted ? quoted[1] : trimmed.split(/\s+/)[1];
-  if (!target) return null;
-  return /\\l\b/.test(trimmed) ? `#${target}` : target;
+  const tokens: { readonly value: string; readonly quoted: boolean }[] = [];
+  for (const match of instr.matchAll(FIELD_TOKEN)) {
+    tokens.push({ value: match[1] ?? match[2] ?? '', quoted: match[1] !== undefined });
+  }
+  const keyword = tokens[0];
+  if (!keyword || keyword.quoted || keyword.value.toUpperCase() !== 'HYPERLINK') return null;
+  let target: string | undefined;
+  let fragment: string | undefined;
+  for (let index = 1; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token) continue;
+    if (!token.quoted && token.value.startsWith('\\')) {
+      const name = token.value.slice(1).toLowerCase();
+      if (name === 'l') {
+        fragment = tokens[index + 1]?.value;
+        index += 1;
+      } else if (HYPERLINK_SWITCHES_WITH_ARGUMENT.has(name)) {
+        index += 1;
+      }
+      continue;
+    }
+    target ??= token.value;
+  }
+  if (fragment) return `${target ?? ''}#${fragment}`;
+  return target || null;
+}
+
+/** Protocoles autorisés dans un `href` produit par le lecteur. */
+const SAFE_PROTOCOLS: ReadonlySet<string> = new Set(['http', 'https', 'mailto', 'tel']);
+
+/**
+ * `href` sûr hors de l'éditeur : `http`, `https`, `mailto`, `tel`, les ancres `#…` et les
+ * URL relatives passent ; tout autre protocole (`javascript:`, `data:`, `vbscript:`…)
+ * retire le lien, le texte est conservé. Le protocole est lu après suppression des
+ * caractères de contrôle et espaces, comme un navigateur le ferait (`java\tscript:`).
+ */
+export function safeHref(href: string | null): string | null {
+  if (href === null) return null;
+  const trimmed = href.trim();
+  if (trimmed === '') return null;
+  // eslint-disable-next-line no-control-regex -- les contrôles C0 sont précisément la cible.
+  const probe = trimmed.replace(/[\u0000- \u007f]/g, '').toLowerCase();
+  const scheme = /^([a-z][a-z0-9+.-]*):/.exec(probe);
+  if (scheme && !SAFE_PROTOCOLS.has(scheme[1] ?? '')) return null;
+  return trimmed;
 }
 
 /** Attribut par nom local quel que soit son préfixe (`r:id`, `w:anchor`). */
@@ -193,10 +247,17 @@ async function hyperlinkHref(hyperlink: Element, ctx: ConverterContext): Promise
   return anchor ? `#${anchor}` : null;
 }
 
-/** Caractère d'un `w:sym` (`w:char` hexadécimal), chaîne vide s'il est illisible. */
+/**
+ * Caractère d'un `w:sym` (`w:char` hexadécimal), chaîne vide s'il est illisible, nul,
+ * hors du plan Unicode (`110000`) ou dans les substituts (`D800`-`DFFF`) : jamais
+ * d'exception (`String.fromCodePoint` lève un `RangeError` hors plage).
+ */
 function symbolChar(sym: Element): string {
-  const code = Number.parseInt(wordAttribute(sym, 'char'), 16);
-  return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+  const raw = wordAttribute(sym, 'char').trim();
+  if (!/^[0-9a-f]{1,6}$/i.test(raw)) return '';
+  const code = Number.parseInt(raw, 16);
+  if (code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) return '';
+  return String.fromCodePoint(code);
 }
 
 /**
@@ -211,7 +272,8 @@ export async function convertRuns(
   const baseline = docDefaultsOf(ctx.styles).run;
   const state: WalkState = { writer: new InlineWriter(), fields: [], linkDepth: 0 };
 
-  const withAnchor = async (href: string | null, body: () => Promise<void>): Promise<void> => {
+  const withAnchor = async (target: string | null, body: () => Promise<void>): Promise<void> => {
+    const href = safeHref(target);
     if (href === null) {
       await body();
       return;
@@ -282,7 +344,7 @@ export async function convertRuns(
       state.fields.push({ instr: [], phase: 'instr', anchor: false });
     } else if (type === 'separate' && top && top.phase === 'instr') {
       top.phase = 'result';
-      const href = hyperlinkTarget(top.instr.join(''));
+      const href = safeHref(hyperlinkTarget(top.instr.join('')));
       if (href !== null && !inInstruction()) {
         state.writer.raw(`<a href="${escapeAttr(href)}">`);
         state.linkDepth += 1;
@@ -330,7 +392,8 @@ export async function convertRuns(
           break;
         case 'sym': {
           if (inInstruction()) break;
-          const font = wordAttribute(child, 'font');
+          // Police du symbole validée comme celle d'un `w:rFonts` ; irrecevable → celle du run.
+          const font = fontName(wordAttribute(child, 'font'));
           const symbolTags =
             font && font !== resolved.fontFamily
               ? renderRunTags({ ...resolved, fontFamily: font }, baseline)
@@ -348,6 +411,22 @@ export async function convertRuns(
         case 'pict':
           if (!inInstruction()) state.writer.raw(await ctx.images.drawing(child, ctx));
           break;
+        case 'AlternateContent': {
+          // Word 2010+ enveloppe zones de texte et formes `wps` : `<mc:Choice>` porte le
+          // dessin moderne, `<mc:Fallback>` son équivalent VML. Seul le premier enfant du
+          // `Choice` est traité, le `Fallback` jamais (sinon l'objet serait produit deux fois).
+          if (inInstruction()) break;
+          const choice = childNamed(child, 'Choice');
+          const content = choice?.firstElementChild ?? null;
+          if (!content) {
+            reportLost(child, ctx);
+          } else if (content.localName === 'drawing' || content.localName === 'pict') {
+            state.writer.raw(await ctx.images.drawing(content, ctx));
+          } else {
+            reportLost(content, ctx);
+          }
+          break;
+        }
         case 'footnoteReference':
         case 'endnoteReference': {
           const id = wordAttribute(child, 'id');
@@ -367,5 +446,15 @@ export async function convertRuns(
   };
 
   await walkChildren(paragraph);
+  // Champs jamais fermés (`w:fldChar end` absent ou dans un paragraphe suivant) : leurs
+  // `<a>` sont fermés ici, sinon le parseur HTML les reconstruirait dans chaque paragraphe
+  // suivant. Aucun `<a>` ouvert ne survit à `convertRuns`.
+  while (state.fields.length > 0) {
+    const frame = state.fields.pop();
+    if (frame?.anchor) {
+      state.linkDepth -= 1;
+      state.writer.raw('</a>');
+    }
+  }
   return state.writer.result();
 }

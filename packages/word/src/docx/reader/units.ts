@@ -17,14 +17,73 @@ export function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Nombre décimal strict : ni hexadécimal (`0x20`), ni exposant (`1e300`), ni `Infinity`. */
+const DECIMAL_NUMBER = /^-?\d+(?:\.\d+)?$/;
+
 /**
  * Entier d'un attribut OOXML, `undefined` si absent ou non numérique. Les valeurs
- * décimales (`"12.5"`, tolérées par certains producteurs) sont acceptées.
+ * décimales (`"12.5"`, tolérées par certains producteurs) sont acceptées ; tout ce que
+ * `Number()` accepterait en plus (hexadécimal, exposant, espaces internes) est rejeté.
  */
 export function numberAttr(value: string | null | undefined): number | undefined {
-  if (value === null || value === undefined || value.trim() === '') return undefined;
-  const parsed = Number(value);
+  if (value === null || value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!DECIMAL_NUMBER.test(trimmed)) return undefined;
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Bornes de Word (ce que son interface accepte), en points : une valeur hors de ces
+ * bornes vient d'un producteur cassé ou d'un document hostile et est ignorée, comme une
+ * valeur non numérique — jamais écrite en CSS, jamais une exception.
+ */
+export const WORD_LIMITS = {
+  /** Taille de police `w:sz` : 1 à 1638 pt. */
+  fontSizeMinPt: 1,
+  fontSizeMaxPt: 1638,
+  /** Largeur de bordure `w:sz` (huitièmes) : 12 pt au plus. */
+  borderMaxPt: 12,
+  /** Retraits, espacements avant/après, interligne exact, espacement de caractères : ±1584 pt. */
+  distanceMaxPt: 1584,
+  /** Interligne multiple (`w:lineRule="auto"`) : 132 lignes au plus. */
+  lineMultipleMax: 132,
+} as const;
+
+/** `value` s'il est dans `[min, max]`, sinon `undefined` (valeur hors bornes ignorée). */
+export function bounded(value: number | undefined, min: number, max: number): number | undefined {
+  return value !== undefined && value >= min && value <= max ? value : undefined;
+}
+
+/** Distance signée (retrait, espacement) bornée à ±1584 pt. */
+export function boundedDistancePt(value: number | undefined): number | undefined {
+  return bounded(value, -WORD_LIMITS.distanceMaxPt, WORD_LIMITS.distanceMaxPt);
+}
+
+/**
+ * Nom de police acceptable : lettres, chiffres, espace, point, tiret, 64 caractères au
+ * plus (`Arial Narrow`, `Wingdings 2`, `Noto Sans CJK`). Tout le reste — en particulier
+ * un `;` ou un `(` qui ferait sortir de la déclaration `font-family` — est ignoré.
+ */
+const FONT_NAME = /^[\w .-]{1,64}$/u;
+
+/** Nom de police validé et épuré des espaces de bord, `undefined` s'il est irrecevable. */
+export function fontName(value: string | null | undefined): string | undefined {
+  const trimmed = (value ?? '').trim();
+  return FONT_NAME.test(trimmed) ? trimmed : undefined;
+}
+
+/** Identifiant CSS simple : pas d'espace, pas de point, ne commence pas par un chiffre. */
+const CSS_IDENTIFIER = /^-?[A-Za-z_][\w-]*$/;
+
+/**
+ * Valeur CSS de `font-family` pour un nom validé par `fontName` : citée entre guillemets
+ * dès qu'elle n'est pas un identifiant CSS (`"Wingdings 2"`, `"Arial Narrow"`), sinon
+ * telle quelle (`Calibri`). Le nom ne contient ni `"` ni `\`, aucun échappement n'est
+ * nécessaire ; le core relit la valeur citée telle quelle et la ré-émet à l'identique.
+ */
+export function cssFontFamily(name: string): string {
+  return CSS_IDENTIFIER.test(name) ? name : `"${name}"`;
 }
 
 /** Twips → points (`240` → `12`). */
@@ -80,7 +139,11 @@ export function borderColor(value: string | null | undefined): string {
   return hexColor(value) ?? '#000000';
 }
 
-/** Surlignages nommés de Word (`w:highlight`), valeurs d'affichage de Word. */
+/**
+ * Surlignages nommés de Word (`w:highlight`), valeurs d'affichage de Word. Clés en
+ * minuscules : la recherche se fait sur le nom abaissé (`darkBlue`, `DarkBlue` et
+ * `darkblue` désignent la même couleur).
+ */
 const HIGHLIGHT_COLORS: Readonly<Record<string, string>> = {
   yellow: '#ffff00',
   green: '#00ff00',
@@ -88,14 +151,14 @@ const HIGHLIGHT_COLORS: Readonly<Record<string, string>> = {
   magenta: '#ff00ff',
   blue: '#0000ff',
   red: '#ff0000',
-  darkBlue: '#000080',
-  darkCyan: '#008080',
-  darkGreen: '#008000',
-  darkMagenta: '#800080',
-  darkRed: '#800000',
-  darkYellow: '#808000',
-  darkGray: '#808080',
-  lightGray: '#c0c0c0',
+  darkblue: '#000080',
+  darkcyan: '#008080',
+  darkgreen: '#008000',
+  darkmagenta: '#800080',
+  darkred: '#800000',
+  darkyellow: '#808000',
+  darkgray: '#808080',
+  lightgray: '#c0c0c0',
   black: '#000000',
   white: '#ffffff',
 };
@@ -103,7 +166,7 @@ const HIGHLIGHT_COLORS: Readonly<Record<string, string>> = {
 /** Surlignage nommé → `#rrggbb`, `none` ou inconnu → `undefined`. */
 export function highlightColor(name: string | null | undefined): string | undefined {
   if (!name) return undefined;
-  return HIGHLIGHT_COLORS[name] ?? HIGHLIGHT_COLORS[name.toLowerCase()];
+  return HIGHLIGHT_COLORS[name.trim().toLowerCase()];
 }
 
 /**

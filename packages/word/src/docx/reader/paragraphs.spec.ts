@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createEditor } from '@aster-editor/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importDocx } from '../import-docx';
-import { run as runXml } from '../preprocess/minimal-docx';
+import { buildDocx, run as runXml } from '../preprocess/minimal-docx';
 import { normalizeHtml, parseFragment } from '../testing/dom';
 import { convertParagraph, paragraphAttributes } from './paragraphs';
 import { createStyleResolver } from './styles';
@@ -360,6 +360,72 @@ describe('fixtures 11-13 (chemin styled)', () => {
       }
     },
   );
+});
+
+describe('revue R24 (importDocx styled sur .docx minimaux)', () => {
+  async function styled(body: string): Promise<string> {
+    return (await importDocx(await buildDocx(body), { fidelity: 'styled' })).html;
+  }
+
+  /** Monte un éditeur du core, y charge le HTML stylé et rend ce que le core en ressort. */
+  function roundTrip(html: string): string {
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    const editor = createEditor({ element });
+    try {
+      editor.setHTML(html);
+      return editor.getHTML();
+    } finally {
+      editor.destroy();
+      element.remove();
+    }
+  }
+
+  it('R24-02 : une police citée survit telle quelle à setHTML puis getHTML (strict)', async () => {
+    const out = await styled(
+      `<w:p>${runXml('narrow', '<w:rPr><w:rFonts w:ascii="Arial Narrow"/></w:rPr>')}${runXml(' plain')}</w:p>` +
+        `<w:p>${runXml('sym', '<w:rPr><w:rFonts w:ascii="Wingdings 2"/><w:b/></w:rPr>')}</w:p>`,
+    );
+    expect(out).toBe(
+      '<p><span style="font-family: &quot;Arial Narrow&quot;">narrow</span> plain</p>' +
+        '<p><span style="font-family: &quot;Wingdings 2&quot;"><strong>sym</strong></span></p>',
+    );
+    expect(roundTrip(out)).toBe(out);
+    expect(roundTrip(roundTrip(out))).toBe(out);
+  });
+
+  it('R24-02 : un nom de police hostile ne produit aucun style', async () => {
+    const out = await styled(
+      `<w:p>${runXml('x', '<w:rPr><w:rFonts w:ascii="Arial; position: fixed; background: url(https://evil.example/px)"/></w:rPr>')}</w:p>`,
+    );
+    expect(out).toBe('<p>x</p>');
+  });
+
+  it('R24-03 : un champ HYPERLINK fermé trois paragraphes plus loin ne donne qu’un lien', async () => {
+    const out = await styled(
+      '<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+        '<w:r><w:instrText xml:space="preserve"> HYPERLINK "https://x.io" </w:instrText></w:r>' +
+        `<w:r><w:fldChar w:fldCharType="separate"/></w:r>${runXml('lien')}</w:p>` +
+        `<w:p>${runXml('suite')}</w:p>` +
+        `<w:p><w:r><w:fldChar w:fldCharType="end"/></w:r>${runXml('fin')}</w:p>` +
+        `<w:p>${runXml('encore')}</w:p>`,
+    );
+    expect(out).toBe('<p><a href="https://x.io">lien</a></p><p>suite</p><p>fin</p><p>encore</p>');
+  });
+
+  it('R24-04 : un w:sym hors plage n’annule pas l’import', async () => {
+    const out = await styled(
+      `<w:p>${runXml('ok')}<w:r><w:sym w:font="Wingdings" w:char="110000"/></w:r><w:r><w:sym w:font="Wingdings" w:char="-1"/></w:r></w:p>`,
+    );
+    expect(out).toBe('<p>ok</p>');
+  });
+
+  it('R24-12 : javascript: retiré du HTML brut, texte conservé', async () => {
+    const out = await styled(
+      `<w:p><w:fldSimple w:instr=' HYPERLINK "javascript:alert(2)" '>${runXml('a')}</w:fldSimple></w:p>`,
+    );
+    expect(out).toBe('<p>a</p>');
+  });
 });
 
 const CLIENT = `${FIXTURES}client/Modele_Demo_DER.docx`;

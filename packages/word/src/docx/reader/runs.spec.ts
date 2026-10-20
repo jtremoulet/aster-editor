@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { run as runXml } from '../preprocess/minimal-docx';
 import { childNamed } from '../preprocess/xml-utils';
-import { convertRuns, hyperlinkTarget, PAGE_BREAK, renderRunTags } from './runs';
+import { convertRuns, hyperlinkTarget, PAGE_BREAK, renderRunTags, safeHref } from './runs';
 import { createStyleResolver } from './styles';
 import { createTestContext, fakePackage, paragraphOf, relsXml, stylesXml } from './test-support';
-import type { ConverterContext, StyleResolver } from './types';
+import type { ConverterContext, DocxPackage, StyleResolver } from './types';
 
 const TAB = String.fromCharCode(0x2003);
 
@@ -27,13 +27,34 @@ const RELS = relsXml({
     'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
     'media/image1.png',
   ],
+  rId3: [
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    'javascript:alert(1)',
+    true,
+  ],
+  rId4: [
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    'data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
+    true,
+  ],
+  rId5: [
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    'mailto:a@b.io',
+    true,
+  ],
+  rId6: [
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    'java\nscript:alert(1)',
+    true,
+  ],
 });
 
+let pkg: DocxPackage;
 let styles: StyleResolver;
 let ctx: ConverterContext;
 
 beforeAll(async () => {
-  const pkg = fakePackage({ 'word/styles.xml': STYLES, 'word/_rels/document.xml.rels': RELS });
+  pkg = fakePackage({ 'word/styles.xml': STYLES, 'word/_rels/document.xml.rels': RELS });
   styles = await createStyleResolver(pkg);
   ctx = createTestContext(styles, pkg);
 });
@@ -259,6 +280,133 @@ describe('convertRuns', () => {
         '<strong>a</strong><img data-test="inline"><strong>b</strong><img data-test="pict">' +
           '<sup data-footnote-ref="4">4</sup><sup data-endnote-ref="5">5</sup>',
       );
+    });
+
+    const MC_NS = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+
+    it('R25-04 : mc:AlternateContent → le dessin de mc:Choice est produit une seule fois, jamais le Fallback', async () => {
+      const xml =
+        `${runXml('Avant')}<w:r><mc:AlternateContent xmlns:mc="${MC_NS}">` +
+        '<mc:Choice Requires="wps"><w:drawing><wp:anchor xmlns:wp="x"><wps:txbx xmlns:wps="y"><w:txbxContent><w:p><w:r><w:t>TEXTE DE LA ZONE</w:t></w:r></w:p></w:txbxContent></wps:txbx></wp:anchor></w:drawing></mc:Choice>' +
+        '<mc:Fallback><w:pict><v:rect xmlns:v="z"/></w:pict></mc:Fallback>' +
+        `</mc:AlternateContent></w:r>${runXml('Après')}`;
+      const html = await convert(xml);
+      expect(html).toBe('Avant<img data-test="drawing">Après');
+      expect(html.match(/<img/g)).toHaveLength(1);
+      expect(html).not.toContain('pict');
+    });
+
+    it('R25-04 : un mc:Choice sans dessin est signalé une fois comme objet perdu', async () => {
+      const local = createTestContext(styles, pkg);
+      const paragraph = paragraphOf(
+        `<w:r><mc:AlternateContent xmlns:mc="${MC_NS}"><mc:Choice Requires="w14"><w:oMath><w:t>x</w:t></w:oMath></mc:Choice>` +
+          '<mc:Fallback><w:pict/></mc:Fallback></mc:AlternateContent></w:r>',
+      );
+      const html = await convertRuns(paragraph, local, styles.paragraph(null));
+      expect(html).toBe('');
+      expect(local.lost.map((lost) => lost.kind)).toEqual(['equation']);
+      expect(local.warnings.filter((w) => w.code === 'object-lost')).toHaveLength(1);
+    });
+  });
+
+  describe('revue R24', () => {
+    it('R24-02 : un nom de police qui n’en est pas un est ignoré (rFonts et w:sym)', async () => {
+      const hostile = 'Arial; position: fixed; background: url(https://evil.example/px)';
+      expect(await convert(runXml('x', `<w:rPr><w:rFonts w:ascii="${hostile}"/></w:rPr>`))).toBe(
+        'x',
+      );
+      expect(
+        await convert(runXml('x', '<w:rPr><w:rFonts w:ascii="Arial(" w:hAnsi="Georgia"/></w:rPr>')),
+      ).toBe('<span style="font-family: Georgia">x</span>');
+      expect(
+        await convert('<w:r><w:sym w:font="Wingdings; color: red" w:char="F0FC"/></w:r>'),
+      ).toBe(String.fromCodePoint(0xf0fc));
+    });
+
+    it('R24-02 / R24-11 : une police avec un espace est citée, échappée dans l’attribut', async () => {
+      expect(await convert(runXml('x', '<w:rPr><w:rFonts w:ascii="Wingdings 2"/></w:rPr>'))).toBe(
+        '<span style="font-family: &quot;Wingdings 2&quot;">x</span>',
+      );
+      expect(await convert('<w:r><w:sym w:font="Wingdings 2" w:char="F0FC"/></w:r>')).toBe(
+        `<span style="font-family: &quot;Wingdings 2&quot;">${String.fromCodePoint(0xf0fc)}</span>`,
+      );
+      expect(renderRunTags({ fontFamily: 'Arial Narrow' }, {}).open).toBe(
+        '<span style="font-family: &quot;Arial Narrow&quot;">',
+      );
+    });
+
+    it('R24-03 : un champ HYPERLINK sans w:fldChar end ferme son <a> en fin de paragraphe', async () => {
+      const unterminated =
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+        '<w:r><w:instrText xml:space="preserve"> HYPERLINK "https://x.io" </w:instrText></w:r>' +
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+        runXml('lien');
+      expect(await convert(unterminated)).toBe('<a href="https://x.io">lien</a>');
+      // Le paragraphe suivant (où Word a mis le `end`) repart sans lien ouvert.
+      expect(await convert(runXml('suite'))).toBe('suite');
+      expect(await convert('<w:r><w:fldChar w:fldCharType="end"/></w:r>' + runXml('fin'))).toBe(
+        'fin',
+      );
+    });
+
+    it('R24-04 : w:sym hors plage, substitut, négatif ou non hexadécimal → chaîne vide, sans exception', async () => {
+      for (const char of ['110000', 'D800', 'DFFF', '-5', 'zz', '', '0']) {
+        expect(await convert(`<w:r><w:sym w:font="Wingdings" w:char="${char}"/></w:r>`)).toBe('');
+      }
+      expect(await convert(`<w:r><w:sym w:char="10FFFF"/></w:r>`)).toBe(
+        String.fromCodePoint(0x10ffff),
+      );
+    });
+
+    it('R24-05 : HYPERLINK "url" \\l "fragment" → url#fragment', async () => {
+      expect(
+        await convert(
+          `<w:fldSimple w:instr=' HYPERLINK "https://x.io/p" \\l "sec2" '>${runXml('x')}</w:fldSimple>`,
+        ),
+      ).toBe('<a href="https://x.io/p#sec2">x</a>');
+      expect(hyperlinkTarget('HYPERLINK "https://x.io/p" \\l "sec2"')).toBe('https://x.io/p#sec2');
+      expect(hyperlinkTarget('HYPERLINK \\l "sec2" "https://x.io/p"')).toBe('https://x.io/p#sec2');
+      expect(hyperlinkTarget('HYPERLINK "https://x.io/p" \\o "info-bulle" \\n')).toBe(
+        'https://x.io/p',
+      );
+      expect(hyperlinkTarget('HYPERLINK \\L Signet2')).toBe('#Signet2');
+      expect(hyperlinkTarget('HYPERLINK \\o "seulement une bulle"')).toBeNull();
+      expect(hyperlinkTarget('hyperlink "https://min.io"')).toBe('https://min.io');
+    });
+
+    it('R24-12 : javascript: et data: retirent le lien, le texte reste (relation et champ)', async () => {
+      expect(await convert(`<w:hyperlink r:id="rId3">${runXml('a')}</w:hyperlink>`)).toBe('a');
+      expect(await convert(`<w:hyperlink r:id="rId4">${runXml('b')}</w:hyperlink>`)).toBe('b');
+      expect(await convert(`<w:hyperlink r:id="rId6">${runXml('c')}</w:hyperlink>`)).toBe('c');
+      expect(
+        await convert(
+          `<w:fldSimple w:instr=' HYPERLINK "javascript:alert(2)" '>${runXml('d')}</w:fldSimple>`,
+        ),
+      ).toBe('d');
+      const complexField =
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+        '<w:r><w:instrText xml:space="preserve"> HYPERLINK "vbscript:x" </w:instrText></w:r>' +
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+        runXml('e') +
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
+      expect(await convert(complexField)).toBe('e');
+    });
+
+    it('R24-12 : http, https, mailto, tel, ancres et relatifs passent', async () => {
+      expect(await convert(`<w:hyperlink r:id="rId5">${runXml('m')}</w:hyperlink>`)).toBe(
+        '<a href="mailto:a@b.io">m</a>',
+      );
+      expect(safeHref('https://x.io')).toBe('https://x.io');
+      expect(safeHref('HTTP://x.io')).toBe('HTTP://x.io');
+      expect(safeHref('tel:+33600000000')).toBe('tel:+33600000000');
+      expect(safeHref('#top')).toBe('#top');
+      expect(safeHref('docs/page.html?a=1')).toBe('docs/page.html?a=1');
+      expect(safeHref('//cdn.example/x')).toBe('//cdn.example/x');
+      expect(safeHref(' javascript:alert(1)')).toBeNull();
+      expect(safeHref('JaVaScRiPt:alert(1)')).toBeNull();
+      expect(safeHref('data:text/html,x')).toBeNull();
+      expect(safeHref('')).toBeNull();
+      expect(safeHref(null)).toBeNull();
     });
   });
 });

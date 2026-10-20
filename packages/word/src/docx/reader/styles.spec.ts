@@ -494,4 +494,195 @@ describe('createStyleResolver', () => {
       expect(tableParagraphDefaultsOf({ borders: [] })).toBeUndefined();
     });
   });
+
+  describe('revue R24', () => {
+    it('R24-02 : une police de thème irrecevable est ignorée', async () => {
+      const styles = await resolver(NORMAL, DOC_DEFAULTS, {
+        'word/theme/theme1.xml': themeXml('Cambria; color: red', 'Calibri Light'),
+      });
+      const paragraph = styles.paragraph(null);
+      expect(
+        styles.run(rPrOf('<w:rFonts w:asciiTheme="majorHAnsi" w:ascii="Georgia"/>'), paragraph)
+          .fontFamily,
+      ).toBe('Georgia');
+      expect(styles.run(rPrOf('<w:rFonts w:asciiTheme="minorHAnsi"/>'), paragraph).fontFamily).toBe(
+        'Calibri Light',
+      );
+    });
+
+    it('R24-06 : taille de police hors 1-1638 pt, négative, nulle ou hexadécimale ignorée', async () => {
+      const styles = await resolver(NORMAL);
+      const paragraph = styles.paragraph(null);
+      const size = (val: string): number | undefined =>
+        styles.run(rPrOf(`<w:sz w:val="${val}"/>`), paragraph).fontSizePt;
+      expect(size('99999999999999999999999')).toBe(10);
+      expect(size('-22')).toBe(10);
+      expect(size('0')).toBe(10);
+      expect(size('1')).toBe(10);
+      expect(size('0x20')).toBe(10);
+      expect(size('1e3')).toBe(10);
+      expect(size('Infinity')).toBe(10);
+      expect(size('3278')).toBe(10);
+      expect(size('2')).toBe(1);
+      expect(size('3276')).toBe(1638);
+      expect(size('23')).toBe(11.5);
+    });
+
+    it('R24-06 : interligne, espacements, retraits et bordures bornés comme dans Word', async () => {
+      const styles = await resolver(NORMAL);
+      const paragraph = (inner: string): ReturnType<StyleResolver['paragraph']> =>
+        styles.paragraph(pPrOf(inner));
+      // Interligne multiple ≤ 132, exact/atLeast ≤ 1584 pt, jamais négatif.
+      expect(paragraph('<w:spacing w:line="2000000"/>').lineHeight).toBe(1.08);
+      expect(paragraph('<w:spacing w:line="31680"/>').lineHeight).toBe(132);
+      expect(paragraph('<w:spacing w:line="-240"/>').lineHeight).toBe(1.08);
+      expect(paragraph('<w:spacing w:line="31700" w:lineRule="exact"/>')).not.toHaveProperty(
+        'lineHeightPt',
+      );
+      expect(paragraph('<w:spacing w:line="31680" w:lineRule="exact"/>').lineHeightPt).toBe(1584);
+      // Espacements et retraits dans ±1584 pt.
+      expect(paragraph('<w:spacing w:before="-100"/>').spacingBeforePt).toBe(-5);
+      expect(paragraph('<w:spacing w:before="31700"/>').spacingBeforePt).toBeUndefined();
+      expect(paragraph('<w:spacing w:after="99999999999"/>').spacingAfterPt).toBe(8);
+      expect(paragraph('<w:ind w:left="31700" w:right="-31700"/>')).not.toHaveProperty(
+        'indentLeftPt',
+      );
+      expect(paragraph('<w:ind w:left="31700" w:right="-31700"/>')).not.toHaveProperty(
+        'indentRightPt',
+      );
+      expect(paragraph('<w:ind w:hanging="31700"/>')).not.toHaveProperty('indentFirstLinePt');
+      expect(paragraph('<w:ind w:left="31680" w:hanging="31680"/>')).toMatchObject({
+        indentLeftPt: 1584,
+        indentFirstLinePt: -1584,
+      });
+      // Bordure > 12 pt : largeur par défaut (½ pt), style et couleur conservés.
+      expect(
+        paragraph('<w:pBdr><w:top w:val="single" w:sz="99999999" w:color="FF0000"/></w:pBdr>')
+          .borders,
+      ).toEqual([{ side: 'top', style: 'solid', widthPt: 0.5, color: '#ff0000' }]);
+      expect(
+        paragraph('<w:pBdr><w:top w:val="single" w:sz="96"/></w:pBdr>').borders?.[0]?.widthPt,
+      ).toBe(12);
+      // Espacement de caractères ±1584 pt.
+      const run = (inner: string): number | undefined =>
+        styles.run(rPrOf(inner), styles.paragraph(null)).letterSpacingPt;
+      expect(run('<w:spacing w:val="31700"/>')).toBeUndefined();
+      expect(run('<w:spacing w:val="-31680"/>')).toBe(-1584);
+      expect(run('<w:spacing w:val="0x14"/>')).toBeUndefined();
+    });
+
+    it('R24-07 : chaîne basedOn de 1 500 styles, 1 500 paragraphes et 1 500 runs en moins de 500 ms', async () => {
+      const COUNT = 1500;
+      let xml = NORMAL;
+      for (let index = 1; index <= COUNT; index += 1) {
+        xml += style('paragraph', `P${index}`, `<w:pPr><w:ind w:left="${index}"/></w:pPr>`, {
+          basedOn: index === 1 ? 'Normal' : `P${index - 1}`,
+        });
+        xml += style('character', `C${index}`, `<w:rPr><w:spacing w:val="${index}"/></w:rPr>`, {
+          basedOn: index === 1 ? undefined : `C${index - 1}`,
+        });
+      }
+      const styles = await resolver(xml);
+      // Les fragments sont parsés hors chronomètre : seule la résolution est mesurée.
+      // Ordre décroissant : le premier paragraphe résout toute la chaîne, les suivants
+      // doivent réutiliser les nœuds mémoïsés.
+      const inputs = Array.from({ length: COUNT }, (_, offset) => {
+        const index = COUNT - offset;
+        return {
+          index,
+          pPr: pPrOf(`<w:pStyle w:val="P${index}"/>`),
+          rPr: rPrOf(`<w:rStyle w:val="C${index}"/>`),
+        };
+      });
+      const started = performance.now();
+      const results = inputs.map(({ pPr, rPr }) => {
+        const paragraph = styles.paragraph(pPr);
+        return { paragraph, run: styles.run(rPr, paragraph) };
+      });
+      const elapsed = performance.now() - started;
+      results.forEach(({ paragraph, run }, offset) => {
+        const { index } = inputs[offset] ?? { index: 0 };
+        expect(paragraph.indentLeftPt).toBe(index / 20);
+        expect(run.letterSpacingPt).toBe(index / 20);
+        expect(run.runStyle).toBe(`C${index}`);
+      });
+      expect(elapsed).toBeLessThan(500);
+    });
+
+    it('R24-08 : un pStyle d’un autre type (tableau, caractère) retombe sur le style par défaut', async () => {
+      const styles = await resolver(
+        NORMAL +
+          style('table', 'TableGrid', '<w:pPr><w:jc w:val="center"/></w:pPr>') +
+          style('character', 'Code', '<w:rPr><w:b/></w:rPr>'),
+      );
+      const expected = styles.paragraph(pPrOf('<w:pStyle w:val="Nope"/>'));
+      expect(expected.styleId).toBe('Normal');
+      for (const requested of ['TableGrid', 'Code']) {
+        const paragraph = styles.paragraph(pPrOf(`<w:pStyle w:val="${requested}"/>`));
+        expect(paragraph).toEqual(expected);
+        expect(paragraph.align).toBeUndefined();
+        expect(paragraph.runDefaults.bold).toBeUndefined();
+      }
+    });
+
+    it('R24-09 : les bascules d’un style de caractère sont en XOR avec celles du paragraphe', async () => {
+      const styles = await resolver(
+        NORMAL +
+          style('paragraph', 'Heading1', '<w:rPr><w:b/><w:i/><w:caps/><w:strike/></w:rPr>') +
+          style(
+            'character',
+            'Strong',
+            '<w:rPr><w:b/><w:i w:val="0"/><w:caps/><w:strike/><w:color w:val="C00000"/></w:rPr>',
+          ) +
+          style('character', 'Stronger', '<w:rPr><w:b/></w:rPr>', { basedOn: 'Strong' }) +
+          style('character', 'Small', '<w:rPr><w:smallCaps/></w:rPr>'),
+      );
+      const heading = styles.paragraph(pPrOf('<w:pStyle w:val="Heading1"/>'));
+      const normal = styles.paragraph(null);
+      const strongRPr = rPrOf('<w:rStyle w:val="Strong"/>');
+      // Sur un titre gras : Strong (gras) rend non gras ; `w:i w:val="0"` ne bascule pas.
+      expect(styles.run(strongRPr, heading)).toEqual({
+        fontFamily: 'Arial',
+        fontSizePt: 10,
+        italic: true,
+        color: '#c00000',
+        runStyle: 'Strong',
+      });
+      // Sur un paragraphe normal : Strong rend gras, capitales et barré.
+      expect(styles.run(strongRPr, normal)).toMatchObject({
+        bold: true,
+        caps: 'all',
+        strike: 'solid',
+        color: '#c00000',
+      });
+      expect(styles.run(strongRPr, normal).italic).toBeUndefined();
+      // Deux styles de caractère gras dans la hiérarchie : XOR entre eux (§17.7.3), puis
+      // avec le paragraphe.
+      expect(styles.run(rPrOf('<w:rStyle w:val="Stronger"/>'), normal).bold).toBeUndefined();
+      expect(styles.run(rPrOf('<w:rStyle w:val="Stronger"/>'), heading).bold).toBe(true);
+      // Petites capitales sur un titre en capitales : la casse du style de caractère l'emporte.
+      expect(styles.run(rPrOf('<w:rStyle w:val="Small"/>'), heading).caps).toBe('small');
+      // Le formatage direct reste absolu : `w:b` direct sur un titre gras + Strong → gras.
+      expect(styles.run(rPrOf('<w:rStyle w:val="Strong"/><w:b/>'), heading).bold).toBe(true);
+      expect(
+        styles.run(rPrOf('<w:rStyle w:val="Strong"/><w:b w:val="0"/>'), normal).bold,
+      ).toBeUndefined();
+    });
+
+    it('R24-10 : surlignage DarkBlue (et toute casse) reconnu', async () => {
+      const styles = await resolver(NORMAL);
+      const paragraph = styles.paragraph(null);
+      for (const name of ['DarkBlue', 'darkBlue', 'darkblue', 'DARKBLUE']) {
+        expect(styles.run(rPrOf(`<w:highlight w:val="${name}"/>`), paragraph).highlight).toBe(
+          '#000080',
+        );
+      }
+      expect(styles.run(rPrOf('<w:highlight w:val="LightGray"/>'), paragraph).highlight).toBe(
+        '#c0c0c0',
+      );
+      expect(
+        styles.run(rPrOf('<w:highlight w:val="chartreuse"/>'), paragraph).highlight,
+      ).toBeUndefined();
+    });
+  });
 });
