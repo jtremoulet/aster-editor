@@ -13,3 +13,6 @@ scripts/vanilla-playground/dist/
 e2e/output/
 e2e/test-results/
 e2e/playwright-report/
+
+# Documents clients déposés pour les tests de fidélité : jamais publiés
+fixtures/docx/client/

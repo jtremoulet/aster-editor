@@ -49,6 +49,18 @@ async function convertBlocks(container: Element, ctx: ConverterContext): Promise
       case 'bookmarkStart':
       case 'bookmarkEnd':
       case 'proofErr':
+      case 'commentRangeStart':
+      case 'commentRangeEnd':
+      case 'permStart':
+      case 'permEnd':
+      // Propriétés des conteneurs traversés (cellule, contrôle de contenu, tableau) : pas des blocs.
+      case 'tcPr':
+      case 'tblPr':
+      case 'tblGrid':
+      case 'trPr':
+      case 'sdtPr':
+      case 'sdtEndPr':
+      case 'pPr':
         break;
       default: {
         const lost = detectLost(child, ctx);

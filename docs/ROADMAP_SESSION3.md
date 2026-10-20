@@ -103,3 +103,9 @@ Phase 0 (contrat, fixtures, briefs) ≈ 45 min · Vague 1 ≈ 2 h en parallèle,
 
 - Un ou plusieurs `.docx` du client dans `fixtures/docx/client/` (anonymisés). Même un seul change la qualité du résultat.
 - La liste des éléments qui comptent le plus pour le client (polices, tableaux, en-têtes…), si elle est connue : elle ordonne les lots.
+
+## ➕ Ajouts en cours de session (20/10, 17:20)
+
+- **Document client** : `fixtures/docx/client/Modele_Demo_DER.docx` déposé par Joris (196 paragraphes, 8 tableaux, 3 sections, 20 champs de fusion complexes dont un imbriqué, 10 révisions, un pied de page). Non commité (`fixtures/docx/client/` ignoré par git tant que Joris n'a pas dit s'il peut être publié). Test `client-doc.spec.ts` activé quand le fichier est présent ; devient le document de référence du rapport de fidélité.
+- **L30 pagination (vague 2, `core` + `ui`)** : demande de Joris. Pagination **approximative** dans la vue page : un plugin ProseMirror mesure la hauteur des blocs rendus et pose des décorations de coupure là où la hauteur cumulée dépasse la zone utile (hauteur de page moins marges), avec numéro de page dans le pied affiché ; recalcul débouncé sur `update` et `resize` ; sauts de page explicites respectés ; les tableaux ne sont pas coupés (ils passent entiers à la page suivante, approximation documentée). Pas de garantie d'exactitude avec Word, écrit dans la doc.
+- **Numéros de liste écrasés** (capture de Joris) : les marqueurs des listes ordonnées sont rognés ou chevauchés. Piste : `padding-left: 1.6em` sur `ol` dans `themes/base.css` trop court pour deux chiffres, et retraits négatifs (`text-indent`) des paragraphes importés dans un `<li>`. À reproduire dans le playground, corriger dans `ui` (feuille) et dans `lists.ts` (retirer `margin-left` / `text-indent` issus de la numérotation).
