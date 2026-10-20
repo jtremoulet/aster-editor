@@ -365,3 +365,9 @@
 - Squelette du lecteur OOXML (`word/src/docx/reader/`) : `types.ts` (interfaces figées), `package.ts` (zip, parties, relations), `index.ts` (orchestrateur), dix stubs à signature figée que L24 et L25 remplacent fichier par fichier. `importDocx({ fidelity: 'styled' })` fonctionne de bout en bout en texte brut, variables comprises (5 tests). Défaut encore `semantic` : bascule à l'intégration de L24+L25.
 - Décision : les deux lots du lecteur se partagent un dossier mais pas un fichier ; ils ne se parlent que par `ConverterContext`. Les polices et tailles sont posées sur les runs, jamais sur les blocs (Tiptap ne lit pas `font-size` sur `<p>`).
 - Lancé : L22 fixtures (16:58). À suivre : L23 core, L24 reader runs, L25 reader blocs, L26 ui.
+
+### 20/10 17:05 — L22 fixtures rendu et intégré (agent ≈ 25 min)
+
+- 7 fixtures `11-styles-inline` … `17-objets-perdus` générées par `scripts/generate-fixtures-layout.ts` (lib `docx` + patches XML pour `TableGrid`, zone de texte, forme, objet OLE), reproductibles (hash identique hors `docProps/core.xml`), lisibles par mammoth sans rejet. README des fixtures mis à jour, `npm run fixtures` enchaîne les quatre scripts.
+- Décisions de l'agent validées : `Heading1`/`Heading2` déclarés via `styles.default.heading1/2` (la lib dupliquait le `styleId` sinon) ; pas de repli VML `mc:AlternateContent` autour des formes.
+- Dette : le script fait 844 lignes (un fichier pour sept fixtures), à découper si on y revient. Point à vérifier dans Word : l'objet OLE factice de la 17 peut déclencher une réparation.
