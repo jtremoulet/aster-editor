@@ -4,7 +4,7 @@ import { wordAttribute } from '../preprocess/xml-utils';
 import { relationshipAttribute } from './images';
 import { deriveContext } from './index';
 import type { ConverterContext } from './types';
-import { booleanAttribute } from './units-blocks';
+import { booleanAttribute } from './units';
 
 export interface HeadersFootersResult {
   readonly headers?: HeaderFooterSet;

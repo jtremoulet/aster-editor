@@ -10,7 +10,7 @@ import type {
 import type { DocxImportWarning } from '../types';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import type { DocxPackage, StyleResolver } from './types';
-import { numericAttribute, twipsToMm } from './units-blocks';
+import { numericAttribute, twipsToMm } from './units';
 
 /**
  * Mise en page d'une section (`w:sectPr`) vers le `DocumentLayout` du contrat : format

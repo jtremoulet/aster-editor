@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { fragment } from './testing-blocks';
 import {
+  booleanAttribute,
+  borderColor,
   borderDeclarations,
   borderStyleOf,
-  cssColor,
+  eighthPointsToPt,
   emuToPx,
+  emuToPxInt,
   mergePadding,
+  numberAttr,
+  numericAttribute,
   paddingValue,
+  ptToPx,
+  readBorderElement,
   readBorders,
   readCellMargins,
   readGridColumns,
@@ -14,37 +21,76 @@ import {
   twipsToMm,
   twipsToPt,
   twipsToPx,
-} from './units-blocks';
+} from './units';
 
-describe('units-blocks : conversions', () => {
-  it('convertit twips, EMU et huitièmes de point', () => {
+describe('units : conversions', () => {
+  it('convertit twips, EMU, points et huitièmes de point', () => {
     expect(twipsToPt(720)).toBe(36);
     expect(twipsToPt(1134)).toBe(56.7);
     expect(twipsToMm(1134)).toBe(20);
     expect(twipsToMm(720)).toBe(12.7);
     expect(twipsToMm(708)).toBe(12.49);
     expect(twipsToPx(2400)).toBe(160);
-    expect(emuToPx(914400)).toBe(96);
-    expect(emuToPx(2286000)).toBe(240);
+    expect(emuToPxInt(914400)).toBe(96);
+    expect(emuToPxInt(2286000)).toBe(240);
+    // Deux décimales pour le comparateur, entier pour les dimensions d'image.
+    expect(emuToPx(952500)).toBe(100);
+    expect(emuToPx(956000)).toBe(100.37);
+    expect(emuToPxInt(956000)).toBe(100);
+    expect(ptToPx(72)).toBe(96);
+    expect(eighthPointsToPt(4)).toBe(0.5);
+  });
+
+  it('F24 : attributs numériques stricts, hexadécimal et exposant rejetés pour les blocs aussi', () => {
+    expect(numberAttr('12')).toBe(12);
+    expect(numberAttr(' 12.5 ')).toBe(12.5);
+    expect(numberAttr('-720')).toBe(-720);
+    expect(numberAttr('0x20')).toBeUndefined();
+    expect(numberAttr('1e3')).toBeUndefined();
+    expect(numberAttr('Infinity')).toBeUndefined();
+    expect(numberAttr('')).toBeUndefined();
+    expect(numberAttr(null)).toBeUndefined();
+    const col = fragment('<w:gridCol w:w="0x960"/>');
+    expect(numericAttribute(col, 'w')).toBeUndefined();
+    expect(numericAttribute(fragment('<w:gridCol w:w="2400"/>'), 'w')).toBe(2400);
+    expect(numericAttribute(fragment('<w:gridCol w:w="1e12"/>'), 'w')).toBeUndefined();
+    expect(numericAttribute(null, 'w')).toBeUndefined();
+  });
+
+  it('lit les booléens Word : présent sans valeur vrai, 0/false/off faux', () => {
+    expect(booleanAttribute(fragment('<w:tblHeader/>'))).toBe(true);
+    expect(booleanAttribute(fragment('<w:tblHeader w:val="1"/>'))).toBe(true);
+    expect(booleanAttribute(fragment('<w:tblHeader w:val="0"/>'))).toBe(false);
+    expect(booleanAttribute(fragment('<w:tblHeader w:val="off"/>'))).toBe(false);
+    expect(booleanAttribute(null)).toBe(false);
   });
 
   it('mappe les styles de bordure Word sur les quatre du contrat', () => {
     expect(borderStyleOf('single')).toBe('solid');
     expect(borderStyleOf('thick')).toBe('solid');
+    expect(borderStyleOf('wave')).toBe('solid');
     expect(borderStyleOf('dashed')).toBe('dashed');
+    expect(borderStyleOf('dashSmallGap')).toBe('dashed');
+    expect(borderStyleOf('dashDotStroked')).toBe('dashed');
     expect(borderStyleOf('dotDash')).toBe('dashed');
+    expect(borderStyleOf('dotDotDash')).toBe('dashed');
     expect(borderStyleOf('dotted')).toBe('dotted');
     expect(borderStyleOf('double')).toBe('double');
+    expect(borderStyleOf('triple')).toBe('double');
+    expect(borderStyleOf('doubleWave')).toBe('double');
     expect(borderStyleOf('thinThickSmallGap')).toBe('double');
+    expect(borderStyleOf('thickThinLargeGap')).toBe('double');
+    expect(borderStyleOf('thinThickThinMediumGap')).toBe('double');
     expect(borderStyleOf('nil')).toBeNull();
     expect(borderStyleOf('none')).toBeNull();
     expect(borderStyleOf('')).toBeNull();
+    expect(borderStyleOf(null)).toBeNull();
   });
 
   it('normalise les couleurs et les fonds', () => {
-    expect(cssColor('FF0000')).toBe('#ff0000');
-    expect(cssColor('auto')).toBe('#000000');
-    expect(cssColor('rouge', '#123456')).toBe('#123456');
+    expect(borderColor('FF0000')).toBe('#ff0000');
+    expect(borderColor('auto')).toBe('#000000');
+    expect(borderColor('rouge', '#123456')).toBe('#123456');
     expect(shadingColor(fragment('<w:shd w:val="clear" w:fill="D9E2F3" w:color="auto"/>'))).toBe(
       '#d9e2f3',
     );
@@ -74,6 +120,37 @@ describe('units-blocks : conversions', () => {
     // `w:sz` absent : filet fin par défaut.
     expect(borders.left).toEqual({ side: 'left', style: 'double', widthPt: 0.5, color: '#000000' });
     expect(readBorders(null)).toEqual({});
+  });
+
+  it('L45 : `w:space` des bordures directes lu en `spacePt`, comme `readBorder` ; hors bornes ignoré', () => {
+    expect(
+      readBorderElement(fragment('<w:top w:val="single" w:sz="4" w:space="0"/>'), 'top'),
+    ).toEqual({ side: 'top', style: 'solid', widthPt: 0.5, color: '#000000', spacePt: 0 });
+    expect(
+      readBorderElement(fragment('<w:left w:val="single" w:sz="8" w:space="4"/>'), 'left'),
+    ).toEqual({ side: 'left', style: 'solid', widthPt: 1, color: '#000000', spacePt: 4 });
+    expect(readBorderElement(fragment('<w:top w:val="single" w:sz="4"/>'), 'top')).toEqual({
+      side: 'top',
+      style: 'solid',
+      widthPt: 0.5,
+      color: '#000000',
+    });
+    expect(
+      readBorderElement(fragment('<w:top w:val="single" w:sz="4" w:space="-1"/>'), 'top'),
+    ).not.toHaveProperty('spacePt');
+    expect(
+      readBorderElement(fragment('<w:top w:val="single" w:sz="4" w:space="0x4"/>'), 'top'),
+    ).not.toHaveProperty('spacePt');
+    // `w:sz` nul, hexadécimal ou au-delà de 12 pt : filet fin.
+    expect(readBorderElement(fragment('<w:top w:val="single" w:sz="0"/>'), 'top')?.widthPt).toBe(
+      0.5,
+    );
+    expect(readBorderElement(fragment('<w:top w:val="single" w:sz="0x10"/>'), 'top')?.widthPt).toBe(
+      0.5,
+    );
+    expect(readBorderElement(fragment('<w:top w:val="single" w:sz="200"/>'), 'top')?.widthPt).toBe(
+      0.5,
+    );
   });
 
   it('sérialise les bordures dans l’ordre top, right, bottom, left', () => {

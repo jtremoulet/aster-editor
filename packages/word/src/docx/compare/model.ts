@@ -9,13 +9,13 @@ import type {
   StyleResolver,
   TableStyleProps,
 } from '../reader/types';
-import { twipsToPt } from '../reader/units';
 import {
   numericAttribute,
   readBorders,
   shadingColor,
+  twipsToPt,
   type BorderMap,
-} from '../reader/units-blocks';
+} from '../reader/units';
 import {
   effectiveCellBorders,
   effectiveTableBorders,

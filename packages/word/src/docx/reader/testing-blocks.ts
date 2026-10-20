@@ -17,7 +17,7 @@ import type {
   ResolvedParagraphProps,
   StyleResolver,
 } from './types';
-import { numericAttribute, twipsToPt } from './units-blocks';
+import { numericAttribute, twipsToPt } from './units';
 
 /**
  * Harnais de test du lot L25 : fragments XML Word, paquets minimaux et contexte de

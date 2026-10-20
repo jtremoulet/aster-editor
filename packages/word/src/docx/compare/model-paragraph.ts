@@ -1,5 +1,6 @@
-import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
+import { parseMergeField, type MergeField } from '../preprocess/fields';
 import { toVariableName } from '../preprocess/names';
+import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
 import type { ResolvedRunProps } from '../reader/types';
 import { emuToPx } from '../reader/units';
 import type {
@@ -34,11 +35,8 @@ interface OpenField {
   capturing: boolean;
 }
 
-/** Nom brut et nom normalisé d'une instruction `MERGEFIELD`. */
-interface MergeFieldName {
-  readonly raw: string;
-  readonly name: string;
-}
+/** Nom brut et nom normalisé d'une instruction `MERGEFIELD` (`preprocess/fields.ts`). */
+type MergeFieldName = MergeField;
 
 /** Capture en cours du résultat d'un champ de fusion : bornes dans le segment courant. */
 interface MergeCapture {
@@ -68,21 +66,6 @@ interface Segment {
 
 /** `{{nom}}`, blancs intérieurs tolérés, pour lister les champs du texte canonique. */
 const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/g;
-
-/**
- * Instruction `MERGEFIELD nom` ou `MERGEFIELD "nom composé"`, options (`\* MERGEFORMAT`)
- * ignorées : même lecture que `preprocess/fields.ts` (`parseMergeField`, non exporté).
- */
-const MERGEFIELD_INSTR = /^\s*MERGEFIELD\s+(?:"([^"]*)"|(\S+))/iu;
-
-/** Nom brut et normalisé d'une instruction `MERGEFIELD`, `null` pour toute autre instruction. */
-function parseMergeField(instruction: string): MergeFieldName | null {
-  const match = MERGEFIELD_INSTR.exec(instruction);
-  if (!match) return null;
-  const raw = (match[1] ?? match[2] ?? '').trim();
-  const name = toVariableName(raw);
-  return name === null ? null : { raw, name };
-}
 
 function newSegment(): Segment {
   return {

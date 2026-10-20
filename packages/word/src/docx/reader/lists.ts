@@ -11,7 +11,7 @@ import type {
   NumberingResolver,
   ParagraphBlock,
 } from './types';
-import { numericAttribute, twipsToPt } from './units-blocks';
+import { numericAttribute, twipsToPt } from './units';
 
 /**
  * Listes : résolution de `numbering.xml` (`w:abstractNum` → niveaux, `w:num` →

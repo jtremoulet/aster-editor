@@ -3,7 +3,7 @@ import { allNamed, childNamed } from '../preprocess/xml-utils';
 import { escapeAttr, escapeHtml } from './html';
 import { alternateContentChoice, detectLostInline, textboxLost } from './lost';
 import type { ConverterContext, DocxPackage, ImageConverter, ReaderOptions } from './types';
-import { emuToPx, ptToPx } from './units-blocks';
+import { emuToPxInt, ptToPx } from './units';
 
 /**
  * Conversion des dessins Word en `<img>` : `w:drawing` (`wp:inline` et `wp:anchor`,
@@ -161,8 +161,8 @@ function readDrawing(drawing: Element): ImageSpec | null {
     relId,
     alt: docPr?.getAttribute('descr') ?? '',
   };
-  const width = boundedPx(cx > 0 ? emuToPx(cx) : undefined);
-  const height = boundedPx(cy > 0 ? emuToPx(cy) : undefined);
+  const width = boundedPx(cx > 0 ? emuToPxInt(cx) : undefined);
+  const height = boundedPx(cy > 0 ? emuToPxInt(cy) : undefined);
   if (width !== undefined) spec.width = width;
   if (height !== undefined) spec.height = height;
   const title = docPr?.getAttribute('title');

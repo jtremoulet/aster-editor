@@ -33,37 +33,36 @@ const TEMPLATE_TARGET_SCORE = 0.98;
 const ROUNDTRIP_MIN_TEXT_RATIO = 0.7;
 
 /**
- * Fixtures qui atteignent la cible dans le gabarit (mesure du 20/10/2026 après L42 et L43 :
- * sections multiples greffées, `w:tab`, `w:space`, couleurs exactes, `w:jc`), avec les
- * seules propriétés encore perdues, réelles et hors périmètre du comparateur :
- * - `11`, `12`, `13`, `15`, `16-sections`, `18-sections-triple` (1) : rien.
- * - `14-tableaux-riches` (0,988) : `table.borders` ×1, `table.cellBorders` ×4 — `w:space`
- *   lu par `reader/properties.readBorder` (bordures de style) mais pas par
- *   `units-blocks.readBorderElement` (`w:tcBorders` directs) : le comparateur voit un
- *   `spacePt: 0` d'un côté et rien de l'autre (fusion des deux modules prévue, L45).
+ * Fixtures qui atteignent la cible dans le gabarit (mesure du 21/10/2026 après L45a :
+ * `w:space` lu sur les bordures directes par `units.readBorderElement` comme sur celles
+ * de style par `properties.readBorder`, et plus comparé sur les bordures de tableau et
+ * de cellule, où Word ne l'applique pas — `model-borders.ts`), avec les seules propriétés
+ * encore perdues : `11`, `12`, `13`, `14`, `15`, `16-sections`, `18-sections-triple` (1) :
+ * rien. La 14 était à 0,988 (`table.borders` ×1, `table.cellBorders` ×4 : `spacePt: 0`
+ * d'un côté, rien ou 1 / 4 pt de l'autre) avant L45a.
  */
 const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
   '11-styles-inline.docx': [],
   '12-paragraphes.docx': [],
   '13-styles-nommes.docx': [],
-  '14-tableaux-riches.docx': ['table.borders', 'table.cellBorders'],
+  '14-tableaux-riches.docx': [],
   '15-listes-numerotation.docx': [],
   '16-sections.docx': [],
   '18-sections-triple.docx': [],
 };
 
 /**
- * Fixtures sous la cible dans le gabarit, avec le score mesuré le 20/10/2026 (après L43).
+ * Fixtures sous la cible dans le gabarit, avec le score mesuré le 21/10/2026 (après L45a).
  * Les parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
  * viennent du lecteur (`reader/**`) ou du writer (`writer/**`, `export/**`), hors
  * périmètre du comparateur :
- * - `17-objets-perdus` (0,972) : `paragraph.text` ×3 — texte de la zone de texte réinjecté
- *   dans le paragraphe porteur, texte de l'équation (`x2+1=0`) absent.
- * - `19-tabulations-bordures` (0,893) : tout sur le tableau à style conditionnel —
- *   `run.bold` ×2, `table.cellShading` ×6 (le lecteur résout `tblStylePr` en propriétés
- *   directes, le writer ne sait pas les retirer sans réécrire `w:tblLook`, hors contrat :
- *   proposition `TableLayoutAttrs.look`), `table.cellBorders` ×10 et `table.borders` ×1
- *   (`spacePt`, même cause que la fixture 14).
+ * - `17-objets-perdus` (0,972, inchangé) : `paragraph.text` ×3 — texte de la zone de texte
+ *   réinjecté dans le paragraphe porteur, texte de l'équation (`x2+1=0`) absent.
+ * - `19-tabulations-bordures` (0,919, 0,893 avant L45a) : tout sur le tableau à style
+ *   conditionnel — `run.bold` ×2, `table.cellShading` ×6 (le lecteur résout `tblStylePr`
+ *   en propriétés directes, le writer ne sait pas les retirer sans réécrire `w:tblLook`,
+ *   hors contrat : proposition `TableLayoutAttrs.look`). Les `table.cellBorders` ×10 et
+ *   `table.borders` ×1 (`spacePt`) ont disparu avec L45a.
  *
  * La valeur est un **plancher de non-régression** (score mesuré moins une marge), pas un
  * seuil : la cible reste `TEMPLATE_TARGET_SCORE`, assertée en `it.fails` jusqu'à ce que
@@ -72,16 +71,18 @@ const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
  */
 const TEMPLATE_BELOW_TARGET: Readonly<Record<string, number>> = {
   '17-objets-perdus.docx': 0.96,
-  '19-tabulations-bordures.docx': 0.88,
+  '19-tabulations-bordures.docx': 0.91,
 };
 
 /**
- * Document client dans le gabarit : **0,99** mesuré le 20/10/2026 après L43 (0,889 en L28c,
- * 0,830 en L28b) : la cible de la session 3 est atteinte, les trois `w:sectPr` ressortent
- * identiques à l'octet. Pertes restantes, toutes réelles et hors périmètre du comparateur :
- * `paragraph.text` ×2, `run.runStyle` / `run.underline` ×1 sur un lien (`Lienhypertexte`),
- * `table.borders` ×6 et `table.cellBorders` ×8 (`spacePt` des `w:tcBorders` directs, même
- * cause que la fixture 14). Le plancher est la cible elle-même.
+ * Document client dans le gabarit : **0,995** mesuré le 21/10/2026 après L45a (0,99 après
+ * L43, 0,889 en L28c, 0,830 en L28b) : la cible de la session 3 est atteinte, les trois
+ * `w:sectPr` ressortent identiques à l'octet. Pertes restantes, toutes réelles et hors
+ * périmètre du comparateur : `paragraph.text` ×2, `run.runStyle` / `run.underline` ×1 sur
+ * un lien (`Lienhypertexte`), `table.cellBorders` ×6 (traits gris `#bfbfbf` de côtés de
+ * cellules réécrits en noir sur un tableau, bordures ajoutées sur une cellule d'un autre :
+ * lecteur ou writer). Les `table.borders` ×6 et deux `table.cellBorders` (`spacePt`) ont
+ * disparu avec L45a. Le plancher est la cible elle-même.
  */
 const CLIENT_TEMPLATE_FLOOR = 0.98;
 
@@ -357,12 +358,6 @@ describe.skipIf(!existsSync(CLIENT))('compareDocx sur le document client', () =>
     expect(report.properties.find((p) => p.name === 'section.count')?.lost).toBe(0);
     expect(report.properties.find((p) => p.name === 'section.pgMar')?.lost).toBe(0);
     const lost = report.properties.filter((p) => p.lost > 0).map((p) => p.name);
-    expect(lost).toEqual([
-      'paragraph.text',
-      'run.runStyle',
-      'run.underline',
-      'table.borders',
-      'table.cellBorders',
-    ]);
+    expect(lost).toEqual(['paragraph.text', 'run.runStyle', 'run.underline', 'table.cellBorders']);
   });
 });

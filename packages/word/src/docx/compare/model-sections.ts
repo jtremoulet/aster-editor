@@ -1,7 +1,6 @@
 import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
 import { relationshipAttribute } from '../reader/images';
-import { twipsToPt } from '../reader/units';
-import { numericAttribute } from '../reader/units-blocks';
+import { numericAttribute, twipsToPt } from '../reader/units';
 import type {
   BlockModel,
   HeaderFooterModel,

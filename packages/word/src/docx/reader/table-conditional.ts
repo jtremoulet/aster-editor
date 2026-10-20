@@ -10,8 +10,7 @@ import {
   type ThemeFonts,
 } from './properties';
 import type { ResolvedRunProps, TableStyleProps } from './types';
-import { bordersBySide } from './units-blocks';
-import { numberAttr, onOff } from './units';
+import { bordersBySide, numberAttr, onOff } from './units';
 
 /**
  * Styles conditionnels de tableau (`w:tblStylePr` : première ligne, bandes…), approximés

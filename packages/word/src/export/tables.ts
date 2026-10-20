@@ -1,54 +1,42 @@
 import type {
   FileChild,
-  IBorderOptions,
-  ITableBordersOptions,
-  ITableCellBorders,
-  ITableCellOptions,
   ITableOptions,
   ITableWidthProperties,
   Paragraph,
   Table,
   TableCell,
+  ITableCellOptions,
 } from 'docx';
 import type { BlockScope } from './blocks';
-import { resolveDocxStyle, warn, type ExportContext } from './context';
+import { resolveDocxStyle, type ExportContext } from './context';
+import { parseBorders, parseStyle } from './css';
+import { positiveIntAttribute, tagOf } from './dom';
+import { DOCX_STYLE_ATTRIBUTE } from './styles';
 import {
-  CSS_BORDER_SIDES,
-  parseBorders,
-  parseColor,
-  parsePadding,
-  parsePixels,
-  parsePoints,
-  parseStyle,
-  pointsToTwips,
-  type CssBorder,
-  type CssBorderSide,
-} from './css';
-import { childElements, positiveIntAttribute, tagOf } from './dom';
-import { DOCX_STYLE_ATTRIBUTE, NIL_BORDER, borderOptions } from './styles';
-
-/** Nombre maximal de colonnes d'une table Word : plafond de `colspan` et de `<col span>`. */
-export const MAX_TABLE_COLUMNS = 63;
-
-/** Nombre maximal de lignes qu'une fusion verticale peut couvrir (`rowspan`). */
-export const MAX_ROW_SPAN = 65_534;
+  anyCellDeclaresBorders,
+  cellLayout,
+  declaredTableWidth,
+  tableAlignment,
+  tableBorders,
+  type CellEdges,
+} from './tables-borders';
+import {
+  MAX_ROW_SPAN,
+  analyzeGrid,
+  cellWidthTwips,
+  collectRows,
+  columnWidthsTwips,
+  isAllHeaderCells,
+  type CellPosition,
+} from './tables-grid';
 
 /**
- * Fusion lue sur `colspan`, `rowspan` ou `span`, 1 par défaut, bornée au plafond de
- * Word avec avertissement `table-span-clamped` : un `colspan="1000000"` ne doit ni
- * produire un fichier que Word refuse, ni faire allouer un million de colonnes.
+ * `<table>` → `Table` de `docx`. La grille (`tables-grid.ts`) et les propriétés du
+ * contrat (`tables-borders.ts`) sont ré-exportées d'ici : l'API du module est celle
+ * d'avant le découpage (L45).
  */
-function spanAttribute(element: Element, name: string, max: number, ctx: ExportContext): number {
-  const value = positiveIntAttribute(element, name);
-  if (value === null) return 1;
-  if (value <= max) return value;
-  warn(
-    ctx,
-    'table-span-clamped',
-    `${name}="${String(value)}" borné à ${String(max)}, plafond de Word`,
-  );
-  return max;
-}
+
+export { MAX_ROW_SPAN, MAX_TABLE_COLUMNS } from './tables-grid';
 
 /** Convertisseur de blocs injecté pour casser le cycle `blocks` ↔ `tables`. */
 export type ChildrenConverter = (
@@ -56,249 +44,6 @@ export type ChildrenConverter = (
   scope: BlockScope,
   ctx: ExportContext,
 ) => Promise<FileChild[]>;
-
-/** Twips par pixel CSS à 96 dpi : 1 px = 0,75 pt = 15 twips. */
-const TWIPS_PER_PX = 15;
-
-/** Ligne d'une table avec ses cellules et son appartenance à l'en-tête. */
-interface TableRowInfo {
-  readonly header: boolean;
-  readonly cells: readonly Element[];
-}
-
-/** Lignes directes d'une table, nues ou dans `thead`/`tbody`/`tfoot`, avec leurs cellules. */
-function collectRows(table: Element): TableRowInfo[] {
-  const rows: TableRowInfo[] = [];
-  const push = (row: Element, header: boolean): void => {
-    const cells = childElements(row).filter((cell) => {
-      const tag = tagOf(cell);
-      return tag === 'td' || tag === 'th';
-    });
-    if (cells.length > 0) rows.push({ header, cells });
-  };
-  for (const child of childElements(table)) {
-    const tag = tagOf(child);
-    if (tag === 'tr') push(child, false);
-    else if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot') {
-      for (const row of childElements(child)) if (tagOf(row) === 'tr') push(row, tag === 'thead');
-    }
-  }
-  return rows;
-}
-
-/** Vrai si toutes les cellules de la ligne sont des `th` : une ligne d'en-tête implicite. */
-function isAllHeaderCells(cells: readonly Element[]): boolean {
-  return cells.length > 0 && cells.every((cell) => tagOf(cell) === 'th');
-}
-
-/**
- * Largeurs en pixels des colonnes couvertes par une cellule : `colwidth="80,90"` (une
- * valeur par colonne fusionnée, convention Tiptap), sinon `style="width"` ou l'attribut
- * `width` pour une cellule simple. `null` pour une colonne inconnue.
- */
-function cellColumnWidths(cell: Element, span: number): Array<number | null> {
-  const colwidth = cell.getAttribute('colwidth');
-  if (colwidth !== null) {
-    const parts = colwidth.split(',').map((part) => parsePixels(part.trim()));
-    return parts.length === span ? parts : [];
-  }
-  if (span !== 1) return [];
-  const style = parseStyle(cell.getAttribute('style'));
-  return [parsePixels(style.get('width') ?? cell.getAttribute('width'))];
-}
-
-/** Largeurs déclarées par `<colgroup><col style="width">` (ou `width`), par colonne. */
-function colgroupWidths(table: Element, ctx: ExportContext): Array<number | null> {
-  const widths: Array<number | null> = [];
-  const pushCol = (col: Element): void => {
-    const style = parseStyle(col.getAttribute('style'));
-    const width = parsePixels(style.get('width') ?? col.getAttribute('width'));
-    const span = spanAttribute(col, 'span', MAX_TABLE_COLUMNS, ctx);
-    for (let i = 0; i < span; i += 1) widths.push(width);
-  };
-  for (const child of childElements(table)) {
-    if (tagOf(child) === 'col') pushCol(child);
-    else if (tagOf(child) === 'colgroup') {
-      for (const col of childElements(child)) if (tagOf(col) === 'col') pushCol(col);
-    }
-  }
-  return widths;
-}
-
-/** Position d'une cellule dans la grille : première colonne et nombre de colonnes couvertes. */
-interface CellPosition {
-  readonly column: number;
-  readonly span: number;
-}
-
-/** Grille de la table : largeur connue (px) de chaque colonne et position de chaque cellule. */
-interface TableGrid {
-  readonly columns: ReadonlyArray<number | null>;
-  readonly positions: ReadonlyMap<Element, CellPosition>;
-}
-
-/**
- * Place chaque cellule dans la grille en tenant compte des fusions (`colspan`, `rowspan`)
- * et relève la largeur de chaque colonne : première valeur rencontrée dans les cellules,
- * puis `<colgroup>` en repli. Les fusions sont bornées ici (avec avertissement) et la
- * grille ne marque que les lignes qui existent : un `rowspan` démesuré ne coûte rien.
- */
-function analyzeGrid(table: Element, rows: readonly TableRowInfo[], ctx: ExportContext): TableGrid {
-  const columns: Array<number | null> = [];
-  const positions = new Map<Element, CellPosition>();
-  const occupied = new Map<number, Set<number>>();
-  rows.forEach(({ cells }, rowIndex) => {
-    const taken = occupied.get(rowIndex) ?? new Set<number>();
-    let column = 0;
-    for (const cell of cells) {
-      while (taken.has(column)) column += 1;
-      const span = spanAttribute(cell, 'colspan', MAX_TABLE_COLUMNS, ctx);
-      const rowSpan = spanAttribute(cell, 'rowspan', MAX_ROW_SPAN, ctx);
-      cellColumnWidths(cell, span).forEach((width, offset) => {
-        const index = column + offset;
-        if (columns[index] === undefined || columns[index] === null) columns[index] = width;
-      });
-      for (let offset = 0; offset < span; offset += 1) {
-        if (columns[column + offset] === undefined) columns[column + offset] = null;
-      }
-      const lastRow = Math.min(rowIndex + rowSpan, rows.length);
-      for (let below = rowIndex + 1; below < lastRow; below += 1) {
-        const set = occupied.get(below) ?? new Set<number>();
-        for (let offset = 0; offset < span; offset += 1) set.add(column + offset);
-        occupied.set(below, set);
-      }
-      positions.set(cell, { column, span });
-      column += span;
-    }
-  });
-  colgroupWidths(table, ctx).forEach((width, index) => {
-    if (index < columns.length && columns[index] === null) columns[index] = width;
-  });
-  return { columns, positions };
-}
-
-/**
- * Largeurs de colonnes en twips quand toutes sont connues, réduites à l'échelle si la
- * table déborderait de la zone de texte. `null` si une colonne au moins est inconnue :
- * la table reste alors à 100 % et seules les cellules connues portent une largeur.
- */
-function columnWidthsTwips(
-  columns: ReadonlyArray<number | null>,
-  ctx: ExportContext,
-  fitToPage: boolean,
-): number[] | null {
-  if (columns.length === 0 || columns.some((width) => width === null)) return null;
-  const px = columns.map((width) => width ?? 0);
-  const total = px.reduce((sum, width) => sum + width, 0);
-  const scale = fitToPage && total > ctx.maxImageWidth ? ctx.maxImageWidth / total : 1;
-  return px.map((width) => Math.max(1, Math.round(width * scale * TWIPS_PER_PX)));
-}
-
-/** Bordure Word explicitement absente (`w:val="nil"`). */
-const NO_BORDER: IBorderOptions = NIL_BORDER;
-
-/** Bordure de cellule ou de tableau : CSS → `docx`, `nil` pour un côté déclaré sans trait. */
-function tableBorder(border: CssBorder | null, side: CssBorderSide): IBorderOptions {
-  return border ? borderOptions(border, side) : NO_BORDER;
-}
-
-/** Attribut d'alignement horizontal du tableau (`TableLayoutAttrs.align`, `w:jc`). */
-const TABLE_ALIGN_ATTRIBUTE = 'data-align';
-
-/**
- * Alignement horizontal du tableau (`w:jc`) : `data-align="center|right"` du contrat, ou
- * le centrage CSS usuel (`margin: 0 auto`, `margin-left/right: auto`). `undefined` pour
- * `left` ou sans déclaration : Word aligne à gauche par défaut.
- */
-function tableAlignment(
-  table: Element,
-  style: ReadonlyMap<string, string>,
-  ctx: ExportContext,
-): ITableOptions['alignment'] | undefined {
-  const { AlignmentType } = ctx.docx;
-  switch (table.getAttribute(TABLE_ALIGN_ATTRIBUTE)?.trim().toLowerCase()) {
-    case 'center':
-      return AlignmentType.CENTER;
-    case 'right':
-      return AlignmentType.RIGHT;
-    case 'left':
-      return undefined;
-    default:
-      break;
-  }
-  const margin = style.get('margin')?.trim().toLowerCase().split(/\s+/) ?? [];
-  const left = style.get('margin-left')?.trim().toLowerCase() ?? margin[3] ?? margin[1];
-  const right = style.get('margin-right')?.trim().toLowerCase() ?? margin[1];
-  if (left === 'auto' && right === 'auto') return AlignmentType.CENTER;
-  if (left === 'auto' && right !== undefined) return AlignmentType.RIGHT;
-  return undefined;
-}
-
-type MutableCellBorders = { -readonly [K in keyof ITableCellBorders]: ITableCellBorders[K] };
-
-/** Arêtes d'une cellule qui sont des bords extérieurs du tableau. */
-interface CellEdges {
-  readonly top: boolean;
-  readonly right: boolean;
-  readonly bottom: boolean;
-  readonly left: boolean;
-}
-
-/**
- * Propriétés de cellule du contrat (`CellLayoutAttrs`, en `style` inline) : bordures par
- * côté (`w:tcBorders`), fond (`w:shd`), alignement vertical (`w:vAlign`), marges internes
- * (`w:tcMar`, `padding` en points). En mode explicite (tableau venu de l'import), le HTML
- * fait foi : un côté intérieur non déclaré est écrit `nil`, pour qu'un style de tableau du
- * gabarit ne le redessine pas ; les bords extérieurs restent ceux du tableau.
- */
-function cellLayout(
-  cell: Element,
-  ctx: ExportContext,
-  explicit: boolean,
-  edges: CellEdges,
-): Pick<ITableCellOptions, 'borders' | 'shading' | 'verticalAlign' | 'margins'> {
-  const style = parseStyle(cell.getAttribute('style'));
-  const result: {
-    -readonly [
-      K in keyof Pick<ITableCellOptions, 'borders' | 'shading' | 'verticalAlign' | 'margins'>
-    ]: ITableCellOptions[K];
-  } = {};
-  const borders: MutableCellBorders = {};
-  const declared = parseBorders(style);
-  for (const side of CSS_BORDER_SIDES) {
-    const border = declared.get(side);
-    if (border !== undefined) borders[side] = tableBorder(border, side);
-    else if (explicit && !edges[side]) borders[side] = NO_BORDER;
-  }
-  if (Object.keys(borders).length > 0) result.borders = borders;
-  const shading = parseColor(style.get('background-color'));
-  if (shading) result.shading = { fill: shading, type: 'clear', color: 'auto' };
-  switch (style.get('vertical-align')?.trim().toLowerCase()) {
-    case 'top':
-      result.verticalAlign = ctx.docx.VerticalAlignTable.TOP;
-      break;
-    case 'middle':
-      result.verticalAlign = ctx.docx.VerticalAlignTable.CENTER;
-      break;
-    case 'bottom':
-      result.verticalAlign = ctx.docx.VerticalAlignTable.BOTTOM;
-      break;
-    default:
-      break;
-  }
-  const padding = parsePadding(style.get('padding'));
-  if (padding) {
-    const [top, right, bottom, left] = padding;
-    result.margins = {
-      marginUnitType: ctx.docx.WidthType.DXA,
-      top: pointsToTwips(top),
-      right: pointsToTwips(right),
-      bottom: pointsToTwips(bottom),
-      left: pointsToTwips(left),
-    };
-  }
-  return result;
-}
 
 /**
  * `<td>`/`<th>` → `TableCell`. Les en-têtes sont en gras, `colspan`/`rowspan` deviennent
@@ -339,77 +84,6 @@ async function convertCell(
     ...cellLayout(cell, ctx, explicit, edges),
   };
   return new ctx.docx.TableCell(options);
-}
-
-/**
- * Largeur déclarée du tableau (`TableLayoutAttrs.width` : `100%` ou `450pt`), `null` sans
- * déclaration lisible.
- */
-function declaredTableWidth(
-  style: ReadonlyMap<string, string>,
-  ctx: ExportContext,
-): ITableWidthProperties | null {
-  const raw = style.get('width')?.trim();
-  if (!raw) return null;
-  const percent = /^([\d.]+)%$/.exec(raw);
-  if (percent) {
-    const value = Number(percent[1]);
-    return Number.isFinite(value) && value > 0
-      ? { size: Math.min(100, value), type: ctx.docx.WidthType.PERCENTAGE }
-      : null;
-  }
-  const points = parsePoints(raw);
-  return points !== null && points > 0
-    ? { size: pointsToTwips(points), type: ctx.docx.WidthType.DXA }
-    : null;
-}
-
-/** Vrai si un `<td>`/`<th>` du tableau déclare une bordure dans son `style`. */
-function anyCellDeclaresBorders(rows: readonly TableRowInfo[]): boolean {
-  return rows.some(({ cells }) =>
-    cells.some((cell) => parseBorders(parseStyle(cell.getAttribute('style'))).size > 0),
-  );
-}
-
-/**
- * Bordures du tableau. Un tableau qui vient de l'éditeur sans aucune bordure déclarée
- * garde le quadrillage simple de `docx` (lisible dans Word). Dès qu'une bordure est
- * déclarée (sur `<table>` ou une cellule) ou qu'un style Word est référencé, le contrat
- * fait foi : côtés extérieurs tels que déclarés, `nil` sinon, et aucun trait intérieur au
- * niveau du tableau (les cellules portent les leurs).
- */
-function tableBorders(
-  style: ReadonlyMap<string, string>,
-  explicit: boolean,
-): ITableBordersOptions | undefined {
-  const declared = parseBorders(style);
-  if (!explicit && declared.size === 0) return undefined;
-  const borders: { -readonly [K in keyof ITableBordersOptions]: ITableBordersOptions[K] } = {
-    insideHorizontal: NO_BORDER,
-    insideVertical: NO_BORDER,
-  };
-  for (const side of CSS_BORDER_SIDES)
-    borders[side] = tableBorder(declared.get(side) ?? null, side);
-  return borders;
-}
-
-/** Largeur en twips d'une cellule à partir des colonnes qu'elle couvre, `null` si l'une est inconnue. */
-function cellWidthTwips(
-  position: CellPosition | undefined,
-  columns: ReadonlyArray<number | null>,
-  twips: readonly number[] | null,
-  ctx: ExportContext,
-): number | null {
-  if (!position) return null;
-  const covered = columns.slice(position.column, position.column + position.span);
-  if (covered.length !== position.span || covered.some((width) => width === null)) return null;
-  if (twips) {
-    return twips
-      .slice(position.column, position.column + position.span)
-      .reduce((sum, width) => sum + width, 0);
-  }
-  const px = covered.reduce<number>((sum, width) => sum + (width ?? 0), 0);
-  return Math.round(Math.min(px, ctx.maxImageWidth) * TWIPS_PER_PX);
 }
 
 /**

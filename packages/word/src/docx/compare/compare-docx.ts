@@ -1,4 +1,4 @@
-import { importDocx } from '../import-docx';
+import { importDocx, invalidDocx } from '../import-docx';
 import { createNumberingResolver } from '../reader/lists';
 import { defaultXmlParse, openPackage, relsPathOf } from '../reader/package';
 import { createStyleResolver } from '../reader/styles';
@@ -61,20 +61,10 @@ interface OpenedDocument {
 }
 
 /**
- * Erreur typée pour les entrées illisibles, même nom et même préfixe de message que
- * l'import (`DocxImportError`, `invalid-docx: …`, non exportés par `import-docx.ts`) : un
- * intégrateur distingue un document hostile d'un bug du comparateur (R30-12).
- */
-function invalidDocx(label: string, detail: string): Error {
-  const error = new Error(`invalid-docx: ${label} : ${detail}`);
-  error.name = 'DocxImportError';
-  return error;
-}
-
-/**
  * Ouvre un paquet et lit son modèle. Un zip sans partie principale, des octets qui ne sont
- * pas un zip ou un XML illisible rejettent en `DocxImportError`, jamais une erreur JSZip
- * ou `Error` nue.
+ * pas un zip ou un XML illisible rejettent en `DocxImportError` (`invalid-docx: <label> :
+ * <détail>`, l'erreur de l'import), jamais une erreur JSZip ou `Error` nue : un intégrateur
+ * distingue un document hostile d'un bug du comparateur (R30-12).
  */
 async function open(buffer: ArrayBuffer, label: string): Promise<OpenedDocument> {
   try {
@@ -86,7 +76,7 @@ async function open(buffer: ArrayBuffer, label: string): Promise<OpenedDocument>
     const model = await readDocumentModel(pkg, styles, numbering);
     return { buffer, pkg, styles, numbering, model };
   } catch (error: unknown) {
-    throw invalidDocx(label, error instanceof Error ? error.message : String(error));
+    throw invalidDocx(`${label} : ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

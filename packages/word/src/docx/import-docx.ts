@@ -30,8 +30,9 @@ type MammothImage = Parameters<Parameters<Mammoth['images']['imgElement']>[0]>[0
  * Vrai si l'entrée est un `File`/`Blob` (jsdom et navigateurs exposent `arrayBuffer()`).
  * Pas d'`instanceof` : en test, le `File` de jsdom et l'`ArrayBuffer` de Node vivent dans
  * des realms différents. `null` et les primitives sont écartés avant tout accès (W-4).
+ * Partagé avec l'ouverture du gabarit (`writer/template.ts`).
  */
-function isBlobLike(input: unknown): input is File {
+export function isBlobLike(input: unknown): input is File {
   return (
     typeof input === 'object' &&
     input !== null &&
@@ -45,12 +46,12 @@ function describeError(error: unknown): string {
 }
 
 /** Détection d'`ArrayBuffer` robuste aux realms (jsdom vs Node), contrairement à `instanceof`. */
-function isArrayBuffer(input: unknown): input is ArrayBuffer {
+export function isArrayBuffer(input: unknown): input is ArrayBuffer {
   return Object.prototype.toString.call(input) === '[object ArrayBuffer]';
 }
 
 /** Les 4 premiers octets d'un .docx valide sont la signature zip `PK\x03\x04`. */
-function hasZipSignature(buffer: ArrayBuffer): boolean {
+export function hasZipSignature(buffer: ArrayBuffer): boolean {
   const bytes = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
   return (
     bytes.length === 4 &&
@@ -61,11 +62,21 @@ function hasZipSignature(buffer: ArrayBuffer): boolean {
   );
 }
 
-/** Erreur typée pour les entrées illisibles, message stable pour les intégrateurs. */
-function invalidDocx(detail: string): Error {
-  const error = new Error(`invalid-docx: ${detail}`);
-  error.name = 'DocxImportError';
-  return error;
+/**
+ * Erreur typée pour les entrées illisibles : nom `DocxImportError` et message
+ * `invalid-docx: …` stables pour les intégrateurs, qui distinguent ainsi un document
+ * hostile d'un bug (R30-12). Levée par l'import et par le comparateur (`compare-docx.ts`).
+ */
+export class DocxImportError extends Error {
+  constructor(detail: string) {
+    super(`invalid-docx: ${detail}`);
+    this.name = 'DocxImportError';
+  }
+}
+
+/** `DocxImportError` pour un détail donné (`invalid-docx: <détail>`). */
+export function invalidDocx(detail: string): DocxImportError {
+  return new DocxImportError(detail);
 }
 
 /**

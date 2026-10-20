@@ -26,7 +26,7 @@ import {
   withSide,
   type BorderMap,
   type PaddingPt,
-} from './units-blocks';
+} from './units';
 
 /**
  * Conversion d'un `w:tbl` en `<table>` stylé selon le contrat `TableLayoutAttrs` /

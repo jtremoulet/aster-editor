@@ -1,7 +1,5 @@
-import type { BlockBorder, BorderSide } from '@aster-editor/core';
-import { allNamed, childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
 import {
-  applyBorders,
   applyParagraphProperties,
   applyRunProperties,
   cloneParagraph,
@@ -9,14 +7,19 @@ import {
   finalizeParagraph,
   finalizeRun,
   mergeRunDelta,
-  orderedBorders,
-  readBorder,
-  readShadingFill,
   type MutableParagraph,
   type MutableRun,
-  type ThemeFonts,
 } from './properties';
-import { readConditionalFormats, type ConditionalFormats } from './table-conditional';
+import {
+  headingLevelOfName,
+  readStyle,
+  readStylesPart,
+  readThemeFonts,
+  type StyleDefinition,
+  type StyleType,
+} from './styles-part';
+import { resolveTableStyle, type DocxTableStyleProps } from './styles-table';
+import type { ConditionalFormats } from './table-conditional';
 import type {
   DocxPackage,
   HeadingLevel,
@@ -25,31 +28,17 @@ import type {
   StyleResolver,
   TableStyleProps,
 } from './types';
-import { fontName, numberAttr, twipsToPt } from './units';
 
 /**
  * Résolution des styles Word : `docDefaults` → chaîne `basedOn` (garde anti-cycle) →
  * style de caractère → propriétés directes. Les polices du thème (`minorHAnsi`…) sont
  * lues dans `theme1.xml`. Le résolveur expose en plus du contrat `docDefaults()`, base
  * d'émission du HTML : `paragraphs.ts` et `runs.ts` n'écrivent que ce qui en diffère.
+ * La lecture de `styles.xml` (`styles-part.ts`) et la résolution des styles de tableau
+ * (`styles-table.ts`) sont des modules de celui-ci (découpage L45).
  */
 
-type StyleType = 'paragraph' | 'character' | 'table' | 'numbering';
-
-interface StyleDefinition {
-  readonly id: string;
-  readonly name: string;
-  readonly type: StyleType;
-  readonly basedOn?: string;
-  readonly link?: string;
-  readonly isDefault: boolean;
-  readonly pPr: Element | null;
-  readonly rPr: Element | null;
-  readonly tblPr: Element | null;
-  readonly tcPr: Element | null;
-  /** `w:tblStylePr` d'un style de tableau (formats conditionnels), vide sinon. */
-  readonly tblStylePrs: readonly Element[];
-}
+export type { DocxTableStyleProps } from './styles-table';
 
 /** Défauts du document (`w:docDefaults`), sans aucun style appliqué. */
 export interface DocDefaults {
@@ -60,15 +49,6 @@ export interface DocDefaults {
 /** Résolveur d'Aster : le contrat plus les défauts du document. */
 export interface DocxStyleResolver extends StyleResolver {
   docDefaults(): DocDefaults;
-}
-
-/**
- * Style de tableau d'Aster : le contrat plus les défauts de paragraphe du style (`pPr`) et
- * ses formats conditionnels (`w:tblStylePr`, session 4), appliqués par `tables.ts`.
- */
-export interface DocxTableStyleProps extends TableStyleProps {
-  readonly paragraphDefaults?: Omit<ResolvedParagraphProps, 'runDefaults' | 'styleId'>;
-  readonly conditional?: ConditionalFormats;
 }
 
 /** Formats conditionnels d'un style de tableau, `undefined` pour un style tiers ou sans `w:tblStylePr`. */
@@ -101,59 +81,6 @@ export function tableParagraphDefaultsOf(
   return style && 'paragraphDefaults' in style
     ? (style as DocxTableStyleProps).paragraphDefaults
     : undefined;
-}
-
-const HEADING_PATTERN = /^(?:heading|titre|überschrift|título|titolo)\s*([1-6])$/i;
-
-function headingLevelOfName(value: string): HeadingLevel | undefined {
-  const match = HEADING_PATTERN.exec(value.trim());
-  return match ? (Number(match[1]) as HeadingLevel) : undefined;
-}
-
-function readStyle(element: Element): StyleDefinition | null {
-  const id = wordAttribute(element, 'styleId');
-  const type = wordAttribute(element, 'type') || 'paragraph';
-  if (!id || !isStyleType(type)) return null;
-  const name = childNamed(element, 'name');
-  const basedOn = childNamed(element, 'basedOn');
-  const link = childNamed(element, 'link');
-  return {
-    id,
-    name: name ? wordAttribute(name, 'val') : '',
-    type,
-    basedOn: basedOn ? wordAttribute(basedOn, 'val') || undefined : undefined,
-    link: link ? wordAttribute(link, 'val') || undefined : undefined,
-    isDefault:
-      wordAttribute(element, 'default') === '1' || wordAttribute(element, 'default') === 'true',
-    pPr: childNamed(element, 'pPr'),
-    rPr: childNamed(element, 'rPr'),
-    tblPr: childNamed(element, 'tblPr'),
-    tcPr: childNamed(element, 'tcPr'),
-    tblStylePrs: type === 'table' ? childrenNamed(element, 'tblStylePr') : [],
-  };
-}
-
-function isStyleType(value: string): value is StyleType {
-  return (
-    value === 'paragraph' || value === 'character' || value === 'table' || value === 'numbering'
-  );
-}
-
-async function readThemeFonts(pkg: DocxPackage): Promise<ThemeFonts> {
-  const path = (await pkg.related(pkg.mainPart, '/theme')) ?? 'word/theme/theme1.xml';
-  const doc = await pkg.part(path);
-  if (!doc) return {};
-  const latin = (scheme: string): string | undefined => {
-    const element = allNamed(doc, scheme)[0];
-    const font = element ? childNamed(element, 'latin') : null;
-    return fontName(font?.getAttribute('typeface'));
-  };
-  return { major: latin('majorFont'), minor: latin('minorFont') };
-}
-
-async function readStylesPart(pkg: DocxPackage): Promise<Document | null> {
-  const path = (await pkg.related(pkg.mainPart, '/styles')) ?? 'word/styles.xml';
-  return pkg.part(path);
 }
 
 /** Crée le résolveur de styles du document. Signature figée par la phase 0. */
@@ -361,48 +288,6 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
 
   const tableStyles = new Map<string, DocxTableStyleProps | null>();
 
-  const resolveTableStyle = (styleId: string): DocxTableStyleProps | null => {
-    const { chain } = chainOf(styleId, 'table');
-    if (chain.length === 0) return null;
-    const borders = new Map<BorderSide, BlockBorder>();
-    const inside = new Map<BorderSide, BlockBorder>();
-    const cellBorders = new Map<BorderSide, BlockBorder>();
-    let cellShading: string | undefined;
-    let padding: [number, number, number, number] | undefined;
-    const run: MutableRun = { ...baseRun };
-    const paragraph = emptyParagraph();
-    for (const style of chain) {
-      if (style.rPr) applyRunProperties(style.rPr, run, theme);
-      if (style.pPr) applyParagraphProperties(style.pPr, paragraph);
-      const tblBorders = style.tblPr ? childNamed(style.tblPr, 'tblBorders') : null;
-      if (tblBorders) {
-        applyBorders(tblBorders, borders);
-        applyInsideBorders(tblBorders, inside);
-      }
-      const cellMar = style.tblPr ? childNamed(style.tblPr, 'tblCellMar') : null;
-      if (cellMar) padding = readCellMargins(cellMar, padding);
-      const tcBorders = style.tcPr ? childNamed(style.tcPr, 'tcBorders') : null;
-      if (tcBorders) applyBorders(tcBorders, cellBorders);
-      const shd = style.tcPr ? childNamed(style.tcPr, 'shd') : null;
-      if (shd) cellShading = readShadingFill(shd);
-    }
-    // Sans `tcBorders` propres, les traits intérieurs du tableau bordent chaque cellule.
-    const cells = cellBorders.size > 0 ? orderedBorders(cellBorders) : orderedBorders(inside);
-    const paragraphDefaults = finalizeParagraph(paragraph, {});
-    const { runDefaults: _ignored, ...paragraphOnly } = paragraphDefaults;
-    const outer = orderedBorders(borders);
-    const conditional = readConditionalFormats(chain, theme);
-    return {
-      ...(outer.length > 0 ? { borders: outer } : {}),
-      ...(cells.length > 0 ? { cellBorders: cells } : {}),
-      ...(cellShading ? { cellShading } : {}),
-      ...(padding ? { cellPaddingPt: padding } : {}),
-      runDefaults: finalizeRun(run),
-      ...(Object.keys(paragraphOnly).length > 0 ? { paragraphDefaults: paragraphOnly } : {}),
-      ...(conditional ? { conditional } : {}),
-    };
-  };
-
   return {
     paragraph(pPr) {
       const pStyle = pPr ? childNamed(pPr, 'pStyle') : null;
@@ -444,7 +329,7 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
       if (!styleId) return null;
       let cached = tableStyles.get(styleId);
       if (cached === undefined) {
-        cached = resolveTableStyle(styleId);
+        cached = resolveTableStyle(chainOf(styleId, 'table').chain, baseRun, theme);
         tableStyles.set(styleId, cached);
       }
       return cached;
@@ -462,44 +347,4 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
       return docDefaults;
     },
   };
-}
-
-/** `w:insideH` → haut et bas de cellule, `w:insideV` → gauche et droite. */
-function applyInsideBorders(tblBorders: Element, inside: Map<BorderSide, BlockBorder>): void {
-  const pairs: readonly (readonly [string, readonly BorderSide[]])[] = [
-    ['insideH', ['top', 'bottom']],
-    ['insideV', ['left', 'right']],
-  ];
-  for (const [name, sides] of pairs) {
-    const element = childNamed(tblBorders, name);
-    if (!element) continue;
-    for (const side of sides) {
-      const border = readBorder(element, side);
-      if (border) inside.set(side, border);
-      else inside.delete(side);
-    }
-  }
-}
-
-/** Marges de cellule `w:tblCellMar` en points `[haut, droite, bas, gauche]`, sur la base héritée. */
-function readCellMargins(
-  cellMar: Element,
-  inherited: [number, number, number, number] | undefined,
-): [number, number, number, number] {
-  const out: [number, number, number, number] = inherited ? [...inherited] : [0, 0, 0, 0];
-  const sides: readonly (readonly [string, 0 | 1 | 2 | 3])[] = [
-    ['top', 0],
-    ['right', 1],
-    ['end', 1],
-    ['bottom', 2],
-    ['left', 3],
-    ['start', 3],
-  ];
-  for (const [name, index] of sides) {
-    const element = childNamed(cellMar, name);
-    if (!element) continue;
-    const width = numberAttr(wordAttribute(element, 'w'));
-    if (width !== undefined) out[index] = twipsToPt(width);
-  }
-  return out;
 }

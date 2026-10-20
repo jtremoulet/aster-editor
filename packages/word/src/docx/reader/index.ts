@@ -125,8 +125,12 @@ async function convertContainer(
   return blocks;
 }
 
-/** Point d'entrée figé de `BlockConverters.blocks` : cellules, notes, en-têtes (sans sections). */
-async function convertBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
+/**
+ * Point d'entrée figé de `BlockConverters.blocks` : cellules, notes, en-têtes (sans
+ * sections). Exporté pour l'ouverture du gabarit (`writer/template.ts`), qui relit les
+ * en-têtes et pieds exactement comme l'import.
+ */
+export async function convertBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
   return convertContainer(container, ctx, null);
 }
 

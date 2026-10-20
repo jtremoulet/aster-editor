@@ -1,17 +1,18 @@
 import type { HeaderFooterSet } from '@aster-editor/core';
 import type { DocxExportWarning } from '../../export/types';
+import { hasZipSignature, isArrayBuffer, isBlobLike } from '../import-docx';
 import { transformVariablesXml } from '../preprocess/variables';
 import { childNamed, childrenNamed } from '../preprocess/xml-utils';
+import { convertBlocks } from '../reader';
 import { readHeadersFooters, type HeadersFootersResult } from '../reader/headers';
 import { createImageConverter } from '../reader/images';
-import { createNumberingResolver, registerListItem, renderBlocks } from '../reader/lists';
+import { createNumberingResolver, renderBlocks } from '../reader/lists';
 import { createNoteRegistry } from '../reader/notes';
 import { openPackage } from '../reader/package';
 import { convertParagraph } from '../reader/paragraphs';
 import { createStyleResolver, type DocxStyleResolver } from '../reader/styles';
 import { convertTable } from '../reader/tables';
 import type {
-  Block,
   ConverterContext,
   DocxPackage,
   NumberingResolver,
@@ -63,33 +64,10 @@ export interface TemplateContext {
   readonly sections?: readonly HeadersFootersResult[];
 }
 
-/** Détection d'`ArrayBuffer` robuste aux realms (jsdom vs Node), contrairement à `instanceof`. */
-function isArrayBuffer(input: unknown): input is ArrayBuffer {
-  return Object.prototype.toString.call(input) === '[object ArrayBuffer]';
-}
-
-/** Vrai si l'entrée est un `File`/`Blob` (`arrayBuffer()` disponible). */
-function isBlobLike(input: unknown): input is Blob {
-  return (
-    typeof input === 'object' &&
-    input !== null &&
-    typeof (input as { arrayBuffer?: unknown }).arrayBuffer === 'function'
-  );
-}
-
-/** Les 4 premiers octets d'un .docx valide sont la signature zip `PK\x03\x04`. */
-function hasZipSignature(buffer: ArrayBuffer): boolean {
-  const bytes = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
-  return (
-    bytes.length === 4 &&
-    bytes[0] === 0x50 &&
-    bytes[1] === 0x4b &&
-    bytes[2] === 0x03 &&
-    bytes[3] === 0x04
-  );
-}
-
-/** Octets d'une entrée `DocxInput`, `null` si elle n'en est pas une. Une vue typée est copiée. */
+/**
+ * Octets d'une entrée `DocxInput`, `null` si elle n'en est pas une (mêmes détections que
+ * l'import : `isArrayBuffer`, `isBlobLike`). Une vue typée est copiée.
+ */
 async function toArrayBuffer(input: DocxInput): Promise<ArrayBuffer | null> {
   if (isArrayBuffer(input)) return input;
   if (ArrayBuffer.isView(input)) {
@@ -243,41 +221,6 @@ async function preprocessedView(pkg: DocxPackage, codec: XmlCodec): Promise<Docx
   };
 }
 
-/**
- * Enfants bloc d'un en-tête ou d'un pied (`w:hdr`, `w:ftr`, `w:tc`, `w:sdtContent`) :
- * paragraphes (enregistrés pour les listes), tableaux, contrôles de contenu et balises
- * personnalisées traversés. Même parcours que le lecteur pour le corps, sans la détection
- * des objets perdus de premier niveau (inexistants dans un en-tête : les dessins y sont
- * dans les runs).
- */
-async function convertHeaderBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
-  const blocks: Block[] = [];
-  for (const child of Array.from(container.children)) {
-    switch (child.localName) {
-      case 'p': {
-        const block = await ctx.convert.paragraph(child, ctx);
-        registerListItem(block, ctx);
-        blocks.push(block);
-        break;
-      }
-      case 'tbl':
-        blocks.push(await ctx.convert.table(child, ctx));
-        break;
-      case 'sdt': {
-        const content = childNamed(child, 'sdtContent');
-        if (content) blocks.push(...(await convertHeaderBlocks(content, ctx)));
-        break;
-      }
-      case 'customXml':
-        blocks.push(...(await convertHeaderBlocks(child, ctx)));
-        break;
-      default:
-        break;
-    }
-  }
-  return blocks;
-}
-
 /** En-têtes et pieds effectifs de chaque section du gabarit, et ceux de la dernière. */
 interface TemplateHeadersFooters {
   readonly sections: readonly HeadersFootersResult[];
@@ -285,9 +228,10 @@ interface TemplateHeadersFooters {
 }
 
 /**
- * En-têtes et pieds effectifs du gabarit, lus par le lecteur stylé (`reader/headers.ts`)
- * sur le paquet déjà ouvert : seules les parties d'en-tête et de pied sont converties,
- * pas le corps. Comme à l'import, chaque section hérite des références de la précédente,
+ * En-têtes et pieds effectifs du gabarit, lus par le lecteur stylé (`reader/headers.ts`,
+ * blocs convertis par `convertBlocks` du lecteur, comme à l'import) sur le paquet déjà
+ * ouvert : seules les parties d'en-tête et de pied sont converties, pas le corps. Comme
+ * à l'import, chaque section hérite des références de la précédente,
  * les plus récentes recouvrant les plus anciennes type par type ; le résultat de chaque
  * section est conservé pour la greffe section par section.
  */
@@ -315,7 +259,7 @@ async function readTemplateHeadersFooters(
     convert: {
       paragraph: convertParagraph,
       table: convertTable,
-      blocks: convertHeaderBlocks,
+      blocks: convertBlocks,
       render: renderBlocks,
     },
     options,
