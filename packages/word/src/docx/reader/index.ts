@@ -1,7 +1,7 @@
-import type { DocumentLayout } from '@aster-editor/core';
+import type { DocumentLayout, SectionLayout } from '@aster-editor/core';
 import type { DocxImportWarning, DocxLostObject } from '../types';
-import { childNamed, childrenNamed } from '../preprocess/xml-utils';
-import { readHeadersFooters, type HeadersFootersResult } from './headers';
+import { childNamed } from '../preprocess/xml-utils';
+import { readEffectiveHeadersFooters, type HeadersFootersResult } from './headers';
 import { escapeHtml } from './html';
 import { createImageConverter } from './images';
 import { createNumberingResolver, registerListItem, renderBlocks } from './lists';
@@ -9,7 +9,7 @@ import { detectLost } from './lost';
 import { createNoteRegistry } from './notes';
 import { openPackage } from './package';
 import { convertParagraph } from './paragraphs';
-import { readDocumentLang, readSectionLayout } from './sections';
+import { readDocumentLang, readSectionLayout, readSectionProperties } from './sections';
 import { createStyleResolver } from './styles';
 import { convertTable } from './tables';
 import type {
@@ -17,6 +17,7 @@ import type {
   BlockConverters,
   ConverterContext,
   ContextPatch,
+  RawBlock,
   ReaderOptions,
   ReaderResult,
 } from './types';
@@ -24,25 +25,60 @@ import type {
 /**
  * Lecteur OOXML d'Aster (chemin `fidelity: 'styled'`). Orchestre les modules du dossier :
  * ouvre le paquet, construit les résolveurs (styles, numérotation, images, notes), parcourt
- * le corps bloc par bloc, rend les listes, ajoute les notes, lit la mise en page et les
- * en-têtes et pieds de la dernière section. Figé en phase 0 : les lots L24 et L25
- * remplacent les modules, pas cet orchestrateur.
+ * le corps bloc par bloc en marquant les fins de section, rend les listes, ajoute les
+ * notes, lit la mise en page de chaque section et celle de la dernière au premier niveau.
  */
+
+/** Saut de section du contrat : `n` est l'index (à partir de 1) de la section qui se termine. */
+export function sectionBreakHtml(section: number): string {
+  return `<hr data-section-break="${String(section)}">`;
+}
+
+/** `w:sectPr` porté par le `w:pPr` d'un paragraphe (fin de section), `null` sinon. */
+function paragraphSectPr(paragraph: Element): Element | null {
+  const pPr = childNamed(paragraph, 'pPr');
+  return pPr ? childNamed(pPr, 'sectPr') : null;
+}
+
+/** Fins de section rencontrées dans le corps, dans l'ordre : le `w:sectPr` et le bloc de saut émis. */
+interface SectionCollector {
+  readonly ends: { readonly sectPr: Element; readonly block: RawBlock }[];
+}
 
 /**
  * Enfants bloc d'un conteneur Word. `w:sdt` et `w:customXml` (balises XML personnalisées,
  * bibliographies) sont traversés, les signets et `w:proofErr` ignorés. Chaque paragraphe
  * numéroté est enregistré dans l'ordre du document (`registerListItem`), pour que la
  * numérotation continue à travers les cellules, rendues avant le corps.
+ *
+ * Avec un collecteur (corps du document, y compris à travers `w:sdt` / `w:customXml`), un
+ * paragraphe dont le `w:pPr` porte un `w:sectPr` termine une section : le paragraphe est
+ * rendu s'il a du contenu (sinon il n'est qu'un porteur, forme fréquente de Word, et ne
+ * laisse pas de `<p></p>` parasite), puis un `<hr data-section-break="n">` est émis.
  */
-async function convertBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
+async function convertContainer(
+  container: Element,
+  ctx: ConverterContext,
+  sections: SectionCollector | null,
+): Promise<Block[]> {
   const blocks: Block[] = [];
   for (const child of Array.from(container.children)) {
     switch (child.localName) {
       case 'p': {
         const block = await ctx.convert.paragraph(child, ctx);
-        registerListItem(block, ctx);
-        blocks.push(block);
+        const sectPr = sections ? paragraphSectPr(child) : null;
+        if (!sectPr || !block.isEmpty) {
+          registerListItem(block, ctx);
+          blocks.push(block);
+        }
+        if (sectPr && sections) {
+          const breakBlock: RawBlock = {
+            kind: 'raw',
+            html: sectionBreakHtml(sections.ends.length + 1),
+          };
+          sections.ends.push({ sectPr, block: breakBlock });
+          blocks.push(breakBlock);
+        }
         break;
       }
       case 'tbl':
@@ -50,11 +86,11 @@ async function convertBlocks(container: Element, ctx: ConverterContext): Promise
         break;
       case 'sdt': {
         const content = childNamed(child, 'sdtContent');
-        if (content) blocks.push(...(await convertBlocks(content, ctx)));
+        if (content) blocks.push(...(await convertContainer(content, ctx, sections)));
         break;
       }
       case 'customXml':
-        blocks.push(...(await convertBlocks(child, ctx)));
+        blocks.push(...(await convertContainer(child, ctx, sections)));
         break;
       case 'customXmlPr':
       case 'sectPr':
@@ -89,14 +125,66 @@ async function convertBlocks(container: Element, ctx: ConverterContext): Promise
   return blocks;
 }
 
+/** Point d'entrée figé de `BlockConverters.blocks` : cellules, notes, en-têtes (sans sections). */
+async function convertBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
+  return convertContainer(container, ctx, null);
+}
+
 /** Dérive un contexte pour une autre partie ou un autre conteneur, sans recréer les résolveurs. */
 export function deriveContext(ctx: ConverterContext, patch: ContextPatch): ConverterContext {
   return { ...ctx, ...patch };
 }
 
-/** `w:sectPr` final du corps (mise en page de la dernière section), `null` s'il manque. */
-function finalSectPr(body: Element): Element | null {
-  return childNamed(body, 'sectPr');
+/**
+ * Corps converti : ses blocs et les `w:sectPr` de toutes ses sections dans l'ordre (ceux
+ * des `w:pPr` puis le final). Sans `w:sectPr` final (paquet mal formé), la dernière fin de
+ * section rencontrée est la dernière section : son saut est retiré, jamais émis pour la
+ * dernière section.
+ */
+async function convertBody(
+  body: Element,
+  ctx: ConverterContext,
+): Promise<{ readonly blocks: Block[]; readonly sectPrs: Element[] }> {
+  const collector: SectionCollector = { ends: [] };
+  const blocks = await convertContainer(body, ctx, collector);
+  const sectPrs = collector.ends.map((end) => end.sectPr);
+  const finalSectPr = childNamed(body, 'sectPr');
+  if (finalSectPr) {
+    sectPrs.push(finalSectPr);
+  } else {
+    const last = collector.ends[collector.ends.length - 1];
+    const index = last ? blocks.indexOf(last.block) : -1;
+    if (index >= 0) blocks.splice(index, 1);
+  }
+  return { blocks, sectPrs };
+}
+
+/**
+ * `layout.sections` : chaque `w:sectPr` dans l'ordre, avec ses en-têtes et pieds effectifs
+ * (hérités de la section précédente type par type) et ses propriétés propres.
+ */
+async function readSections(
+  sectPrs: readonly Element[],
+  ctx: ConverterContext,
+  warnings: DocxImportWarning[],
+): Promise<{ readonly sections: SectionLayout[]; readonly headersFooters: HeadersFootersResult }> {
+  const effective = await readEffectiveHeadersFooters(sectPrs, ctx);
+  const sections = sectPrs.map((sectPr, index): SectionLayout => ({
+    ...readSectionProperties(sectPr, warnings),
+    ...effective[index],
+  }));
+  // Premier niveau (compatibilité 0.5) : jeu effectif de la dernière section, et première
+  // page différente dès qu'une section la déclare (décision L25, fixture 16).
+  const last = effective[effective.length - 1];
+  const titlePage = effective.some((section) => section.titlePage);
+  return {
+    sections,
+    headersFooters: {
+      ...(last?.headers ? { headers: last.headers } : {}),
+      ...(last?.footers ? { footers: last.footers } : {}),
+      ...(titlePage ? { titlePage: true } : {}),
+    },
+  };
 }
 
 /**
@@ -143,50 +231,19 @@ export async function readDocx(buffer: ArrayBuffer, options: ReaderOptions): Pro
     tableStyle: null,
   };
 
-  const blocks = await convertBlocks(body, ctx);
-  const sectPr = finalSectPr(body);
+  const { blocks, sectPrs } = await convertBody(body, ctx);
   const bodyHtml = renderBlocks(blocks, ctx);
   const notesHtml = options.footnotes ? await notes.render(ctx) : '';
   const lang = await readDocumentLang(pkg);
-  const headersFooters = await readEffectiveHeadersFooters(body, ctx);
+  const { sections, headersFooters } = await readSections(sectPrs, ctx, warnings);
+  const last = sections[sections.length - 1];
   const layout: DocumentLayout = {
-    ...readSectionLayout(sectPr, styles, lang, warnings),
+    ...(last?.page ? { page: last.page } : {}),
+    ...(last?.columns !== undefined ? { columns: last.columns } : {}),
+    ...readSectionLayout(null, styles, lang),
     ...headersFooters,
+    ...(sections.length > 0 ? { sections } : {}),
   };
 
   return { html: bodyHtml + notesHtml, layout, lost, warnings };
-}
-
-/** Tous les `w:sectPr` du corps dans l'ordre : ceux des `w:pPr` (fins de section) puis le final. */
-function allSectPrs(body: Element): Element[] {
-  const result: Element[] = [];
-  for (const p of childrenNamed(body, 'p')) {
-    const pPr = childNamed(p, 'pPr');
-    const sectPr = pPr ? childNamed(pPr, 'sectPr') : null;
-    if (sectPr) result.push(sectPr);
-  }
-  const last = finalSectPr(body);
-  if (last) result.push(last);
-  return result;
-}
-
-/**
- * En-têtes et pieds effectifs : Word fait hériter chaque section des références de la
- * précédente quand elle n'en déclare pas. On lit donc toutes les sections dans l'ordre, les
- * plus récentes recouvrant les plus anciennes type par type (`default`, `first`, `even`),
- * et `titlePage` vaut celui de la dernière section qui le déclare. Un document dont seule
- * la première section référence un pied (cas client) le conserve ainsi.
- */
-async function readEffectiveHeadersFooters(
-  body: Element,
-  ctx: ConverterContext,
-): Promise<HeadersFootersResult> {
-  const merged: { -readonly [K in keyof HeadersFootersResult]: HeadersFootersResult[K] } = {};
-  for (const sectPr of allSectPrs(body)) {
-    const section = await readHeadersFooters(sectPr, ctx);
-    if (section.headers) merged.headers = { ...merged.headers, ...section.headers };
-    if (section.footers) merged.footers = { ...merged.footers, ...section.footers };
-    if (section.titlePage !== undefined) merged.titlePage = section.titlePage;
-  }
-  return merged;
 }

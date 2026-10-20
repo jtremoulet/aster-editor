@@ -73,3 +73,31 @@ export async function readHeadersFooters(
   if (booleanAttribute(childNamed(sectPr, 'titlePg'))) result.titlePage = true;
   return result;
 }
+
+/**
+ * En-têtes et pieds **effectifs** de chaque section, dans l'ordre : Word fait hériter une
+ * section des références de la précédente quand elle n'en déclare pas, type par type
+ * (`default`, `first`, `even`). Chaque entrée reçoit le jeu hérité complété par ses propres
+ * références ; les parties ne sont converties qu'une fois et partagées entre sections.
+ * `titlePage` n'hérite pas (ECMA-376 §17.10.6 : `w:titlePg` absent = pas de première page
+ * différente) : il vaut celui que la section déclare elle-même.
+ */
+export async function readEffectiveHeadersFooters(
+  sectPrs: readonly Element[],
+  ctx: ConverterContext,
+): Promise<HeadersFootersResult[]> {
+  const result: HeadersFootersResult[] = [];
+  let headers: HeaderFooterSet | undefined;
+  let footers: HeaderFooterSet | undefined;
+  for (const sectPr of sectPrs) {
+    const own = await readHeadersFooters(sectPr, ctx);
+    if (own.headers) headers = { ...headers, ...own.headers };
+    if (own.footers) footers = { ...footers, ...own.footers };
+    result.push({
+      ...(headers ? { headers } : {}),
+      ...(footers ? { footers } : {}),
+      ...(own.titlePage ? { titlePage: true } : {}),
+    });
+  }
+  return result;
+}

@@ -2,6 +2,7 @@ import type { DocxLostObject } from '../types';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import { escapeAttr, escapeHtml, pt, styleAttr } from './html';
 import { detectLostInline } from './lost';
+import { tabStopsOf } from './properties';
 import { docDefaultsOf } from './styles';
 import type { ConverterContext, ResolvedParagraphProps, ResolvedRunProps } from './types';
 import { cssFontFamily, fontName } from './units';
@@ -56,8 +57,10 @@ function reportLost(element: Element, ctx: ConverterContext): void {
  * - les propriétés égales aux `docDefaults` du document ne sont pas écrites ; tout ce qui
  *   en diffère (y compris hérité du style de paragraphe) est posé sur chaque run, jamais
  *   sur le bloc ;
- * - `w:tab` → espace cadratin U+2003 (un seul caractère, non replié par HTML, réversible
- *   à l'export) ;
+ * - `w:tab` → nœud inline atomique `<span data-tab=""></span>` du contrat (session 4),
+ *   `data-stop="Npt"` quand le paragraphe définit un taquet pour cette tabulation (la
+ *   n-ième tabulation prend le n-ième taquet, approximation sans mesure du texte) ; émis
+ *   dans les balises du run, comme l'éditeur sérialise un atome inline portant des marques ;
  * - `w:br w:type="page"` → marqueur `PAGE_BREAK` dans le flux, que `paragraphs.ts` coupe
  *   en blocs frères ; dans un lien ou un champ, il dégénère en `<br>`.
  */
@@ -65,7 +68,13 @@ function reportLost(element: Element, ctx: ConverterContext): void {
 /** Marqueur de saut de page inséré dans le flux inline, extrait par `paragraphs.ts`. */
 export const PAGE_BREAK = '<hr data-page-break>';
 
-const TAB = String.fromCharCode(0x2003);
+/** Tabulation du contrat (`TabAttrs`) : `data-stop` seulement quand le taquet est connu. */
+export function tabHtml(stopPt?: number): string {
+  return stopPt === undefined
+    ? '<span data-tab=""></span>'
+    : `<span data-tab="" data-stop="${pt(stopPt)}"></span>`;
+}
+
 const NO_BREAK_HYPHEN = String.fromCharCode(0x2011);
 const SOFT_HYPHEN = String.fromCharCode(0xad);
 
@@ -167,6 +176,9 @@ interface WalkState {
   readonly fields: FieldFrame[];
   /** Profondeur de `<a>` ouverts : un saut de page y devient `<br>`. */
   linkDepth: number;
+  /** Taquets du paragraphe et rang de la prochaine tabulation rendue. */
+  readonly tabStops: readonly number[];
+  tabIndex: number;
 }
 
 /** Jeton d'instruction de champ : chaîne entre guillemets ou mot. */
@@ -270,7 +282,13 @@ export async function convertRuns(
   props: ResolvedParagraphProps,
 ): Promise<string> {
   const baseline = docDefaultsOf(ctx.styles).run;
-  const state: WalkState = { writer: new InlineWriter(), fields: [], linkDepth: 0 };
+  const state: WalkState = {
+    writer: new InlineWriter(),
+    fields: [],
+    linkDepth: 0,
+    tabStops: tabStopsOf(props),
+    tabIndex: 0,
+  };
 
   const withAnchor = async (target: string | null, body: () => Promise<void>): Promise<void> => {
     const href = safeHref(target);
@@ -376,8 +394,13 @@ export async function convertRuns(
           fieldChar(child);
           break;
         case 'tab':
+          if (inInstruction()) break;
+          state.writer.text(tags, tabHtml(state.tabStops[state.tabIndex]));
+          state.tabIndex += 1;
+          break;
         case 'ptab':
-          if (!inInstruction()) state.writer.text(tags, TAB);
+          // Tabulation absolue (`w:ptab`) : tabulation sans taquet, hors du décompte.
+          if (!inInstruction()) state.writer.text(tags, tabHtml());
           break;
         case 'br':
           if (inInstruction()) break;

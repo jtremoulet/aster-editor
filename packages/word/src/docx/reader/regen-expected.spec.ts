@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { importDocx } from '../import-docx';
 
 /**
- * Régénère `fixtures/docx/expected/11-17.html` depuis le chemin `styled`. Inactif par
+ * Régénère `fixtures/docx/expected/11-19.html` depuis le chemin `styled`. Inactif par
  * défaut : `ASTER_REGEN=1 npx vitest run src/docx/reader/regen-expected.spec.ts`, puis
  * relire le diff git avant de figer. À utiliser quand une décision de sérialisation change.
  */
@@ -17,6 +17,8 @@ const NAMES = [
   '15-listes-numerotation',
   '16-sections',
   '17-objets-perdus',
+  '18-sections-triple',
+  '19-tabulations-bordures',
 ];
 
 describe.skipIf(!process.env.ASTER_REGEN)('régénération des attendus du lecteur stylé', () => {

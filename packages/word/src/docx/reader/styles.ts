@@ -16,6 +16,7 @@ import {
   type MutableRun,
   type ThemeFonts,
 } from './properties';
+import { readConditionalFormats, type ConditionalFormats } from './table-conditional';
 import type {
   DocxPackage,
   HeadingLevel,
@@ -46,6 +47,8 @@ interface StyleDefinition {
   readonly rPr: Element | null;
   readonly tblPr: Element | null;
   readonly tcPr: Element | null;
+  /** `w:tblStylePr` d'un style de tableau (formats conditionnels), vide sinon. */
+  readonly tblStylePrs: readonly Element[];
 }
 
 /** Défauts du document (`w:docDefaults`), sans aucun style appliqué. */
@@ -59,9 +62,20 @@ export interface DocxStyleResolver extends StyleResolver {
   docDefaults(): DocDefaults;
 }
 
-/** Style de tableau d'Aster : le contrat plus les défauts de paragraphe du style (`pPr`). */
+/**
+ * Style de tableau d'Aster : le contrat plus les défauts de paragraphe du style (`pPr`) et
+ * ses formats conditionnels (`w:tblStylePr`, session 4), appliqués par `tables.ts`.
+ */
 export interface DocxTableStyleProps extends TableStyleProps {
   readonly paragraphDefaults?: Omit<ResolvedParagraphProps, 'runDefaults' | 'styleId'>;
+  readonly conditional?: ConditionalFormats;
+}
+
+/** Formats conditionnels d'un style de tableau, `undefined` pour un style tiers ou sans `w:tblStylePr`. */
+export function conditionalFormatsOf(
+  style: TableStyleProps | null,
+): ConditionalFormats | undefined {
+  return style && 'conditional' in style ? (style as DocxTableStyleProps).conditional : undefined;
 }
 
 /**
@@ -115,6 +129,7 @@ function readStyle(element: Element): StyleDefinition | null {
     rPr: childNamed(element, 'rPr'),
     tblPr: childNamed(element, 'tblPr'),
     tcPr: childNamed(element, 'tcPr'),
+    tblStylePrs: type === 'table' ? childrenNamed(element, 'tblStylePr') : [],
   };
 }
 
@@ -376,6 +391,7 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
     const paragraphDefaults = finalizeParagraph(paragraph, {});
     const { runDefaults: _ignored, ...paragraphOnly } = paragraphDefaults;
     const outer = orderedBorders(borders);
+    const conditional = readConditionalFormats(chain, theme);
     return {
       ...(outer.length > 0 ? { borders: outer } : {}),
       ...(cells.length > 0 ? { cellBorders: cells } : {}),
@@ -383,6 +399,7 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
       ...(padding ? { cellPaddingPt: padding } : {}),
       runDefaults: finalizeRun(run),
       ...(Object.keys(paragraphOnly).length > 0 ? { paragraphDefaults: paragraphOnly } : {}),
+      ...(conditional ? { conditional } : {}),
     };
   };
 

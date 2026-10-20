@@ -65,9 +65,9 @@ describe('fixtures 14-17 en mode styled', () => {
       /Tableau imbriqué :<\/p><table style="width: 100%;[^"]*"><tbody><tr><td colwidth="80"/,
     );
     expect(html).toMatch(/Imbriqué B2<\/p><\/td><\/tr><\/tbody><\/table><p[^>]*><\/p><\/td>/);
-    // Tableau 300 pt, style TableGrid résolu par L24 (bordures 0,5 pt), colwidth 200.
+    // Tableau 300 pt centré (`w:jc` → data-align), style TableGrid résolu par L24 (bordures 0,5 pt), colwidth 200.
     expect(html).toContain(
-      '<table style="width: 300pt; border-top: 0.5pt solid #000000; border-right: 0.5pt solid #000000; border-bottom: 0.5pt solid #000000; border-left: 0.5pt solid #000000" data-docx-style="TableGrid"><tbody><tr><td colwidth="200"',
+      '<table style="width: 300pt; border-top: 0.5pt solid #000000; border-right: 0.5pt solid #000000; border-bottom: 0.5pt solid #000000; border-left: 0.5pt solid #000000" data-docx-style="TableGrid" data-align="center"><tbody><tr><td colwidth="200"',
     );
     expect(html).not.toContain('margin-left: auto');
     expect(normalizeHtml(html)).toBe(normalizeHtml(expected('14-tableaux-riches')));

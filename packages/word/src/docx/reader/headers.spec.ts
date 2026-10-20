@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readHeadersFooters } from './headers';
+import { readEffectiveHeadersFooters, readHeadersFooters } from './headers';
 import { buildPackage, createTestContext, fragment, paragraphXml, partXml } from './testing-blocks';
 import type { DocxPackage } from './types';
 
@@ -90,5 +90,40 @@ describe('readHeadersFooters', () => {
       { part: 'word/header1.xml', where: 'header', style: null },
       { part: 'word/footer1.xml', where: 'footer', style: null },
     ]);
+  });
+
+  it('readEffectiveHeadersFooters : héritage type par type, titlePage propre à chaque section', async () => {
+    const ctx = await createTestContext(await sectionPackage());
+    const first = fragment(
+      '<w:sectPr><w:headerReference w:type="default" r:id="rId6"/><w:headerReference w:type="first" r:id="rId7"/><w:footerReference w:type="default" r:id="rId9"/><w:titlePg/></w:sectPr>',
+    );
+    const second = fragment(
+      '<w:sectPr><w:headerReference w:type="default" r:id="rId8"/></w:sectPr>',
+    );
+    const third = fragment('<w:sectPr><w:type w:val="continuous"/></w:sectPr>');
+    const sections = await readEffectiveHeadersFooters([first, second, third], ctx);
+    expect(sections).toHaveLength(3);
+    expect(sections[0]).toEqual({
+      headers: {
+        default: { html: '<p>En-tête par défaut</p>' },
+        first: { html: '<p>En-tête première page</p>' },
+      },
+      footers: { default: { html: '<p>Page 1</p>' } },
+      titlePage: true,
+    });
+    // Section 2 : en-tête `default` propre, `first` et pied hérités, pas de `titlePage`.
+    expect(sections[1]).toEqual({
+      headers: {
+        default: { html: '<p>En-tête page paire</p>' },
+        first: { html: '<p>En-tête première page</p>' },
+      },
+      footers: { default: { html: '<p>Page 1</p>' } },
+    });
+    expect(sections[1]?.headers?.first).toBe(sections[0]?.headers?.first);
+    // Section 3 sans référence : tout hérité de la section 2.
+    expect(sections[2]).toEqual({ headers: sections[1]?.headers, footers: sections[1]?.footers });
+    expect(sections[0]?.headers).not.toBe(sections[1]?.headers);
+    expect(await readEffectiveHeadersFooters([], ctx)).toEqual([]);
+    expect(ctx.warnings).toEqual([]);
   });
 });

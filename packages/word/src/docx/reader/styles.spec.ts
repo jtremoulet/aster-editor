@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createStyleResolver, docDefaultsOf, tableParagraphDefaultsOf } from './styles';
+import {
+  conditionalFormatsOf,
+  createStyleResolver,
+  docDefaultsOf,
+  tableParagraphDefaultsOf,
+} from './styles';
 import { fakePackage, pPrOf, rPrOf, stylesXml, themeXml } from './test-support';
 import type { StyleResolver } from './types';
 
@@ -473,6 +478,46 @@ describe('createStyleResolver', () => {
       expect(grid?.runDefaults).toEqual({ fontFamily: 'Arial', fontSizePt: 9 });
       expect(tableParagraphDefaultsOf(grid)).toEqual({ spacingAfterPt: 0, lineHeight: 1 });
       expect(styles.tableStyle('TableGrid')).toBe(grid);
+    });
+
+    it('w:tblStylePr → conditional (firstRow, band1Horz…), hérité le long de basedOn', async () => {
+      const styles = await resolver(
+        TABLE +
+          style(
+            'table',
+            'Cond',
+            '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/><w:bCs/></w:rPr><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/></w:tcPr></w:tblStylePr>' +
+              '<w:tblStylePr w:type="band1Horz"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/></w:tcPr></w:tblStylePr>',
+            { basedOn: 'TableGrid' },
+          ) +
+          style(
+            'table',
+            'CondChild',
+            '<w:tblStylePr w:type="firstRow"><w:tcPr><w:tcBorders><w:bottom w:val="single" w:sz="12" w:color="2F5496"/></w:tcBorders></w:tcPr></w:tblStylePr>',
+            { basedOn: 'Cond' },
+          ),
+      );
+      expect(conditionalFormatsOf(styles.tableStyle('Cond'))).toEqual({
+        firstRow: { cellShading: '#d9e2f3', run: { bold: true } },
+        band1Horz: { cellShading: '#f2f2f2' },
+      });
+      expect(conditionalFormatsOf(styles.tableStyle('CondChild'))).toEqual({
+        firstRow: {
+          cellBorders: [{ side: 'bottom', style: 'solid', widthPt: 1.5, color: '#2f5496' }],
+          cellShading: '#d9e2f3',
+          run: { bold: true },
+        },
+        band1Horz: { cellShading: '#f2f2f2' },
+      });
+      // Le reste du style est inchangé par les formats conditionnels.
+      expect(styles.tableStyle('Cond')?.cellShading).toBe('#f2f2f2');
+      expect(styles.tableStyle('Cond')?.runDefaults).toEqual({
+        fontFamily: 'Arial',
+        fontSizePt: 9,
+      });
+      expect(conditionalFormatsOf(styles.tableStyle('TableGrid'))).toBeUndefined();
+      expect(conditionalFormatsOf(null)).toBeUndefined();
+      expect(conditionalFormatsOf({ borders: [] })).toBeUndefined();
     });
 
     it('tcBorders explicites priment sur les traits intérieurs ; inconnu et null → null', async () => {

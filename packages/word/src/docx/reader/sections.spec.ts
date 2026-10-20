@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { DocxImportWarning } from '../types';
-import { namedPageSize, readDocumentLang, readSectionLayout } from './sections';
+import {
+  namedPageSize,
+  readDocumentLang,
+  readSectionLayout,
+  readSectionProperties,
+  readSectionStart,
+} from './sections';
 import { buildPackage, fragment, partXml, stubStyles } from './testing-blocks';
 
 const styles = stubStyles();
@@ -115,6 +121,30 @@ describe('readSectionLayout', () => {
       readSectionLayout(sectPr('<w:pgSz w:w="1000000000000" w:h="1000000000000"/>'), styles),
     ).toEqual({});
     expect(readSectionLayout(sectPr('<w:pgSz w:w="719" w:h="16838"/>'), styles)).toEqual({});
+  });
+
+  it('readSectionProperties : page, colonnes et type de saut d’une section (session 4)', () => {
+    expect(
+      readSectionProperties(
+        sectPr(
+          '<w:type w:val="continuous"/><w:pgSz w:w="11906" w:h="16838"/><w:cols w:num="2" w:space="708"/>',
+        ),
+      ),
+    ).toEqual({ page: { size: 'A4', orientation: 'portrait' }, columns: 2, start: 'continuous' });
+    for (const start of ['nextPage', 'evenPage', 'oddPage', 'continuous']) {
+      expect(readSectionStart(sectPr(`<w:type w:val="${start}"/>`))).toBe(start);
+    }
+    // `nextColumn` et les valeurs inconnues ne sont pas dans le contrat ; absent → `nextPage` implicite non écrit.
+    expect(readSectionStart(sectPr('<w:type w:val="nextColumn"/>'))).toBeUndefined();
+    expect(readSectionStart(sectPr('<w:type/>'))).toBeUndefined();
+    expect(readSectionStart(sectPr(''))).toBeUndefined();
+    expect(readSectionProperties(sectPr(''))).toEqual({});
+    // Les bornes et avertissements sont les mêmes qu'au premier niveau.
+    const warnings: DocxImportWarning[] = [];
+    expect(readSectionProperties(sectPr('<w:cols w:num="46"/>'), warnings)).toEqual({});
+    expect(warnings.map((w) => w.code)).toEqual(['reader']);
+    // `readSectionLayout` ne recopie pas `start` au premier niveau.
+    expect(readSectionLayout(sectPr('<w:type w:val="continuous"/>'), styles)).toEqual({});
   });
 
   it('sectPr absent : police par défaut et langue seulement', () => {

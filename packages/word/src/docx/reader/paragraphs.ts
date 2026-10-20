@@ -151,6 +151,14 @@ export function paragraphAttributes(
       `border-${border.side}`,
       borderCss(border),
     ]),
+    // `w:space` des bordures (`BlockBorder.spacePt`), juste après les `border-*`, dans le
+    // même ordre de côtés, seulement pour les côtés bordés qui le précisent.
+    ...sides
+      .filter((border) => border.spacePt !== undefined)
+      .map((border): readonly [string, string] => [
+        `padding-${border.side}`,
+        pt(border.spacePt ?? 0),
+      ]),
     ['background-color', differs('shading')],
   ]);
 
@@ -163,9 +171,9 @@ export function paragraphAttributes(
   return attrs.join('');
 }
 
-/** Vrai si le HTML inline n'a ni texte, ni image, ni saut, ni appel de note. */
+/** Vrai si le HTML inline n'a ni texte, ni image, ni saut, ni tabulation, ni appel de note. */
 function isEmptyInline(inline: string): boolean {
-  if (/<(?:img|br|hr|sup)\b/.test(inline)) return false;
+  if (/<(?:img|br|hr|sup)\b|<span data-tab\b/.test(inline)) return false;
   return /^[ \t\r\n]*$/.test(inline.replace(/<[^>]*>/g, ''));
 }
 

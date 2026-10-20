@@ -1,5 +1,5 @@
 import type { BlockBorder, BorderSide, DecorationStyle } from '@aster-editor/core';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
 import type { ParagraphAlign, ResolvedParagraphProps, ResolvedRunProps } from './types';
 import {
   borderColor,
@@ -49,6 +49,23 @@ export interface MutableParagraph {
   pageBreakBefore?: boolean;
   numbering?: { readonly numId: string; readonly level: number };
   outlineLevel?: number;
+  /** Taquets de tabulation en points, clé = position (`w:tabs`, `w:clear` retire). */
+  tabStops?: Map<number, true>;
+}
+
+/**
+ * Propriétés de paragraphe d'Aster : le contrat plus les taquets de tabulation résolus
+ * (style puis direct), positions croissantes en points. `runs.ts` attribue le n-ième
+ * taquet à la n-ième tabulation du paragraphe. L'alignement du taquet (`left`, `center`,
+ * `right`, `decimal`) est hors contrat et n'est pas conservé.
+ */
+export interface DocxParagraphProps extends ResolvedParagraphProps {
+  readonly tabStopsPt?: readonly number[];
+}
+
+/** Taquets d'un paragraphe résolu quelconque, vide pour un résolveur tiers ou stub. */
+export function tabStopsOf(props: ResolvedParagraphProps): readonly number[] {
+  return 'tabStopsPt' in props ? ((props as DocxParagraphProps).tabStopsPt ?? []) : [];
 }
 
 /** Accumulateur de run ; `underline`/`strike` à `null` = explicitement sans trait. */
@@ -74,7 +91,11 @@ export function emptyParagraph(): MutableParagraph {
 }
 
 export function cloneParagraph(source: MutableParagraph): MutableParagraph {
-  return { ...source, borders: new Map(source.borders) };
+  return {
+    ...source,
+    borders: new Map(source.borders),
+    ...(source.tabStops ? { tabStops: new Map(source.tabStops) } : {}),
+  };
 }
 
 const BORDER_SIDES: readonly BorderSide[] = ['top', 'right', 'bottom', 'left', 'between'];
@@ -85,7 +106,9 @@ const DEFAULT_BORDER_WIDTH_PT = 0.5;
 /**
  * Une bordure OOXML (`w:top`, `w:left`… de `w:pBdr`, `w:tcBorders`, `w:tblBorders`) :
  * `w:val` → style, `w:sz` en huitièmes de point → `widthPt` (au plus 12 pt, sinon la
- * largeur par défaut), `w:color` (`auto` → noir). `null` pour `nil`/`none` : la bordure
+ * largeur par défaut), `w:color` (`auto` ou absent → noir, toute couleur hexadécimale
+ * conservée telle quelle : `BFBFBF` reste `#bfbfbf`), `w:space` en points → `spacePt`
+ * (seulement s'il est présent et dans les bornes). `null` pour `nil`/`none` : la bordure
  * est explicitement absente.
  */
 export function readBorder(element: Element, side: BorderSide): BlockBorder | null {
@@ -94,12 +117,34 @@ export function readBorder(element: Element, side: BorderSide): BlockBorder | nu
   const size = numberAttr(wordAttribute(element, 'sz'));
   const widthPt =
     size === undefined ? undefined : bounded(eighthPointsToPt(size), 0, WORD_LIMITS.borderMaxPt);
+  const spacePt = bounded(
+    numberAttr(wordAttribute(element, 'space')),
+    0,
+    WORD_LIMITS.distanceMaxPt,
+  );
   return {
     side,
     style,
     widthPt: widthPt ?? DEFAULT_BORDER_WIDTH_PT,
     color: borderColor(wordAttribute(element, 'color')),
+    ...(spacePt !== undefined ? { spacePt } : {}),
   };
+}
+
+/**
+ * Applique un `w:tabs` sur les taquets hérités : `w:clear` retire le taquet à cette
+ * position (c'est ainsi qu'un paragraphe annule un taquet de son style), tout autre
+ * `w:val` en pose un. La position `w:pos` est en twips, bornée à ±1584 pt.
+ */
+function applyTabStops(tabs: Element, acc: MutableParagraph): void {
+  for (const tab of childrenNamed(tabs, 'tab')) {
+    const position = distanceAttr(wordAttribute(tab, 'pos'));
+    if (position === undefined) continue;
+    const stops = acc.tabStops ?? new Map<number, true>();
+    if (wordAttribute(tab, 'val') === 'clear') stops.delete(position);
+    else stops.set(position, true);
+    acc.tabStops = stops;
+  }
 }
 
 /** Applique les côtés d'un conteneur de bordures sur la carte héritée (`nil` efface). */
@@ -221,6 +266,9 @@ export function applyParagraphProperties(pPr: Element, acc: MutableParagraph): v
         break;
       case 'pBdr':
         applyBorders(child, acc.borders);
+        break;
+      case 'tabs':
+        applyTabStops(child, acc);
         break;
       case 'shd': {
         const fill = readShadingFill(child);
@@ -419,9 +467,9 @@ export function finalizeRun(acc: MutableRun): ResolvedRunProps {
 export function finalizeParagraph(
   acc: MutableParagraph,
   runDefaults: ResolvedRunProps,
-): Omit<ResolvedParagraphProps, 'styleId' | 'headingLevel'> {
+): Omit<DocxParagraphProps, 'styleId' | 'headingLevel'> {
   const out: {
-    -readonly [K in keyof ResolvedParagraphProps]?: ResolvedParagraphProps[K];
+    -readonly [K in keyof DocxParagraphProps]?: DocxParagraphProps[K];
   } = {};
   if (acc.align) out.align = acc.align;
   if (acc.lineHeightPt !== undefined) out.lineHeightPt = acc.lineHeightPt;
@@ -437,5 +485,8 @@ export function finalizeParagraph(
   if (acc.keepWithNext) out.keepWithNext = true;
   if (acc.pageBreakBefore) out.pageBreakBefore = true;
   if (acc.numbering) out.numbering = acc.numbering;
+  if (acc.tabStops && acc.tabStops.size > 0) {
+    out.tabStopsPt = Array.from(acc.tabStops.keys()).sort((a, b) => a - b);
+  }
   return { ...out, runDefaults };
 }
