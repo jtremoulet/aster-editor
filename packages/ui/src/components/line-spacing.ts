@@ -4,6 +4,8 @@ import { el } from '../utils/dom';
 import { createPlainButton } from './button';
 import { createDropdown, createMenuItem, type Dropdown } from './dropdown';
 import {
+  MAX_LINE_HEIGHT_MULTIPLE,
+  MAX_PARAGRAPH_PT,
   canEditBlockLayout,
   createAlert,
   createNumberField,
@@ -43,6 +45,11 @@ interface CustomDraft {
   value: string;
 }
 
+/** Plafond Word d'un interligne : 132 pour un multiple, 1584 pt pour une valeur exacte. */
+export function maxFor(kind: CustomDraft['kind']): number {
+  return kind === 'exact' ? MAX_PARAGRAPH_PT : MAX_LINE_HEIGHT_MULTIPLE;
+}
+
 /**
  * Widget `lineSpacing` : menu « Interligne » avec « Par défaut », les multiples 1 / 1,15 /
  * 1,5 / 2 et « Personnalisé… », qui bascule le panneau sur un mini-formulaire (multiple ou
@@ -50,6 +57,7 @@ interface CustomDraft {
  * valeur exacte `{ lineHeightPt, lineHeight: null }` : les deux attributs sont exclusifs
  * et `lineHeightPt` l'emporterait au rendu. « Par défaut » efface les deux via
  * `paragraph.unsetLayout`. Le déclencheur est « enfoncé » dès qu'un interligne est posé.
+ * Bornes Word : multiple ≤ 132, valeur exacte ≤ 1584 pt.
  */
 export function createLineSpacingMenu(editor: AsterEditor): ToolbarWidget {
   let mode: 'list' | 'custom' = 'list';
@@ -113,7 +121,7 @@ export function createLineSpacingMenu(editor: AsterEditor): ToolbarWidget {
             draft.kind = 'multiple';
             draft.value = numberInputValue(state.lineHeight);
           }
-          dropdown.update();
+          dropdown.rerender();
           panel.querySelector<HTMLInputElement>('input[type="number"]')?.focus();
         },
       }),
@@ -153,10 +161,19 @@ export function createLineSpacingMenu(editor: AsterEditor): ToolbarWidget {
       label: t('ui.lineSpacing.value'),
       value: null,
       min: 0,
+      max: maxFor(draft.kind),
       step: 'any',
     });
     value.input.value = draft.value;
+    // Le plafond suit le mode : 132 pour un multiple, 1584 pt pour une valeur exacte.
+    for (const radio of radios) {
+      radio.addEventListener('change', () => {
+        if (radio.checked) value.input.setAttribute('max', String(maxFor(draft.kind)));
+      });
+    }
     const alert = createAlert();
+    const invalidMessage = (): string =>
+      editor.i18n.t('ui.lineSpacing.invalid', { max: maxFor(draft.kind) });
     value.input.addEventListener('input', () => {
       draft.value = value.input.value;
       if (error) {
@@ -166,7 +183,7 @@ export function createLineSpacingMenu(editor: AsterEditor): ToolbarWidget {
       }
     });
     if (error) {
-      alert.textContent = t('ui.lineSpacing.invalid');
+      alert.textContent = invalidMessage();
       alert.removeAttribute('hidden');
       value.input.setAttribute('aria-invalid', 'true');
     }
@@ -174,12 +191,12 @@ export function createLineSpacingMenu(editor: AsterEditor): ToolbarWidget {
 
     const submit = (): void => {
       const parsed = parseNumberInput(value.input.value);
-      if (parsed === null || parsed === 'invalid' || parsed <= 0) {
+      const kind = radios.find((radio) => radio.checked)?.value === 'exact' ? 'exact' : 'multiple';
+      if (parsed === null || parsed === 'invalid' || parsed <= 0 || parsed > maxFor(kind)) {
         error = true;
-        flagInvalid(value.input, alert, t('ui.lineSpacing.invalid'));
+        flagInvalid(value.input, alert, invalidMessage());
         return;
       }
-      const kind = radios.find((radio) => radio.checked)?.value === 'exact' ? 'exact' : 'multiple';
       setBlockLayout(
         editor,
         kind === 'exact'
@@ -216,6 +233,9 @@ export function createLineSpacingMenu(editor: AsterEditor): ToolbarWidget {
     labelKey: 'ui.lineSpacing.label',
     icon: 'line-spacing',
     panelClass: 'aster-menu aster-line-spacing',
+    // Le formulaire « Personnalisé » n'est pas reconstruit à chaque `update()`
+    // (`selectionChange`…) : le champ resterait détaché, le focus tomberait sur `body`.
+    shouldRerender: () => mode === 'list',
     isEnabled: () => canEditBlockLayout(editor),
     isActive: () => {
       const state = currentLineSpacing(editor);

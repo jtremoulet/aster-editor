@@ -7,7 +7,6 @@ import type {
   AsterEventName,
   AsterEvents,
   AsterLocale,
-  AsterVariable,
   CommandId,
   CommandRegistry,
   DocumentLayout,
@@ -15,10 +14,9 @@ import type {
   PageViewOptions,
   TranslateParams,
   Unsubscribe,
-  VariableStore,
-  VariableValues,
 } from '@aster-editor/core';
 import { STANDARD_COMMAND_IDS, en, fr } from '@aster-editor/core';
+import { createMockVariables, type MockVariablesOptions } from './mock-variables';
 
 /** Appel de commande enregistré par le mock, pour les assertions. */
 export interface RecordedCall {
@@ -35,8 +33,11 @@ export interface ChainStep {
 /** Classe posée sur l'hôte par le core quand la vue page est active (L23). */
 const PAGE_VIEW_CLASS = 'aster--page-view';
 
-/** Options du mock : commandes enregistrées, locale, lecture seule initiales. */
-export interface MockEditorOptions {
+/**
+ * Options du mock : commandes enregistrées, locale, lecture seule initiales, variables
+ * (voir `MockVariablesOptions`) et vue page.
+ */
+export interface MockEditorOptions extends MockVariablesOptions {
   /** Commandes à enregistrer, toutes les standard par défaut. */
   commands?: readonly string[];
   locale?: AsterLocale;
@@ -48,12 +49,6 @@ export interface MockEditorOptions {
    * les boutons sans `aria-pressed`. Les autres déclarent `isActive` et lisent `active`.
    */
   stateless?: readonly string[];
-  /** Variables déclarées initialement (voir `VariableSource.variables`). */
-  variables?: readonly AsterVariable[];
-  /** Valeurs initiales des variables. */
-  variableValues?: VariableValues;
-  /** Insertion d'une variable non déclarée autorisée ? Vrai par défaut, comme le core. */
-  allowUnknownVariables?: boolean;
   /**
    * Expose `setPageView` / `getLayout` (méthodes hors contrat annoncées par L23). Vrai par
    * défaut ; `false` simule un core sans vue page pour tester le widget désactivé.
@@ -63,17 +58,6 @@ export interface MockEditorOptions {
   layout?: DocumentLayout | null;
   /** Vue page active au montage (classe `aster--page-view` sur l'hôte). */
   pageView?: boolean;
-}
-
-/** Nom de variable valide : même règle que le core (`isValidVariableName`). */
-const VARIABLE_NAME_PATTERN = /^[\p{L}\p{N}_][\p{L}\p{N}_.-]*$/u;
-
-/** Vrai si `args` ressemble aux arguments de `variable.insert`. */
-function readVariableInsertArgs(args: unknown): { name: string; label?: string } | null {
-  if (typeof args !== 'object' || args === null) return null;
-  const { name, label } = args as { name?: unknown; label?: unknown };
-  if (typeof name !== 'string') return null;
-  return typeof label === 'string' ? { name, label } : { name };
 }
 
 /**
@@ -200,7 +184,6 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     },
   };
 
-  const presentVariables = new Set<string>();
   const plugins: Plugin[] = [];
   const deletedRanges: Range[] = [];
   const chains: ChainStep[][] = [];
@@ -247,56 +230,20 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     },
   } as unknown as Editor;
 
-  // --- Variables : magasin en mémoire fidèle au contrat `VariableStore` ---------------
-  const declared = new Map<string, AsterVariable>();
-  for (const variable of options.variables ?? []) declared.set(variable.name, variable);
-  let values: Record<string, string> = { ...(options.variableValues ?? {}) };
-  const allowUnknown = options.allowUnknownVariables ?? true;
-
-  /** Variable enrichie de sa valeur courante, comme `list()` du core. */
-  const withValue = (variable: AsterVariable): AsterVariable => {
-    const value = values[variable.name];
-    return value === undefined ? variable : { ...variable, value };
-  };
-
-  const variables: VariableStore = {
-    list: () => {
-      const result: AsterVariable[] = Array.from(declared.values(), withValue);
-      for (const name of presentVariables) {
-        if (!declared.has(name)) result.push(withValue({ name }));
-      }
-      return result;
-    },
-    getNames: () => Array.from(presentVariables),
-    getValues: () => ({ ...values }),
-    setValues: (next) => {
-      const merged: Record<string, string> = { ...values };
-      for (const [name, value] of Object.entries(next)) {
-        if (value === undefined) delete merged[name];
-        else merged[name] = value;
-      }
-      values = merged;
-      editor.emit('variablesChange', { editor, values: { ...values } });
-    },
-    define: (list) => {
-      for (const variable of list) {
-        const { value, ...rest } = variable;
-        declared.set(variable.name, { ...(declared.get(variable.name) ?? {}), ...rest });
-        if (value !== undefined) values = { ...values, [variable.name]: value };
-      }
-      editor.emit('variablesChange', { editor, values: { ...values } });
-    },
-    insert: (name, label) =>
-      commands.run('variable.insert', label === undefined ? { name } : { name, label }),
-    resolve: () => Promise.resolve({ ...values }),
-    hasUnresolved: () => Array.from(presentVariables).some((name) => values[name] === undefined),
-  };
+  // Variables : magasin en mémoire fidèle au contrat `VariableStore` (`mock-variables.ts`).
+  const mockVariables = createMockVariables(options, {
+    commands,
+    calls,
+    disabled,
+    isReadOnly: () => readOnly,
+    emitChange: (values) => editor.emit('variablesChange', { editor, values }),
+  });
 
   const editor: MockEditor = {
     tiptap,
     commands,
     i18n,
-    variables,
+    variables: mockVariables.store,
     element,
     contentElement,
     calls,
@@ -304,7 +251,7 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     disabled,
     attributes,
     activeNodes,
-    presentVariables,
+    presentVariables: mockVariables.presentVariables,
     plugins,
     deletedRanges,
     chains,
@@ -407,30 +354,9 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
     commands.register(command);
   }
 
-  // `variable.insert` suit le contrat du core : refusée en lecture seule, pour un nom
-  // invalide, et pour un nom non déclaré quand `allowUnknown` est faux. L'insertion marque
-  // la variable comme présente dans le document.
-  if (ids.includes('variable.insert')) {
-    const generic = registry.get('variable.insert');
-    commands.register<unknown>({
-      id: 'variable.insert',
-      labelKey: 'command.variable.insert',
-      run: (_editor, args) => {
-        const parsed = readVariableInsertArgs(args);
-        if (!parsed) return false;
-        calls.push({ id: 'variable.insert', args });
-        presentVariables.add(parsed.name);
-        return true;
-      },
-      canRun: (_editor, args) => {
-        const parsed = readVariableInsertArgs(args);
-        if (!parsed || readOnly || disabled.has('variable.insert')) return false;
-        if (!VARIABLE_NAME_PATTERN.test(parsed.name)) return false;
-        return allowUnknown || declared.has(parsed.name);
-      },
-      ...(generic?.isActive ? { isActive: generic.isActive } : {}),
-    });
-  }
+  // `variable.insert` suit le contrat du core (refus en lecture seule, nom invalide ou
+  // non déclaré) : remplace la commande générique si elle est enregistrée.
+  mockVariables.registerInsertCommand();
 
   return editor;
 }

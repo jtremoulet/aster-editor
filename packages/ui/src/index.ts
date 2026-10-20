@@ -136,8 +136,14 @@ export {
 export type { NumberFieldOptions, ParsedNumber } from './components/paragraph-layout';
 export {
   INDENT_STEP_PT,
+  MAX_BORDER_WIDTH_PT,
+  MAX_LINE_HEIGHT_MULTIPLE,
+  MAX_PARAGRAPH_PT,
+  MIN_BORDER_WIDTH_PT,
   PARAGRAPH_LAYOUT_NODES,
   canEditBlockLayout,
+  createCheckbox,
+  createNumberField,
   currentBlockLayout,
   formatNumber,
   parseNumberInput,

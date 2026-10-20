@@ -147,7 +147,7 @@ describe('createLineSpacingMenu', () => {
     expect(isOpen()).toBe(true);
     expect(panel().querySelector('[role="alert"]')?.hasAttribute('hidden')).toBe(false);
     expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
-      'Enter a number greater than zero',
+      'Enter a number greater than zero, at most 132',
     );
     expect(valueInput().getAttribute('aria-invalid')).toBe('true');
     valueInput().value = '1.2';
@@ -160,6 +160,58 @@ describe('createLineSpacingMenu', () => {
     radio('exact').dispatchEvent(new Event('change'));
     widget.update();
     expect(radio('exact').checked).toBe(true);
+  });
+
+  it('R26-07 (F10) : le formulaire survit à un update() : champ attaché, focus et erreur conservés', () => {
+    open();
+    item('Custom…').click();
+    const input = valueInput();
+    input.focus();
+    input.value = '1.3';
+    input.dispatchEvent(new Event('input'));
+    editor.emit('selectionChange', { editor });
+    widget.update();
+    expect(panel().getAttribute('role')).toBe('dialog');
+    expect(input.isConnected).toBe(true);
+    expect(valueInput()).toBe(input);
+    expect(document.activeElement).toBe(input);
+    // L'erreur affichée n'est pas effacée non plus.
+    input.value = '0';
+    button('Apply').click();
+    const alert = panel().querySelector('[role="alert"]')!;
+    widget.update();
+    expect(panel().querySelector('[role="alert"]')).toBe(alert);
+    expect(alert.hasAttribute('hidden')).toBe(false);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('R26-04 : borne un multiple à 132 et une valeur exacte à 1584 pt, max suit le mode', () => {
+    open();
+    item('Custom…').click();
+    expect(valueInput().getAttribute('max')).toBe('132');
+    valueInput().value = '133';
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    expect(valueInput().getAttribute('aria-invalid')).toBe('true');
+    expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
+      'Enter a number greater than zero, at most 132',
+    );
+    radio('exact').click();
+    radio('exact').dispatchEvent(new Event('change'));
+    expect(valueInput().getAttribute('max')).toBe('1584');
+    valueInput().value = '1585';
+    valueInput().dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
+      'Enter a number greater than zero, at most 1584',
+    );
+    valueInput().value = '1584';
+    valueInput().dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls).toEqual([
+      { id: 'paragraph.setLayout', args: { lineHeightPt: 1584, lineHeight: null } },
+    ]);
   });
 
   it('Annuler et Échap ferment le formulaire sans rien appeler et rendent la liste à l’ouverture suivante', () => {

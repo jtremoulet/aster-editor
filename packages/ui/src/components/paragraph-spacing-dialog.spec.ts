@@ -61,7 +61,11 @@ describe('createParagraphSpacingDialog', () => {
       expect(input(attr).value, attr).toBe('');
     }
     expect(input('spacingBeforePt').getAttribute('min')).toBe('0');
-    expect(input('indentFirstLinePt').hasAttribute('min')).toBe(false);
+    expect(input('spacingBeforePt').getAttribute('max')).toBe('1584');
+    expect(input('indentLeftPt').getAttribute('max')).toBe('1584');
+    // Retrait suspendu : première ligne négative autorisée, bornée symétriquement.
+    expect(input('indentFirstLinePt').getAttribute('min')).toBe('-1584');
+    expect(input('indentFirstLinePt').getAttribute('max')).toBe('1584');
     expect(checkbox('keep').checked).toBe(false);
     expect(checkbox('break').checked).toBe(false);
     expect(button('Apply')).toBeDefined();
@@ -138,12 +142,58 @@ describe('createParagraphSpacingDialog', () => {
     expect(editor.calls).toEqual([]);
     expect(isOpen()).toBe(true);
     expect(input('spacingBeforePt').getAttribute('aria-invalid')).toBe('true');
-    expect(panel().querySelector('[role="alert"]')?.textContent).toBe('Enter a valid number');
+    expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
+      'Enter a number between 0 and 1584',
+    );
     expect(document.activeElement).toBe(input('spacingBeforePt'));
     input('spacingBeforePt').value = '2';
     input('spacingBeforePt').dispatchEvent(new Event('input'));
     expect(input('spacingBeforePt').hasAttribute('aria-invalid')).toBe(false);
     expect(panel().querySelector('[role="alert"]')?.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('R26-04 (F5) : refuse un retrait au-delà de 1584 pt (1000000000, 1e9) et une première ligne sous -1584', () => {
+    open();
+    input('indentLeftPt').value = '1000000000';
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    expect(input('indentLeftPt').getAttribute('aria-invalid')).toBe('true');
+    expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
+      'Enter a number between 0 and 1584',
+    );
+    input('indentLeftPt').value = '1e9';
+    input('indentLeftPt').dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    input('indentLeftPt').value = '1584';
+    input('indentLeftPt').dispatchEvent(new Event('input'));
+    input('indentFirstLinePt').value = '-1585';
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    expect(input('indentFirstLinePt').getAttribute('aria-invalid')).toBe('true');
+    expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
+      'Enter a number between -1584 and 1584',
+    );
+    input('indentFirstLinePt').value = '-1584';
+    input('indentFirstLinePt').dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls[0]?.args).toMatchObject({ indentLeftPt: 1584, indentFirstLinePt: -1584 });
+    expect(isOpen()).toBe(false);
+  });
+
+  it('R26-11 (F9) : des drapeaux à false ne rendent pas le bloc « mis en forme »', () => {
+    editor.attributes.set('paragraph', { keepWithNext: false, pageBreakBefore: false });
+    widget.update();
+    expect(hasParagraphSpacing(editor)).toBe(false);
+    expect(trigger().getAttribute('aria-pressed')).toBe('false');
+    open();
+    expect(button('Reset').disabled).toBe(true);
+    expect(checkbox('keep').checked).toBe(false);
+    trigger().click();
+    editor.attributes.set('paragraph', { keepWithNext: false, spacingAfterPt: 0 });
+    widget.update();
+    // Un nombre posé, même nul, reste un attribut explicite.
+    expect(hasParagraphSpacing(editor)).toBe(true);
   });
 
   it('Réinitialiser envoie paragraph.unsetLayout sur les sept attributs', () => {

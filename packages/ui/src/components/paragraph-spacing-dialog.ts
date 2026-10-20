@@ -4,6 +4,7 @@ import { el } from '../utils/dom';
 import { createPlainButton } from './button';
 import { createDropdown, type Dropdown } from './dropdown';
 import {
+  MAX_PARAGRAPH_PT,
   canEditBlockLayout,
   createAlert,
   createCheckbox,
@@ -11,6 +12,7 @@ import {
   currentBlockLayout,
   fieldSuffix,
   flagInvalid,
+  isOutOfRange,
   parseNumberInput,
   readFlag,
   readNumber,
@@ -19,21 +21,45 @@ import {
   unsetBlockLayout,
 } from './paragraph-layout';
 
-/** Champs numériques du dialogue, dans l'ordre d'affichage : attribut et clé i18n. */
+/**
+ * Champs numériques du dialogue, dans l'ordre d'affichage : attribut, clé i18n et bornes
+ * (Word : 1584 pt au plus). Un retrait de première ligne négatif est un retrait suspendu,
+ * seul champ au minimum négatif.
+ */
 const NUMBER_FIELDS: readonly {
   readonly attr: Extract<
     ParagraphLayoutAttrName,
     'spacingBeforePt' | 'spacingAfterPt' | 'indentLeftPt' | 'indentRightPt' | 'indentFirstLinePt'
   >;
   readonly labelKey: string;
-  /** Un retrait de première ligne négatif est un retrait suspendu : seul champ sans minimum. */
-  readonly min?: number;
+  readonly min: number;
+  readonly max: number;
 }[] = [
-  { attr: 'spacingBeforePt', labelKey: 'ui.paragraphSpacing.before', min: 0 },
-  { attr: 'spacingAfterPt', labelKey: 'ui.paragraphSpacing.after', min: 0 },
-  { attr: 'indentLeftPt', labelKey: 'ui.paragraphSpacing.indentLeft', min: 0 },
-  { attr: 'indentRightPt', labelKey: 'ui.paragraphSpacing.indentRight', min: 0 },
-  { attr: 'indentFirstLinePt', labelKey: 'ui.paragraphSpacing.firstLine' },
+  {
+    attr: 'spacingBeforePt',
+    labelKey: 'ui.paragraphSpacing.before',
+    min: 0,
+    max: MAX_PARAGRAPH_PT,
+  },
+  { attr: 'spacingAfterPt', labelKey: 'ui.paragraphSpacing.after', min: 0, max: MAX_PARAGRAPH_PT },
+  {
+    attr: 'indentLeftPt',
+    labelKey: 'ui.paragraphSpacing.indentLeft',
+    min: 0,
+    max: MAX_PARAGRAPH_PT,
+  },
+  {
+    attr: 'indentRightPt',
+    labelKey: 'ui.paragraphSpacing.indentRight',
+    min: 0,
+    max: MAX_PARAGRAPH_PT,
+  },
+  {
+    attr: 'indentFirstLinePt',
+    labelKey: 'ui.paragraphSpacing.firstLine',
+    min: -MAX_PARAGRAPH_PT,
+    max: MAX_PARAGRAPH_PT,
+  },
 ];
 
 /** Attributs que le dialogue pilote, et que « Réinitialiser » efface. */
@@ -47,10 +73,16 @@ export const PARAGRAPH_SPACING_ATTRS: readonly ParagraphLayoutAttrName[] = [
   'pageBreakBefore',
 ];
 
-/** Vrai si le bloc courant porte au moins un des attributs du dialogue. */
+/**
+ * Vrai si le bloc courant porte au moins un des attributs du dialogue. Un booléen à
+ * `false` compte comme non posé, au cas où le core sérialise ses drapeaux à `false`
+ * plutôt qu'à `null` : sinon tout paragraphe serait « mis en forme ».
+ */
 export function hasParagraphSpacing(editor: AsterEditor): boolean {
   const attrs = currentBlockLayout(editor);
-  return PARAGRAPH_SPACING_ATTRS.some((attr) => attrs[attr] !== null && attrs[attr] !== undefined);
+  return PARAGRAPH_SPACING_ATTRS.some(
+    (attr) => attrs[attr] !== null && attrs[attr] !== undefined && attrs[attr] !== false,
+  );
 }
 
 /**
@@ -86,6 +118,7 @@ function renderSpacingPanel(editor: AsterEditor, panel: HTMLElement, dropdown: D
       label: t(field.labelKey),
       value: readNumber(current, field.attr),
       min: field.min,
+      max: field.max,
       step: 0.5,
     }),
   }));
@@ -107,11 +140,12 @@ function renderSpacingPanel(editor: AsterEditor, panel: HTMLElement, dropdown: D
     const values: Partial<Record<ParagraphLayoutAttrName, number | null>> = {};
     for (const field of fields) {
       const parsed = parseNumberInput(field.input.value);
-      if (
-        parsed === 'invalid' ||
-        (parsed !== null && field.min !== undefined && parsed < field.min)
-      ) {
-        flagInvalid(field.input, alert, t('ui.paragraphSpacing.invalid'));
+      if (parsed === 'invalid' || (parsed !== null && isOutOfRange(parsed, field.min, field.max))) {
+        flagInvalid(
+          field.input,
+          alert,
+          editor.i18n.t('ui.paragraphSpacing.invalid', { min: field.min, max: field.max }),
+        );
         return;
       }
       values[field.attr] = parsed;

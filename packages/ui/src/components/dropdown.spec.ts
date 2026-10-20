@@ -257,6 +257,38 @@ describe('createDropdown', () => {
     dialog.destroy();
   });
 
+  it('shouldRerender suspend la reconstruction à update() ; rerender() la force (R26-07)', () => {
+    let form = false;
+    const dropdown = createDropdown({
+      editor,
+      labelKey: 'command.heading',
+      shouldRerender: () => !form,
+      renderPanel: (panel) => {
+        if (form) panel.append(document.createElement('input'));
+        else panel.append(createMenuItem({ text: 'item', onSelect: () => undefined }));
+      },
+    });
+    host.append(dropdown.element);
+    expect(dropdown.rerender).toBeTypeOf('function');
+    // Fermé : sans effet.
+    dropdown.rerender();
+    expect(dropdown.panel.childElementCount).toBe(0);
+    dropdown.open();
+    const first = dropdown.panel.querySelector('[role="menuitem"]');
+    dropdown.update();
+    expect(dropdown.panel.querySelector('[role="menuitem"]')).not.toBe(first);
+    form = true;
+    dropdown.rerender();
+    const input = dropdown.panel.querySelector('input')!;
+    input.focus();
+    input.value = 'brouillon';
+    dropdown.update();
+    expect(dropdown.panel.querySelector('input')).toBe(input);
+    expect(input.value).toBe('brouillon');
+    expect(document.activeElement).toBe(input);
+    dropdown.destroy();
+  });
+
   it('ne pose aria-pressed sur le déclencheur que si isActive est fourni', () => {
     const dropdown = mount();
     expect(dropdown.trigger.hasAttribute('aria-pressed')).toBe(false);

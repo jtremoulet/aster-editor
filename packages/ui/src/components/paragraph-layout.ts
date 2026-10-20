@@ -20,20 +20,57 @@ export const PARAGRAPH_LAYOUT_NODES = ['paragraph', 'heading'] as const;
 export const INDENT_STEP_PT = 18;
 
 /**
- * Attributs du bloc courant : paragraphe d'abord, titre ensuite. Tiptap renvoie `{}` hors
- * du nœud demandé, un dictionnaire non vide signale donc le bloc sous le curseur.
- * Tolérant si l'extension manque (core réduit, mock).
+ * Bornes de saisie alignées sur Word : retraits, espacements et interligne exact plafonnés
+ * à 1584 pt (22 pouces), interligne multiple à 132, épaisseur de bordure entre 0,25 et
+ * 6 pt. Posées en `max` / `min` sur les champs **et** vérifiées dans `submit`, un
+ * `<input type="number">` n'empêchant pas la saisie clavier hors bornes.
+ */
+export const MAX_PARAGRAPH_PT = 1584;
+export const MAX_LINE_HEIGHT_MULTIPLE = 132;
+export const MIN_BORDER_WIDTH_PT = 0.25;
+export const MAX_BORDER_WIDTH_PT = 6;
+
+/** Attributs d'un nœud, `null` s'il est absent du schéma ou hors sélection. */
+function readNodeAttrs(editor: AsterEditor, name: string): Record<string, unknown> | null {
+  try {
+    const attrs: unknown = editor.tiptap.getAttributes(name);
+    return isRecord(attrs) && Object.keys(attrs).length > 0 ? attrs : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Égalité structurelle simple ; `null` et `undefined` sont confondus (attribut non posé). */
+function sameAttrValue(a: unknown, b: unknown): boolean {
+  if ((a ?? null) === (b ?? null)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Attributs du bloc courant. Tiptap renvoie `{}` hors du nœud demandé, un dictionnaire
+ * non vide signale donc le bloc sous le curseur. Sur une sélection qui couvre à la fois
+ * un paragraphe et un titre, les deux sont lus et seuls les attributs à valeur commune
+ * sont conservés : un attribut qui diffère est « indéterminé » (absent, rien de coché ni
+ * de prérempli), comme dans Word. Tolérant si l'extension manque (core réduit, mock).
  */
 export function currentBlockLayout(editor: AsterEditor): Record<string, unknown> {
-  for (const name of PARAGRAPH_LAYOUT_NODES) {
-    try {
-      const attrs: unknown = editor.tiptap.getAttributes(name);
-      if (isRecord(attrs) && Object.keys(attrs).length > 0) return attrs;
-    } catch {
-      // Extension absente : on tente le nœud suivant.
-    }
+  const found = PARAGRAPH_LAYOUT_NODES.map((name) => readNodeAttrs(editor, name)).filter(
+    (attrs): attrs is Record<string, unknown> => attrs !== null,
+  );
+  const [first, ...others] = found;
+  if (!first) return {};
+  if (others.length === 0) return first;
+  const merged: Record<string, unknown> = {};
+  for (const key of Object.keys(first)) {
+    if (others.every((attrs) => sameAttrValue(first[key], attrs[key]))) merged[key] = first[key];
   }
-  return {};
+  return merged;
+}
+
+/** Vrai si `value` sort de l'intervalle `[min, max]` (bornes absentes = non vérifiées). */
+export function isOutOfRange(value: number, min?: number, max?: number): boolean {
+  return (min !== undefined && value < min) || (max !== undefined && value > max);
 }
 
 /** Champ numérique fini d'un dictionnaire, `null` s'il est absent, nul ou d'un autre type. */
@@ -69,8 +106,15 @@ export function unsetBlockLayout(
 export type ParsedNumber = number | null | 'invalid';
 
 /**
+ * Forme d'un nombre décimal, exposant compris (`1e3`, accepté par `<input type="number">`).
+ * Sans alternative ambiguë entre `\d+` et `\d*` : une saisie longue et invalide est
+ * rejetée en temps linéaire, la fonction étant publique et appelée sur `input.value`.
+ */
+const NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
+
+/**
  * Lit une saisie numérique : virgule ou point décimal, unité (`pt`, `mm`, `px`) tolérée,
- * vide → `null`, texte non numérique → `'invalid'`.
+ * vide → `null`, texte non numérique ou nombre non fini → `'invalid'`.
  */
 export function parseNumberInput(value: string): ParsedNumber {
   const trimmed = value
@@ -78,8 +122,8 @@ export function parseNumberInput(value: string): ParsedNumber {
     .replace(',', '.')
     .replace(/\s*(pt|mm|px)$/i, '');
   if (trimmed === '') return null;
-  if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(trimmed)) return 'invalid';
-  const parsed = Number.parseFloat(trimmed);
+  if (!NUMBER_PATTERN.test(trimmed)) return 'invalid';
+  const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : 'invalid';
 }
 

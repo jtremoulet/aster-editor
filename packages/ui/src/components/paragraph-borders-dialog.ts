@@ -5,6 +5,8 @@ import { isRecord } from '../utils/guards';
 import { createPlainButton } from './button';
 import { createDropdown, type Dropdown } from './dropdown';
 import {
+  MAX_BORDER_WIDTH_PT,
+  MIN_BORDER_WIDTH_PT,
   canEditBlockLayout,
   createAlert,
   createCheckbox,
@@ -12,6 +14,7 @@ import {
   currentBlockLayout,
   fieldSuffix,
   flagInvalid,
+  isOutOfRange,
   parseNumberInput,
   setBlockLayout,
   submitOnEnter,
@@ -89,10 +92,13 @@ export function toHexColor(value: string | null | undefined, fallback: string): 
 
 /**
  * Widget `paragraphBorders` : dialogue « Bordures et fond ». Une ligne par côté (haut,
- * droite, bas, gauche) avec style de trait, épaisseur en pt et couleur, plus une case
- * « Fond » et sa couleur. « Appliquer » envoie `paragraph.setLayout({ borders, shading })`
- * (`null` quand rien n'est coché, pour effacer), « Réinitialiser » envoie
- * `paragraph.unsetLayout({ attrs: ['borders', 'shading'] })`.
+ * droite, bas, gauche) avec style de trait, épaisseur en pt (0,25 à 6, comme Word) et
+ * couleur, plus une case « Fond » et sa couleur. « Appliquer » envoie
+ * `paragraph.setLayout({ borders, shading })` (`null` quand rien n'est coché, pour
+ * effacer), « Réinitialiser » envoie `paragraph.unsetLayout({ attrs: ['borders',
+ * 'shading'] })`. Une bordure `between` (import Word, non éditable ici) est conservée
+ * telle quelle ; une couleur d'origine hors `#rrggbb` (`rgb()`, nom) est renvoyée intacte
+ * tant que son sélecteur n'a pas été touché.
  */
 export function createParagraphBordersDialog(editor: AsterEditor): ToolbarWidget {
   return createDropdown({
@@ -112,6 +118,21 @@ interface SideRow {
   readonly style: HTMLSelectElement;
   readonly width: HTMLInputElement;
   readonly color: HTMLInputElement;
+  /** Couleur à renvoyer : celle d'origine tant que le sélecteur n'a pas émis `input`. */
+  readonly currentColor: () => string;
+}
+
+/**
+ * Lie un `<input type="color">` à une couleur d'origine : `toHexColor` replie en silence
+ * tout ce qui n'est pas `#rgb` / `#rrggbb`, le repli ne doit donc être renvoyé que si
+ * l'utilisateur a réellement choisi une couleur.
+ */
+function trackColor(input: HTMLInputElement, original: string | null): () => string {
+  let touched = false;
+  input.addEventListener('input', () => {
+    touched = true;
+  });
+  return () => (touched || original === null ? input.value : original);
 }
 
 function renderBordersPanel(editor: AsterEditor, panel: HTMLElement, dropdown: Dropdown): void {
@@ -156,7 +177,8 @@ function renderBordersPanel(editor: AsterEditor, panel: HTMLElement, dropdown: D
       id: `aster-borders-${side}-width-${suffix}`,
       label: `${t(`ui.borders.side.${side}`)} – ${t('ui.borders.width')}`,
       value: existing ? existing.widthPt : DEFAULT_BORDER_WIDTH_PT,
-      min: 0,
+      min: MIN_BORDER_WIDTH_PT,
+      max: MAX_BORDER_WIDTH_PT,
       step: 0.25,
       className: 'aster-borders-dialog__width',
     });
@@ -170,6 +192,7 @@ function renderBordersPanel(editor: AsterEditor, panel: HTMLElement, dropdown: D
       },
     });
     color.value = toHexColor(existing?.color, DEFAULT_BORDER_COLOR);
+    const currentColor = trackColor(color, existing?.color ?? null);
 
     const syncRow = (): void => {
       const disabled = style.value === 'none';
@@ -191,7 +214,7 @@ function renderBordersPanel(editor: AsterEditor, panel: HTMLElement, dropdown: D
         color,
       ]),
     );
-    rows.push({ side, style, width: widthField.input, color });
+    rows.push({ side, style, width: widthField.input, color, currentColor });
   }
 
   const shading = createCheckbox(
@@ -204,26 +227,39 @@ function renderBordersPanel(editor: AsterEditor, panel: HTMLElement, dropdown: D
     attrs: { type: 'color', 'aria-label': t('ui.borders.shadingColor') },
   });
   shadingColor.value = toHexColor(current.shading, DEFAULT_SHADING_COLOR);
+  const currentShadingColor = trackColor(shadingColor, current.shading);
   shadingColor.disabled = !shading.input.checked;
   shading.input.addEventListener('change', () => {
     shadingColor.disabled = !shading.input.checked;
   });
 
   const submit = (): void => {
-    const borders: BlockBorder[] = [];
+    // Les bordures `between` ne sont pas éditables ici : on repart d'elles.
+    const borders: BlockBorder[] = current.borders.filter((border) => border.side === 'between');
     for (const row of rows) {
       const style = row.style.value;
       if (!isBorderStyle(style)) continue;
       const width = parseNumberInput(row.width.value);
-      if (width === null || width === 'invalid' || width <= 0) {
-        flagInvalid(row.width, alert, t('ui.borders.invalid'));
+      if (
+        width === null ||
+        width === 'invalid' ||
+        isOutOfRange(width, MIN_BORDER_WIDTH_PT, MAX_BORDER_WIDTH_PT)
+      ) {
+        flagInvalid(
+          row.width,
+          alert,
+          editor.i18n.t('ui.borders.invalid', {
+            min: MIN_BORDER_WIDTH_PT,
+            max: MAX_BORDER_WIDTH_PT,
+          }),
+        );
         return;
       }
-      borders.push({ side: row.side, style, widthPt: width, color: row.color.value });
+      borders.push({ side: row.side, style, widthPt: width, color: row.currentColor() });
     }
     setBlockLayout(editor, {
       borders: borders.length > 0 ? borders : null,
-      shading: shading.input.checked ? shadingColor.value : null,
+      shading: shading.input.checked ? currentShadingColor() : null,
     });
     dropdown.close(false);
     editor.focus();

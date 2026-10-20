@@ -208,7 +208,7 @@ describe('createParagraphBordersDialog', () => {
     expect(isOpen()).toBe(true);
     expect(width('right').getAttribute('aria-invalid')).toBe('true');
     expect(panel().querySelector('[role="alert"]')?.textContent).toBe(
-      'Enter a width greater than zero',
+      'Enter a width between 0.25 and 6 pt',
     );
     width('right').value = '2';
     width('right').dispatchEvent(new Event('input'));
@@ -219,6 +219,79 @@ describe('createParagraphBordersDialog', () => {
     expect(editor.calls[0]?.args).toEqual({
       borders: [{ side: 'right', style: 'solid', widthPt: 2, color: '#000000' }],
       shading: null,
+    });
+  });
+
+  it('R26-04 : les champs d’épaisseur portent min 0,25 / max 6 et submit refuse hors bornes', () => {
+    open();
+    expect(width('top').getAttribute('min')).toBe('0.25');
+    expect(width('top').getAttribute('max')).toBe('6');
+    style('top').value = 'solid';
+    style('top').dispatchEvent(new Event('change'));
+    width('top').value = '6.25';
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    expect(width('top').getAttribute('aria-invalid')).toBe('true');
+    width('top').value = '0.2';
+    width('top').dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls).toEqual([]);
+    width('top').value = '6';
+    width('top').dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls[0]?.args).toMatchObject({
+      borders: [{ side: 'top', style: 'solid', widthPt: 6, color: '#000000' }],
+    });
+  });
+
+  it('R26-02 (F3) : une bordure between (import Word) survit à « Appliquer » sans y toucher', () => {
+    editor.attributes.set('paragraph', {
+      borders: [
+        { side: 'between', style: 'solid', widthPt: 0.5, color: '#000000' },
+        { side: 'top', style: 'solid', widthPt: 1, color: '#000000' },
+      ],
+    });
+    open();
+    button('Apply').click();
+    const sent = editor.calls[0]?.args as { borders: { side: string }[] };
+    expect(sent.borders.map((border) => border.side)).toEqual(['between', 'top']);
+    // Retirer le haut ne retire pas le `between` : `borders` n'est pas effacé.
+    editor.calls.length = 0;
+    open();
+    style('top').value = 'none';
+    style('top').dispatchEvent(new Event('change'));
+    button('Apply').click();
+    expect(editor.calls[0]?.args).toEqual({
+      borders: [{ side: 'between', style: 'solid', widthPt: 0.5, color: '#000000' }],
+      shading: null,
+    });
+  });
+
+  it('R26-10 (F4) : une couleur hors #rrggbb est conservée tant que le sélecteur n’a pas été touché', () => {
+    editor.attributes.set('paragraph', {
+      borders: [{ side: 'top', style: 'solid', widthPt: 1, color: 'rgb(255, 0, 0)' }],
+      shading: 'yellow',
+    });
+    open();
+    // Le champ `<input type="color">` affiche le repli, mais ne le renvoie pas.
+    expect(color('top').value).toBe(DEFAULT_BORDER_COLOR);
+    expect(shadingColor().value).toBe(DEFAULT_SHADING_COLOR);
+    button('Apply').click();
+    expect(editor.calls[0]?.args).toEqual({
+      borders: [{ side: 'top', style: 'solid', widthPt: 1, color: 'rgb(255, 0, 0)' }],
+      shading: 'yellow',
+    });
+    // Après une saisie réelle, c'est la couleur choisie qui part.
+    editor.calls.length = 0;
+    open();
+    color('top').value = '#123456';
+    color('top').dispatchEvent(new Event('input'));
+    shadingColor().value = '#ffff00';
+    shadingColor().dispatchEvent(new Event('input'));
+    button('Apply').click();
+    expect(editor.calls[0]?.args).toEqual({
+      borders: [{ side: 'top', style: 'solid', widthPt: 1, color: '#123456' }],
+      shading: '#ffff00',
     });
   });
 
