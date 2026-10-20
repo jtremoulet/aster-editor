@@ -4,6 +4,7 @@
  */
 import type { AsterInstance, AsterUiOptions } from '@aster-editor/ui';
 import { createAster } from '@aster-editor/ui';
+import type { DocxImportResult } from '@aster-editor/word';
 import { downloadDocx, exportDocx, importDocx, wordPasteTransformer } from '@aster-editor/word';
 import '../../packages/ui/themes/aster.css';
 
@@ -51,6 +52,8 @@ const INITIAL_CONTENT =
   '<table><thead><tr><th>Nom</th><th>Rôle</th></tr></thead><tbody><tr><td><p>Alice</p></td><td><p>Dev</p></td></tr></tbody></table>';
 
 let instance: AsterInstance | null = null;
+/** Dernier import : son gabarit et sa mise en page servent à l'export dans le gabarit. */
+let lastImport: DocxImportResult | null = null;
 
 function log(label: string, value: unknown): void {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -90,20 +93,32 @@ dumpButton.addEventListener('click', () => log('getHTML()', instance?.editor.get
 exportButton.addEventListener('click', async () => {
   if (!instance) return;
   const warnings: unknown[] = [];
+  // Après un import, l'export repart du gabarit : tout ce qui n'est pas le corps est conservé.
   const blob = await exportDocx(instance.editor.getHTML(), {
     onWarning: (w) => warnings.push(w),
     title: 'Aster playground',
+    ...(lastImport ? { template: lastImport.template, layout: lastImport.layout } : {}),
   });
-  log(`exportDocx — ${blob.size} octets, ${warnings.length} avertissement(s)`, warnings);
+  log(
+    `exportDocx${lastImport ? ' (gabarit)' : ''} — ${blob.size} octets, ${warnings.length} avertissement(s)`,
+    warnings,
+  );
   downloadDocx(blob, 'aster-playground.docx');
 });
 docxInput.addEventListener('change', async () => {
   const file = docxInput.files?.[0];
   if (!file || !instance) return;
   try {
-    const result = await importDocx(file);
+    // Chemin stylé (session 3) : polices, interlignes, bordures, tableaux, mise en page.
+    const result = await importDocx(file, { fidelity: 'styled' });
     instance.editor.setHTML(result.html);
-    log(`importDocx(${file.name}) — ${result.warnings.length} avertissement(s)`, result.warnings);
+    lastImport = result;
+    // La mise en page lue (format, marges, en-têtes, pieds) alimente la vue page.
+    instance.editor.setPageView({ layout: result.layout });
+    log(
+      `importDocx(${file.name}) — ${result.warnings.length} avertissement(s), ${result.lost.length} objet(s) non représentable(s)`,
+      { warnings: result.warnings, lost: result.lost, layout: result.layout },
+    );
     refreshNames();
   } catch (error) {
     log('importDocx — erreur', error instanceof Error ? error.message : String(error));
@@ -149,6 +164,7 @@ const exportWithVariables = async (mode: 'fields' | 'resolve'): Promise<void> =>
   const blob = await exportDocx(instance.editor.getHTML(), {
     title: 'Aster variables',
     variables: { mode, values: instance.editor.variables.getValues() },
+    ...(lastImport ? { template: lastImport.template, layout: lastImport.layout } : {}),
   } as Parameters<typeof exportDocx>[1]);
   log(`exportDocx variables=${mode} — ${blob.size} octets`, {});
   downloadDocx(blob, `aster-variables-${mode}.docx`);
