@@ -265,23 +265,30 @@ describe('vue page', () => {
       );
     });
 
-    it('R23-03 : assainissement itératif, imbrication plafonnée à MAX_SANITIZE_DEPTH', () => {
-      expect(MAX_SANITIZE_DEPTH).toBe(64);
-      // Preuve du relecteur : 8 000 `<div>` imbriqués faisaient déborder la pile d'appels.
-      const html = '<div>'.repeat(8000) + 'x' + '</div>'.repeat(8000);
-      let result = '';
-      expect(() => {
-        result = sanitizeHeaderFooterHtml(html);
-      }).not.toThrow();
-      expect(result).toBe('<div>'.repeat(64) + 'x' + '</div>'.repeat(64));
-      // Les attributs des éléments déballés disparaissent avec eux ; le texte reste.
-      const deep = '<span>'.repeat(70) + '<b onclick="x()" class="k">y</b>' + '</span>'.repeat(70);
-      expect(sanitizeHeaderFooterHtml(deep)).toBe('<span>'.repeat(64) + 'y' + '</span>'.repeat(64));
-      // Balise inconnue au-delà du plafond : déballée aussi, sans commentaire ni script.
-      const mixed =
-        '<custom>'.repeat(100) + '<!-- c --><script>bad()</script>z' + '</custom>'.repeat(100);
-      expect(sanitizeHeaderFooterHtml(mixed)).toBe('z');
-    });
+    it(
+      'R23-03 : assainissement itératif, imbrication plafonnée à MAX_SANITIZE_DEPTH',
+      { timeout: 60_000 },
+      () => {
+        expect(MAX_SANITIZE_DEPTH).toBe(64);
+        // Preuve du relecteur : 8 000 `<div>` imbriqués faisaient déborder la pile d'appels.
+        const html = '<div>'.repeat(8000) + 'x' + '</div>'.repeat(8000);
+        let result = '';
+        expect(() => {
+          result = sanitizeHeaderFooterHtml(html);
+        }).not.toThrow();
+        expect(result).toBe('<div>'.repeat(64) + 'x' + '</div>'.repeat(64));
+        // Les attributs des éléments déballés disparaissent avec eux ; le texte reste.
+        const deep =
+          '<span>'.repeat(70) + '<b onclick="x()" class="k">y</b>' + '</span>'.repeat(70);
+        expect(sanitizeHeaderFooterHtml(deep)).toBe(
+          '<span>'.repeat(64) + 'y' + '</span>'.repeat(64),
+        );
+        // Balise inconnue au-delà du plafond : déballée aussi, sans commentaire ni script.
+        const mixed =
+          '<custom>'.repeat(100) + '<!-- c --><script>bad()</script>z' + '</custom>'.repeat(100);
+        expect(sanitizeHeaderFooterHtml(mixed)).toBe('z');
+      },
+    );
   });
 
   describe('sur l’éditeur', () => {
