@@ -24,10 +24,21 @@ export const OUTPUT_DIR = path.join(E2E_DIR, 'output');
  */
 interface PlaygroundEditor {
   getHTML(options?: { variables?: 'placeholders' | 'resolve' }): string;
+  /** Texte brut du document : une tabulation (nœud `tab`) y devient `\t`. */
+  getText(): string;
   setHTML(html: string, emit?: boolean): void;
   focus(position?: 'start' | 'end' | 'all'): void;
   commands: { run(id: string, args?: Record<string, unknown>): boolean };
-  tiptap: { view: { pasteHTML(html: string): boolean } };
+  tiptap: {
+    view: {
+      pasteHTML(html: string): boolean;
+      posAtDOM(node: Node, offset: number): number;
+      /** Focus synchrone de la vue ProseMirror (la commande `focus` de Tiptap, elle, diffère). */
+      focus(): void;
+    };
+    state: { selection: { $from: { parent: { textContent: string } } } };
+    commands: { setTextSelection(position: number): boolean };
+  };
   /** Vue page (session 3) : `false` la retire, un objet `{ layout }` l'active ou la remplace. */
   setPageView(options: boolean | Record<string, unknown>): void;
 }
@@ -82,6 +93,40 @@ export async function getResolvedHtml(page: Page): Promise<string> {
   });
 }
 
+/** Texte brut du document du playground, via `window.aster.editor.getText()`. */
+export async function getText(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const aster = (window as unknown as PlaygroundWindow).aster;
+    if (!aster) throw new Error('window.aster is not available: playground not mounted');
+    return aster.editor.getText();
+  });
+}
+
+/**
+ * Texte du bloc qui contient la sélection de l'**état** de l'éditeur du playground. Après
+ * un clic, ProseMirror relit la sélection du DOM de façon asynchrone (`selectionchange`),
+ * et la vue page redessine ses coupures dans un `requestAnimationFrame` : à combiner avec
+ * `expect.poll` avant une commande ou une frappe qui dépend du curseur.
+ */
+export async function selectionBlockText(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const aster = (window as unknown as PlaygroundWindow).aster;
+    if (!aster) throw new Error('window.aster is not available: playground not mounted');
+    return aster.editor.tiptap.state.selection.$from.parent.textContent;
+  });
+}
+
+/**
+ * Clique dans un bloc du playground et attend que la sélection de l'état y soit bien
+ * arrivée (voir `selectionBlockText`), pour que la commande ou la frappe suivante parte
+ * du bon endroit.
+ */
+export async function clickInto(page: Page, block: Locator): Promise<void> {
+  const text = (await block.textContent()) ?? '';
+  await block.click();
+  await expect.poll(() => selectionBlockText(page)).toBe(text);
+}
+
 /**
  * Importe une fixture `.docx` dans le playground via `<input id="docx">` et attend la
  * trace `importDocx(<nom>)` dans `#out`, signe que `setHTML` a été appliqué.
@@ -101,13 +146,41 @@ export async function downloadSize(download: Download): Promise<number> {
   return (await stat(file)).size;
 }
 
-/** Remplace le document du playground, sans passer par le clavier. */
-export async function setHtml(page: Page, html: string): Promise<void> {
-  await page.evaluate((value) => {
+/**
+ * Remplace le document du playground, sans passer par le clavier. Avec `emit: false`, le
+ * remplacement est exclu de l'historique et la pile d'annulation vidée (contrat de
+ * `setHTML`) : un `undo` qui suit n'annule alors que l'édition testée, sans se grouper
+ * avec le chargement (`newGroupDelay` de ProseMirror).
+ */
+export async function setHtml(page: Page, html: string, emit = true): Promise<void> {
+  await page.evaluate(
+    ({ value, emitUpdate }) => {
+      const aster = (window as unknown as PlaygroundWindow).aster;
+      if (!aster) throw new Error('window.aster is not available: playground not mounted');
+      aster.editor.setHTML(value, emitUpdate);
+    },
+    { value: html, emitUpdate: emit },
+  );
+}
+
+/**
+ * Place le curseur à la **fin** d'un bloc du playground (position ProseMirror après son
+ * dernier enfant, via `view.posAtDOM`) et rend le focus à l'éditeur, de façon synchrone
+ * (`view.focus()` : la commande `focus` de Tiptap passe par `requestAnimationFrame`, et
+ * une frappe envoyée avant irait au document). La touche `End` ne va qu'à la fin de la
+ * ligne visuelle : en vue page, un paragraphe long en a plusieurs.
+ */
+export async function placeCursorAtEnd(page: Page, block: Locator): Promise<void> {
+  const text = (await block.textContent()) ?? '';
+  await block.evaluate((element) => {
     const aster = (window as unknown as PlaygroundWindow).aster;
     if (!aster) throw new Error('window.aster is not available: playground not mounted');
-    aster.editor.setHTML(value, true);
-  }, html);
+    const position = aster.editor.tiptap.view.posAtDOM(element, element.childNodes.length);
+    aster.editor.tiptap.commands.setTextSelection(position);
+    aster.editor.tiptap.view.focus();
+  });
+  await expect(editor(page)).toBeFocused();
+  await expect.poll(() => selectionBlockText(page)).toBe(text);
 }
 
 /** Exécute une commande du registre du playground, en renvoyant son résultat. */
@@ -183,6 +256,36 @@ export async function hostCssVariable(page: Page, name: string): Promise<string>
     (host, variable) => getComputedStyle(host).getPropertyValue(variable).trim(),
     name,
   );
+}
+
+/**
+ * Sauts de section du corps (`hr[data-section-break]`, NodeView du nœud `sectionBreak`),
+ * dans l'ordre du document. Avec la vue page, chacun porte en style inline les variables
+ * `--aster-page-*` de la section qu'il ouvre et `data-section-start` (session 4).
+ */
+export function sectionBreaks(page: Page): Locator {
+  return editor(page).locator('hr[data-section-break]');
+}
+
+/**
+ * Valeur d'une variable CSS `--aster-*` posée en style **inline** sur un élément (saut de
+ * section, coupure de page), chaîne vide si elle n'est pas posée. À combiner avec
+ * `expect.poll` : les NodeViews se rafraîchissent après l'événement de la vue page.
+ */
+export async function inlineCssVariable(locator: Locator, name: string): Promise<string> {
+  return locator.evaluate(
+    (element, variable) => (element as HTMLElement).style.getPropertyValue(variable).trim(),
+    name,
+  );
+}
+
+/**
+ * Coupures de page posées par la pagination qui ouvrent une section (classe
+ * `aster-page-gap--section`) : elles portent le libellé « Section n · Format orientation »,
+ * l'en-tête de la section qui commence et le pied de celle qui se termine.
+ */
+export function sectionGaps(page: Page): Locator {
+  return editor(page).locator('.aster-page-gap--section');
 }
 
 /**

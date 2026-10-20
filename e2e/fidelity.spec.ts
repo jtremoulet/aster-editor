@@ -58,7 +58,8 @@ function demoMain(page: Page): Locator {
  * document client.
  */
 test.describe('Fidélité Word — playground', () => {
-  test.skip(() => test.info().project.name !== 'playground', 'playground seulement');
+  // Projets `playground`, `playground-firefox` et `playground-webkit` (session 4, L47).
+  test.skip(() => !test.info().project.name.startsWith('playground'), 'playground seulement');
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
