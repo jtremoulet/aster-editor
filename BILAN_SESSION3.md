@@ -21,7 +21,7 @@
 
 | Mesure                             | Session 2 (0.4.3) | Session 3 (0.5.0)                                                                   |
 | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------- |
-| Tests unitaires                    | 1 262             | **1 971** (core 626, word 867, ui 399, angular 49, démo 30)                         |
+| Tests unitaires                    | 1 262             | **1 994** (core 630, word 885, ui 400, angular 49, démo 30)                         |
 | Tests e2e Playwright               | 35                | **42** (+ 7 scénarios fidélité, document client compris)                            |
 | Lots d'agents                      | 10 + 3 revues     | **17 lots + 6 revues + 7 lots de correctifs** (2 agents en parallèle en pointe : 7) |
 | Findings de revue                  | 41                | **73** (3 bloquants, 24 majeurs), tous corrigés avec test de non-régression         |

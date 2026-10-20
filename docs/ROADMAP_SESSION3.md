@@ -1,4 +1,4 @@
-# 🌙 Roadmap session 3 — fidélité de mise en page Word
+# 🌙 Roadmap session 3 — fidélité de mise en page Word ✅ réalisée le 20/10 (0.5.0)
 
 > Objectif de Joris (20 octobre 2026) : l'utilisateur **voit le document tel qu'il est** dès l'import, **modifie ce qu'il modifie**, et **sauvegarde dans le bon format**, c'est-à-dire un `.docx` qui ressort comme l'original partout où il n'a rien touché. Les deux faces sont prioritaires : fidélité à l'écran (import) et fidélité à la sortie (export).
 > Point de départ : 0.4.3 sur `develop`, 1 262 tests unitaires + 35 e2e verts, paquets publiés sur npm. Même rituel que les sessions 1 et 2 (contrat figé en phase 0, lots disjoints, revues adverses au fil de l'eau, correctifs immédiats, e2e, docs, bilan), avec les leçons du REX.

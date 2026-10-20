@@ -13,7 +13,7 @@
 | Intégration manuelle | App démo + navigateur intégré de Claude        | Collage réel, import .docx réel, clavier, vue page ; ouverture dans Word réel via `samples/` (checklist)                                                                     | V1, vérif de fin de lot                                                         |
 | E2E graphique        | Playwright                                     | Parcours utilisateur complets, captures (`e2e/`, projets `playground` et `demo`, `npm run e2e`)                                                                              | Livré en 0.3.0, étendu aux variables en 0.4.0, à la fidélité en session 3 (L32) |
 
-État session 3 (20/10/2026, `npm run test`) : **1 971 tests unitaires** verts (core 626, word 867 passés + 3 `it.fails` attendus + 7 ignorés sans document client, ui 399, angular 49, démo 30), contre 1 262 en 0.4.3. E2E : 35 tests au départ de la session, **42** après L32 (`e2e/fidelity.spec.ts` : import stylé idempotent en navigateur réel, vue page, pagination, export dans le gabarit relu dans le zip, objets perdus, page Modèle, document client).
+État session 3 (20/10/2026, `npm run test`) : **1 994 tests unitaires** verts (core 630, word 885 passés + 3 `it.fails` attendus + 7 ignorés sans document client, ui 399, angular 49, démo 30), contre 1 262 en 0.4.3. E2E : 35 tests au départ de la session, **42** après L32 (`e2e/fidelity.spec.ts` : import stylé idempotent en navigateur réel, vue page, pagination, export dans le gabarit relu dans le zip, objets perdus, page Modèle, document client).
 
 ## 📐 Règles
 

@@ -438,3 +438,15 @@
 - **L32** (13 min, 221k tokens, 80 outils) : 4 e2e existants réalignés sur le chemin stylé, nouveau `fidelity.spec.ts` (7 scénarios : import stylé idempotent en vrai navigateur, vue page et dialogue de mise en page, pagination avec `hr data-page-break`, export dans le gabarit vérifié dans le zip téléchargé, objets perdus, page Modèle complète avec en-tête édité répercuté, document client). 40 e2e verts en 17 s.
 - **Bug trouvé par L32, invisible sous jsdom et plus grave que celui de L29** : le prétraitement des champs de fusion (`preprocess/variables.ts`) concaténait lui aussi sa déclaration XML à la sortie de `XMLSerializer`, que Chromium préfixe déjà → `document.xml` prétraité invalide → chemin stylé **vide** pour tout `.docx` à champs de fusion ou contrôles de contenu dans un vrai navigateur (fixture 09 et document client). Corrigé à la source : `stripXmlDeclaration` partagé (`preprocess/xml-utils.ts`), appliqué aux trois sites de réécriture (prétraitement, greffe, en-têtes) ; `isParseError` du lecteur détecte aussi le `<parsererror>` que Chromium injecte dans la racine. Les deux e2e `fixme` réactivés.
 - Leçon REX (la même, renforcée) : un test jsdom ne prouve pas la sérialisation XML ; chaque lot qui écrit du XML doit avoir au moins un e2e en navigateur réel, et le relecteur doit l'exiger.
+
+### 20/10 22:09 — F30, L31 intégrés, gel 0.5.0
+
+- **F30** (23 min, 320k tokens, 126 outils) : 13 findings R30 corrigés (saut de page mesuré à zéro, impression, décorations mappées entre deux mesures, nom brut des champs, alignement patience, `w:sdt` dans les tableaux, codes de sortie du script), `pagination.ts` et `page-view.ts` découpés sous 400 lignes. **L31** (34 min, 602k tokens, 210 outils) : 11 documents, compteurs recalculés, deux JSDoc obsolètes corrigées par l'orchestrateur.
+- **Gel 0.5.0** : `npm run check` vert (**1 994 tests** : core 630, word 885 + 3 échecs attendus documentés + 7 ignorés, ui 400, angular 49, démo 30), `npm run build` vert, `npm run e2e` **42/42** en 16 s. Arbre propre, `develop` poussé. `main` reste en 0.4.3, merge sur demande ; publication npm à faire par Joris (2FA).
+- Fin de session à 22:09 : 5 h 37 de GO à 0.5.0 dont 1 h 20 de limite de session.
+
+#### Reprendre le travail
+
+1. `BILAN_SESSION3.md` (5 min), puis `docs/ROADMAP_SESSION3.md` et la section « Différé » du bilan.
+2. Ouvrir dans Word réel les exports dans le gabarit (`samples/README.md`, points 18-31) et les documents clients.
+3. Prochain chantier structurant : sections multiples conservées dans le corps (perte principale sur le document client et la fixture 16), puis bascule du défaut `fidelity: 'styled'` (0.6).

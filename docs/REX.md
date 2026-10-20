@@ -219,7 +219,7 @@ Version condensée et réutilisable, à transformer en skill si elle tient la ro
 | R23-R27, R30 (6 revues)            | 11 à 20 min      | 1,6M   | 303    | —             | 73 findings prouvés, 3 bloquants                       |
 | F23, F23b, F24, F25, F26, F27, F30 | 15 à 31 min      | ≈ 2,1M | ≈ 700  | +150          | tous les findings corrigés avec test de non-régression |
 
-Total : ≈ 8 M tokens d'agents, 1 262 → 1 971 tests unitaires, 35 → 42 e2e, GO → 0.5.0 en 6 h dont 1 h 20 de limite de session.
+Total : ≈ 8 M tokens d'agents, 1 262 → 1 994 tests unitaires, 35 → 42 e2e, GO → 0.5.0 en 6 h dont 1 h 20 de limite de session.
 
 ### ✅ Ce qui a marché
 
