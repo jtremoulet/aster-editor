@@ -594,7 +594,12 @@ export class TemplatePage {
       this.warnings.set(result.warnings);
       this.fileName.set(file.name);
       this.draft.set({});
-      this.headerControl.setValue(result.layout.headers?.default?.html ?? '');
+      // L'hôte de la vue page affiche l'en-tête de la première section et le pied de la
+      // dernière (`layout.footers` = dernière section par contrat) : le panneau édite ceux-là.
+      const first = result.layout.sections?.[0];
+      this.headerControl.setValue(
+        first?.headers?.default?.html ?? result.layout.headers?.default?.html ?? '',
+      );
       this.footerControl.setValue(result.layout.footers?.default?.html ?? '');
       // Un import sans variable n'émet pas `variablesChanged` : on relit l'état à la main.
       const instance = editor.editor();
@@ -675,10 +680,28 @@ export class TemplatePage {
     }
   }
 
-  /** Remplace l'en-tête ou le pied `default` de la mise en page éditée par le HTML saisi. */
+  /**
+   * Remplace l'en-tête ou le pied `default` de la mise en page éditée par le HTML saisi.
+   * Avec des sections : l'en-tête va dans la première (celle que l'hôte affiche), le pied
+   * dans la dernière **et** au premier niveau (invariant du contrat : `layout.footers` =
+   * dernière section).
+   */
   private updateHeaderFooter(kind: 'headers' | 'footers', html: string): void {
     const base = this.editedLayout() ?? this.editorRef()?.layout() ?? {};
-    this.editedLayout.set({ ...base, [kind]: { ...base[kind], default: { html } } });
+    const sections = base.sections;
+    if (!sections || sections.length === 0) {
+      this.editedLayout.set({ ...base, [kind]: { ...base[kind], default: { html } } });
+      return;
+    }
+    const index = kind === 'headers' ? 0 : sections.length - 1;
+    const target = sections[index];
+    const next = sections.map((section, i) =>
+      i === index && target
+        ? { ...target, [kind]: { ...target[kind], default: { html } } }
+        : section,
+    );
+    const top = kind === 'footers' ? { footers: { ...base.footers, default: { html } } } : {};
+    this.editedLayout.set({ ...base, ...top, sections: next });
   }
 
   /** Recalcule le HTML résolu seulement quand l'onglet « Résolu » est affiché. */

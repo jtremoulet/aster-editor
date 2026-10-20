@@ -66,7 +66,7 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     // `hr` ordinaire ; la tabulation est de priorité basse pour laisser la touche Tab aux
     // listes et aux tables.
     SectionBreak,
-    Tab,
+    Tab.configure({ key: options.tabKey ?? 'focus' }),
     createLinkExtension(context.linkPolicy),
     TaskList,
     TaskItem.configure({ nested: true }),

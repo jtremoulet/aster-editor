@@ -53,6 +53,14 @@ export interface AsterOptions {
    */
   pageView?: boolean | PageViewOptions;
   /**
+   * Touche Tab dans un paragraphe ou un titre (session 4). `'focus'` (défaut) : la touche
+   * n'est pas consommée, le focus quitte l'éditeur comme dans n'importe quel champ de
+   * formulaire (pas de piège clavier, WCAG 2.1.2 ; comportement de la 0.5). `'insert'` :
+   * insère un nœud `tab` (édition type Word). Dans les listes et les cellules, Tab garde
+   * toujours l'indentation et la navigation ; `text.insertTab` fonctionne dans les deux modes.
+   */
+  tabKey?: 'focus' | 'insert';
+  /**
    * Désactive des commandes standard par identifiant. Utile pour une toolbar réduite
    * qui veut aussi bloquer le raccourci clavier correspondant.
    */

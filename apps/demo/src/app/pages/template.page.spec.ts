@@ -232,26 +232,42 @@ describe('TemplatePage', () => {
       expect(host.querySelector('.demo-header-footer')).not.toBeNull();
     });
 
-    // La vue page suit la mise en page lue (Letter paysage) et affiche l'en-tête par défaut.
+    // La vue page par section (L44) : l'hôte porte la section 1 (A4, en-tête « Rapport »),
+    // le saut de section porte la section 2 (Letter paysage) ; le résumé suit `layout.page`
+    // (dernière section). Le pied de l'hôte est celui de la dernière section.
     const sheet = main.editor()?.element;
-    expect(sheet?.style.getPropertyValue('--aster-page-width')).toBe('279.4mm');
-    expect(sheet?.querySelector('.aster-page-header')?.textContent).toContain(
-      'Section 2 — en-tête par défaut',
+    expect(sheet?.style.getPropertyValue('--aster-page-width')).toBe('210mm');
+    expect(sheet?.querySelector('hr[data-section-break]')?.getAttribute('style') ?? '').toContain(
+      '279.4mm',
+    );
+    expect(sheet?.querySelector('.aster-page-header')?.textContent).toContain('Rapport');
+    expect(sheet?.querySelector('.aster-page-footer')?.textContent).toContain(
+      'Section 2 — pied par défaut',
     );
     expect(host.querySelector('.demo-layout-summary')?.textContent).toContain('Letter, landscape');
 
-    // Le panneau « En-tête / Pied » est initialisé depuis la mise en page lue.
+    // Le panneau « En-tête / Pied » est initialisé depuis ce que l'hôte affiche : en-tête de
+    // la première section, pied de la dernière.
     const [, header, footer] = editors(fixture);
-    expect(header?.getHTML()).toContain('Section 2 — en-tête par défaut');
+    expect(header?.getHTML()).toContain('Rapport');
     expect(footer?.getHTML()).toContain('Section 2 — pied par défaut');
 
-    // Modifier l'en-tête se répercute sur la vue page de l'éditeur principal.
+    // Modifier l'en-tête se répercute sur la vue page de l'éditeur principal (section 1) ;
+    // `layout.headers` (dernière section, contrat) reste celui de la section 2.
     header?.editor()?.setHTML('<p>Nouvel en-tête</p>', true);
     fixture.detectChanges();
     expect(sheet?.querySelector('.aster-page-header')?.textContent).toBe('Nouvel en-tête');
-    expect(main.layout()?.headers?.default?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(main.layout()?.sections?.[0]?.headers?.default?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(main.layout()?.headers?.default?.html).toContain('Section 2 — en-tête par défaut');
     expect(main.layout()?.footers?.default?.html).toContain('Section 2 — pied par défaut');
     expect(main.layout()?.page?.size).toBe('Letter');
+
+    // Modifier le pied va dans la dernière section et au premier niveau (invariant).
+    footer?.editor()?.setHTML('<p>Nouveau pied</p>', true);
+    fixture.detectChanges();
+    expect(sheet?.querySelector('.aster-page-footer')?.textContent).toBe('Nouveau pied');
+    expect(main.layout()?.footers?.default?.html).toBe('<p>Nouveau pied</p>');
+    expect(main.layout()?.sections?.at(-1)?.footers?.default?.html).toBe('<p>Nouveau pied</p>');
 
     // Export dans le gabarit : gabarit importé et mise en page éditée transmis.
     const exportSpy = vi.spyOn(main, 'exportDocx').mockResolvedValue(new Blob(['docx']));
@@ -264,13 +280,14 @@ describe('TemplatePage', () => {
     const options = exportSpy.mock.calls[0]?.[0];
     expect(options?.template).toBe(main.importedTemplate());
     expect(options?.variables?.mode).toBe('fields');
-    expect(options?.layout?.headers?.default?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(options?.layout?.sections?.[0]?.headers?.default?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(options?.layout?.footers?.default?.html).toBe('<p>Nouveau pied</p>');
 
     // Les exports existants restent des exports neufs (pas de gabarit).
     buttonByText(host, 'Télécharger modèle').click();
     await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
     expect(exportSpy.mock.calls[1]?.[0]?.template).toBeUndefined();
-    expect(exportSpy.mock.calls[1]?.[0]?.layout?.headers?.default?.html).toBe(
+    expect(exportSpy.mock.calls[1]?.[0]?.layout?.sections?.[0]?.headers?.default?.html).toBe(
       '<p>Nouvel en-tête</p>',
     );
     vi.unstubAllGlobals();

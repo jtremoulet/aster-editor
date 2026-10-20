@@ -233,6 +233,22 @@ describe('Tab', () => {
   });
 
   describe('touche Tab', () => {
+    beforeEach(() => {
+      mounted.cleanup();
+      mounted = mountEditor({ content: '<p>a</p>', tabKey: 'insert' });
+    });
+
+    it("par défaut (tabKey 'focus'), Tab n'est pas consommée et n'insère rien", () => {
+      mounted.cleanup();
+      mounted = mountEditor({ content: '<p>a</p>' });
+      cursorAtEndOf(mounted, 'a');
+      expect(pressKey(mounted, 'Tab')).toBe(false);
+      expect(mounted.editor.getHTML()).toBe('<p>a</p>');
+      // La commande programmatique reste disponible dans les deux modes.
+      expect(mounted.editor.commands.run('text.insertTab')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe(`<p>a${TAB}</p>`);
+    });
+
     it('insère une tabulation dans un paragraphe et un titre', () => {
       cursorAtEndOf(mounted, 'a');
       expect(pressKey(mounted, 'Tab')).toBe(true);

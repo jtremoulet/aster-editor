@@ -193,7 +193,12 @@ export function renderTabNodeView(): NodeViewRenderer {
  * consommée dans un bloc de code ni là où le nœud `tab` n'est pas accepté (`canInsertTab`).
  * Backspace et Delete effacent la tabulation adjacente d'un coup, comme un caractère.
  */
-export const Tab = Node.create({
+/** Options de l'extension : `key` reflète `AsterOptions.tabKey`. */
+export interface TabOptions {
+  readonly key: 'focus' | 'insert';
+}
+
+export const Tab = Node.create<TabOptions>({
   name: TAB_NODE_NAME,
   group: 'inline',
   inline: true,
@@ -202,6 +207,10 @@ export const Tab = Node.create({
   draggable: false,
   // Les keymaps de liste et de table (priorité 100 par défaut) passent avant.
   priority: 50,
+
+  addOptions() {
+    return { key: 'focus' as const };
+  },
 
   addAttributes() {
     return {
@@ -256,7 +265,8 @@ export const Tab = Node.create({
     return {
       Tab: ({ editor }) => {
         const { state } = editor;
-        if (isTabReserved(state) || !canInsertTab(state)) {
+        // Mode `focus` : la touche n'est pas consommée, le navigateur déplace le focus.
+        if (this.options.key !== 'insert' || isTabReserved(state) || !canInsertTab(state)) {
           return false;
         }
         return editor.commands.insertContent({ type: this.name });
