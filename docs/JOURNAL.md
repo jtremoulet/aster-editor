@@ -412,7 +412,7 @@
 - **F26** : 10 findings corrigés, 375 → 392 tests ui ; R26-01/08/09/13 et les bornes des marges de page confiés à F23b après L30.
 - **R23** (core, 19 min, 240k tokens) : 1 bloquant (XSS par `java\tscript:` dans l'assainisseur des en-têtes de la vue page), 1 majeur (commandes de mise en page sur une sélection de cellules : une seule cellule traitée), 8 mineurs (récursion du sanitiseur, garde `suspiciousAttributes` du sérialiseur verbatim, `Infinity` sérialisé, valeur invalide qui efface, couleurs non normalisées, largeur de table dans la vue d'édition). Deux lots : F23 (tout sauf la vue page, + `colspan` borné au parse relayé par R25) et F23b (vue page + `page.css` / `print.css` / dialogue de mise en page).
 
-### 20/10 18:20 — F23, F23b, L27 intégrés ; R27, L28b, L29 lancés
+### 20/10 18:15 — F23, F23b, L27 intégrés ; R27, L28b, L29 lancés
 
 - **F23** (core, 31 min, 317k tokens, 136 outils) : sélections de cellules, garde XSS du sérialiseur verbatim, bornes ±100 000, valeurs invalides ignorées, span vide supprimé, couleurs normalisées en `#rrggbb` au rendu, largeur de table en édition, `colspan` ≤ 63 et `rowspan` ≤ 1 000 au parse, `data-docx-num-indent` conservé. `AsterStrike` et `AsterHighlight` câblés par l'orchestrateur. Core 626 tests.
 - **F23b** (vue page, 21 min, 216k tokens, 94 outils) : bloquant XSS fermé (`java\tscript:`), assainissement itératif plafonné à 64 niveaux, vue page qui lève au montage ignorée avec avertissement, bornes 0-10 000 mm, variables de marge d'en-tête et de pied posées ; `page.css` avec replis, contraste 0,7, impression du saut de page ; dialogue de mise en page : dimensions libres validées, marges ≤ moitié de la page. Dette : `page-view.ts` 473 lignes, sanitiseur à extraire.
