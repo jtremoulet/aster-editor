@@ -58,6 +58,16 @@ const SINGLE_ATTRIBUTE_CASES: readonly [string, string, ParagraphLayoutAttrs][] 
     '<p data-border-between="0.5pt dotted #ff0000">x</p>',
     { borders: [{ side: 'between', style: 'dotted', widthPt: 0.5, color: '#ff0000' }] },
   ],
+  [
+    'borders avec spacePt (session 4)',
+    '<p style="border-top: 1pt solid #000000; border-bottom: 1pt solid #000000; padding-top: 1pt; padding-bottom: 4pt">x</p>',
+    {
+      borders: [
+        { side: 'top', style: 'solid', widthPt: 1, color: '#000000', spacePt: 1 },
+        { side: 'bottom', style: 'solid', widthPt: 1, color: '#000000', spacePt: 4 },
+      ],
+    },
+  ],
   ['shading', '<p style="background-color: #eeeeee">x</p>', { shading: '#eeeeee' }],
   ['keepWithNext', '<p data-keep-next="">x</p>', { keepWithNext: true }],
   ['pageBreakBefore', '<p data-page-break-before="">x</p>', { pageBreakBefore: true }],
@@ -178,6 +188,27 @@ describe('ParagraphLayout', () => {
         expectIdempotent(mounted);
       },
     );
+
+    it('spacePt : padding-* émis après les border-*, seulement pour les côtés bordés, jamais seul', () => {
+      mounted.editor.setHTML(
+        '<p style="margin-top: 6pt; border-left: 1pt solid #000000; padding-left: 2pt; padding-right: 9pt; background-color: #eeeeee">x</p>',
+      );
+      expect(mounted.editor.getHTML()).toBe(
+        '<p style="margin-top: 6pt; border-left: 1pt solid #000000; padding-left: 2pt; background-color: #eeeeee">x</p>',
+      );
+      expectIdempotent(mounted);
+      // La commande setLayout accepte spacePt et l'écrit à sa place.
+      selectFirstBlock(mounted.editor);
+      expect(
+        mounted.editor.commands.run('paragraph.setLayout', {
+          borders: [{ side: 'bottom', style: 'solid', widthPt: 0.5, color: '#ff0000', spacePt: 3 }],
+        }),
+      ).toBe(true);
+      expect(mounted.editor.getHTML()).toBe(
+        '<p style="margin-top: 6pt; border-bottom: 0.5pt solid #ff0000; padding-bottom: 3pt; background-color: #eeeeee">x</p>',
+      );
+      expectIdempotent(mounted);
+    });
 
     it('cumul de tous les attributs : rendu exact dans l’ordre du contrat, idempotent', () => {
       mounted.editor.setHTML(FULL_PARAGRAPH);

@@ -27,6 +27,50 @@ import {
 /** Options de table partagées par le jeu d'Aster. */
 export const TABLE_OPTIONS = { resizable: true, cellMinWidth: 48 } as const;
 
+/** Attribut HTML de l'alignement horizontal d'une table : `data-align="center"`. */
+export const TABLE_ALIGN_ATTRIBUTE = 'data-align';
+
+/** Alignements horizontaux de table reconnus (`TableLayoutAttrs.align`). */
+export const TABLE_ALIGNS = ['left', 'center', 'right'] as const;
+
+export type TableAlign = (typeof TABLE_ALIGNS)[number];
+
+/** Vrai pour `left`, `center` ou `right`. */
+export function isTableAlign(value: unknown): value is TableAlign {
+  return typeof value === 'string' && (TABLE_ALIGNS as readonly string[]).includes(value);
+}
+
+/**
+ * Lit l'alignement d'une table : `data-align` d'abord, sinon l'ancienne forme CSS
+ * `margin-left: auto; margin-right: auto` (centré) ou `margin-left: auto` seul (à
+ * droite). `null` sans alignement (gauche implicite).
+ */
+export function parseTableAlign(element: HTMLElement): TableAlign | null {
+  const attribute = element.getAttribute(TABLE_ALIGN_ATTRIBUTE)?.toLowerCase();
+  if (isTableAlign(attribute)) {
+    return attribute;
+  }
+  const declarations = parseStyleDeclarations(element.getAttribute('style'));
+  const left = declarations.get('margin-left')?.toLowerCase() === 'auto';
+  const right = declarations.get('margin-right')?.toLowerCase() === 'auto';
+  if (left && right) {
+    return 'center';
+  }
+  return left ? 'right' : null;
+}
+
+/**
+ * CSS de repli d'un alignement de table, pour la vue d'édition (`AsterTableView`) :
+ * `margin: 0 auto` au centre, `margin-left: auto` à droite, rien à gauche. `getHTML()`
+ * n'émet que `data-align` ; c'est la feuille `ui` qui aligne à l'affichage.
+ */
+export function tableAlignFallbackStyle(align: unknown): string | null {
+  if (align === 'center') {
+    return 'margin: 0 auto';
+  }
+  return align === 'right' ? 'margin-left: auto' : null;
+}
+
 /**
  * Bornes de `colspan` et `rowspan` à l'analyse HTML : Word plafonne une table à 63
  * colonnes, et 1 000 lignes fusionnées couvrent tout usage réel. Au-delà, prosemirror-tables
@@ -141,7 +185,16 @@ export function tableLayoutDeclarations(attributes: Record<string, unknown>): st
   return declarations;
 }
 
-/** Déclarations `style` d'une cellule : `border-*`, `background-color`, `vertical-align`, `padding`. */
+/**
+ * Déclarations `style` d'une cellule : `border-*` (suivis des `padding-<côté>` des
+ * bordures à `spacePt`), `background-color`, `vertical-align`, `padding`.
+ *
+ * Arbitrage `spacePt` / `paddingPt` (session 4) : les deux sont lus et réécrits tels
+ * quels, chacun à sa place, donc l'aller-retour est exact. Le raccourci `padding` vient
+ * en dernier et l'emporte en CSS sur les `padding-<côté>` : à l'affichage et pour
+ * l'export, `paddingPt` (les marges internes de la cellule, `w:tcMar`) prime sur le
+ * `spacePt` des bordures, que Word ignore sur les cellules.
+ */
 export function cellLayoutDeclarations(attributes: Record<string, unknown>): string[] {
   const declarations: string[] = [];
   const borders = sanitizeBorders(attributes['borders']);
@@ -170,7 +223,10 @@ function silentAttribute(parseHTML: (element: HTMLElement) => unknown): Attribut
   return { default: null, parseHTML, renderHTML: () => ({}) };
 }
 
-/** Attributs HTML de mise en page d'une table : `style` (largeur puis bordures), `data-docx-style`. */
+/**
+ * Attributs HTML de mise en page d'une table, dans l'ordre : `style` (largeur puis
+ * bordures), `data-docx-style`, `data-align`.
+ */
 export function tableLayoutHtmlAttributes(
   attributes: Record<string, unknown>,
 ): Record<string, string> {
@@ -183,12 +239,16 @@ export function tableLayoutHtmlAttributes(
   if (typeof docxStyle === 'string' && docxStyle !== '') {
     rendered[DOCX_STYLE_ATTRIBUTE] = docxStyle;
   }
+  const align: unknown = attributes['align'];
+  if (isTableAlign(align)) {
+    rendered[TABLE_ALIGN_ATTRIBUTE] = align;
+  }
   return rendered;
 }
 
 /**
- * Attributs de `TableLayoutAttrs`. `width` émet tout le rendu (`style` puis
- * `data-docx-style`) ; les autres n'émettent rien, comme pour `ParagraphLayout`.
+ * Attributs de `TableLayoutAttrs`. `width` émet tout le rendu (`style`, `data-docx-style`
+ * puis `data-align`) ; les autres n'émettent rien, comme pour `ParagraphLayout`.
  */
 function tableLayoutAttributes(): Record<string, Attribute> {
   return {
@@ -202,6 +262,7 @@ function tableLayoutAttributes(): Record<string, Attribute> {
       return borders.length > 0 ? borders : null;
     }),
     docxStyle: silentAttribute((element) => element.getAttribute(DOCX_STYLE_ATTRIBUTE) || null),
+    align: silentAttribute(parseTableAlign),
   };
 }
 
@@ -245,7 +306,11 @@ export class AsterTableView extends TableView {
     return true;
   }
 
-  /** Réapplique `style` et `data-docx-style` de mise en page après `updateColumns`. */
+  /**
+   * Réapplique `style`, `data-docx-style` et `data-align` de mise en page après
+   * `updateColumns`. L'alignement reçoit son CSS de repli (`tableAlignFallbackStyle`)
+   * dans la vue d'édition seulement : `getHTML()` n'émet que `data-align`.
+   */
   private syncLayout(node: ProseMirrorNode): void {
     const rendered = tableLayoutHtmlAttributes(node.attrs);
     const style = rendered['style'];
@@ -254,17 +319,20 @@ export class AsterTableView extends TableView {
     const layoutWidth = parseTableWidth(
       typeof node.attrs['width'] === 'string' ? node.attrs['width'] : null,
     );
-    this.table.style.cssText = style ?? '';
+    const alignStyle = tableAlignFallbackStyle(node.attrs['align']);
+    this.table.style.cssText = [style, alignStyle].filter((part) => part).join('; ');
     if (!layoutWidth || hasResizedColumn(node)) {
       // `updateColumns` vient de poser la largeur calculée : on la garde.
       this.table.style.width = computedWidth;
     }
     this.table.style.minWidth = minWidth;
-    const docxStyle = rendered[DOCX_STYLE_ATTRIBUTE];
-    if (docxStyle === undefined) {
-      this.table.removeAttribute(DOCX_STYLE_ATTRIBUTE);
-    } else {
-      this.table.setAttribute(DOCX_STYLE_ATTRIBUTE, docxStyle);
+    for (const name of [DOCX_STYLE_ATTRIBUTE, TABLE_ALIGN_ATTRIBUTE]) {
+      const value = rendered[name];
+      if (value === undefined) {
+        this.table.removeAttribute(name);
+      } else {
+        this.table.setAttribute(name, value);
+      }
     }
   }
 }

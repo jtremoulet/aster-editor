@@ -1,4 +1,10 @@
-import type { DocumentLayout, PageDimensions, PageSizeName, PageViewOptions } from '../api';
+import type {
+  DocumentLayout,
+  PageDimensions,
+  PageSizeName,
+  PageViewOptions,
+  SectionLayout,
+} from '../api';
 import { sanitizeHeaderFooterHtml } from './header-footer-sanitize';
 import { roundLayoutNumber } from './layout-css';
 
@@ -33,6 +39,14 @@ export const PAGE_SIZES_MM: Readonly<Record<PageSizeName, PageDimensions>> = {
   Letter: { widthMm: 215.9, heightMm: 279.4 },
   Legal: { widthMm: 215.9, heightMm: 355.6 },
 };
+
+/**
+ * Variable CSS posée sur l'hôte quand `layout.sections` existe (session 4, L44) : largeur
+ * de la plus large section, en mm. La feuille (`ui/themes/page.css`) garde cette largeur
+ * sur tout le document : une seule feuille, pas de changement de largeur en cours de
+ * document (approximation documentée). Absente sans sections.
+ */
+export const PAGE_WIDTH_MAX_CSS_VARIABLE = '--aster-page-width-max';
 
 /** Variables CSS posées sur l'hôte, dans l'ordre. */
 export const PAGE_VIEW_CSS_VARIABLES = [
@@ -91,7 +105,9 @@ function isPageSizeName(value: unknown): value is PageSizeName {
  * par défaut, en-tête et pied à 12,7 mm du bord. Les valeurs absurdes (négatives, `NaN`,
  * infinies, au-delà de `MAX_PAGE_MM`) tombent sur les défauts.
  */
-export function resolvePageMetrics(layout: DocumentLayout | undefined | null): PageMetrics {
+export function resolvePageMetrics(
+  layout: DocumentLayout | SectionLayout | undefined | null,
+): PageMetrics {
   const page = layout?.page;
   const size = page?.size;
   let dimensions: PageDimensions = PAGE_SIZES_MM.A4;
@@ -115,6 +131,41 @@ export function resolvePageMetrics(layout: DocumentLayout | undefined | null): P
     marginHeaderMm: nonNegativeOr(margins?.headerMm, DEFAULT_HEADER_FOOTER_MARGIN_MM),
     marginFooterMm: nonNegativeOr(margins?.footerMm, DEFAULT_HEADER_FOOTER_MARGIN_MM),
   };
+}
+
+/**
+ * Mise en page de la section `section` (numéro 1-based, celui de `data-section-break` et
+ * de `getSections`). `layout.sections[section - 1]` quand elle existe ; sinon les champs
+ * de premier niveau (`page`, `columns`, `headers`, `footers`, `titlePage`), qui sont la
+ * seule section d'un document sans `sections` et la copie de la dernière section sinon
+ * (compatibilité 0.5). Un numéro hors plage retombe donc sur la dernière section.
+ */
+export function resolveSectionLayout(layout: DocumentLayout, section: number): SectionLayout {
+  const known = layout.sections?.[section - 1];
+  if (known) {
+    return known;
+  }
+  const fallback: {
+    -readonly [K in keyof SectionLayout]: SectionLayout[K];
+  } = {};
+  if (layout.page !== undefined) fallback.page = layout.page;
+  if (layout.columns !== undefined) fallback.columns = layout.columns;
+  if (layout.headers !== undefined) fallback.headers = layout.headers;
+  if (layout.footers !== undefined) fallback.footers = layout.footers;
+  if (layout.titlePage !== undefined) fallback.titlePage = layout.titlePage;
+  return fallback;
+}
+
+/**
+ * Largeur de la plus large section en mm (`--aster-page-width-max`, L44), `null` sans
+ * `layout.sections` : la feuille suit alors `--aster-page-width`.
+ */
+export function maxSectionWidthMm(layout: DocumentLayout | undefined | null): number | null {
+  const sections = layout?.sections;
+  if (!sections || sections.length === 0) {
+    return null;
+  }
+  return Math.max(...sections.map((section) => resolvePageMetrics(section).widthMm));
 }
 
 /** Valeurs des variables CSS, dans l'ordre de `PAGE_VIEW_CSS_VARIABLES`. */
@@ -165,6 +216,12 @@ export interface PageViewHandle {
  * l'hôte, conteneurs `div.aster-page-header` / `div.aster-page-footer` (contenu assaini)
  * juste avant et juste après `contentElement`. La feuille de style est dans `ui` ; le
  * core ne pose que classes, variables et conteneurs.
+ *
+ * Sections (session 4) : avec `layout.sections`, l'hôte porte les variables, l'en-tête
+ * et le pied de la **section 1** (`resolveSectionLayout`), pas ceux du premier niveau
+ * (copie de la dernière section). Chaque `sectionBreak` porte ensuite, sur son `hr`, les
+ * variables de la section qui le suit ; les en-têtes des sections suivantes sont du
+ * ressort de la pagination (L44).
  */
 export function applyPageView(
   host: HTMLElement,
@@ -174,19 +231,25 @@ export function applyPageView(
   const layout: DocumentLayout = options.layout ?? {};
   // Tout ce qui lit la mise en page (et peut lever sur une entrée hostile) est calculé
   // avant la première mutation de l'hôte : en cas d'exception, rien n'est à moitié posé.
+  const first = resolveSectionLayout(layout, 1);
   const showHeadersFooters = options.showHeadersFooters !== false;
-  const values = pageViewCssValues(resolvePageMetrics(layout));
+  const values = pageViewCssValues(resolvePageMetrics(first));
   const headerHtml = showHeadersFooters
-    ? sanitizeHeaderFooterHtml(layout.headers?.default?.html ?? '')
+    ? sanitizeHeaderFooterHtml(first.headers?.default?.html ?? '')
     : '';
   const footerHtml = showHeadersFooters
-    ? sanitizeHeaderFooterHtml(layout.footers?.default?.html ?? '')
+    ? sanitizeHeaderFooterHtml(first.footers?.default?.html ?? '')
     : '';
+  const widthMaxMm = maxSectionWidthMm(layout);
 
   host.classList.add(PAGE_VIEW_CLASS);
   PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
     host.style.setProperty(name, values[index] ?? '');
   });
+  // Sections (L44) : la feuille prend la largeur de la plus large section.
+  if (widthMaxMm !== null) {
+    host.style.setProperty(PAGE_WIDTH_MAX_CSS_VARIABLE, formatMm(widthMaxMm));
+  }
 
   let header: HTMLElement | null = null;
   let footer: HTMLElement | null = null;
@@ -227,6 +290,7 @@ export function applyPageView(
       for (const name of PAGE_VIEW_CSS_VARIABLES) {
         host.style.removeProperty(name);
       }
+      host.style.removeProperty(PAGE_WIDTH_MAX_CSS_VARIABLE);
       if (host.getAttribute('style') === '') {
         host.removeAttribute('style');
       }

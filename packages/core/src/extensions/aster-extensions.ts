@@ -22,7 +22,9 @@ import {
 import { AsterHorizontalRule } from './page-break';
 import { Pagination } from './pagination';
 import { Search } from './search';
+import { SectionBreak } from './section-break';
 import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
+import { Tab } from './tab';
 import { createTableExtensions } from './table-layout';
 import { Variable } from './variable';
 
@@ -60,6 +62,11 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     AsterStrike,
     AsterUnderline,
     AsterHorizontalRule,
+    // Sections et tabulations (session 4) : le saut lit `hr[data-section-break]` avant le
+    // `hr` ordinaire ; la tabulation est de priorité basse pour laisser la touche Tab aux
+    // listes et aux tables.
+    SectionBreak,
+    Tab,
     createLinkExtension(context.linkPolicy),
     TaskList,
     TaskItem.configure({ nested: true }),

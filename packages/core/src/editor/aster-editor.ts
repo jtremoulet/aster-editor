@@ -14,6 +14,7 @@ import type {
   DocumentLayout,
   GetHtmlOptions,
   PageViewOptions,
+  SectionLayout,
   VariableStore,
   I18n,
   Unsubscribe,
@@ -23,9 +24,10 @@ import { createStandardCommands } from '../commands/standard';
 import { createAsterExtensions } from '../extensions/aster-extensions';
 import { createImageUploadProps } from '../extensions/image-upload';
 import { resolveLinkPolicy } from '../extensions/link-safety';
-import { applyPageView, type PageViewHandle } from '../extensions/page-view';
+import { applyPageView, resolveSectionLayout, type PageViewHandle } from '../extensions/page-view';
 import { createPastePipelineProps } from '../extensions/paste-pipeline';
 import { collectShortcutBindings } from '../extensions/shortcuts';
+import { TAB_NODE_NAME, TAB_TEXT } from '../extensions/tab';
 import { normalizeOutputHtml } from '../html/normalize-output';
 import { resolveVariablesHtml } from '../html/resolve-variables';
 import { serializeDocumentHtml } from '../html/serialize-html';
@@ -176,6 +178,17 @@ export class AsterEditorImpl implements AsterEditor {
     return this.pageView?.layout ?? null;
   }
 
+  /**
+   * Mise en page de la section `section` (numéro 1-based, celui de `data-section-break`
+   * et de `getSections`) dans la vue page active : `layout.sections[section - 1]`, sinon
+   * les champs de premier niveau (`resolveSectionLayout`). `null` hors vue page. Hors
+   * contrat (session 4).
+   */
+  getSectionLayout(section: number): SectionLayout | null {
+    const layout = this.getLayout();
+    return layout ? resolveSectionLayout(layout, section) : null;
+  }
+
   // --- Contenu -------------------------------------------------------------
 
   /**
@@ -278,6 +291,9 @@ export class AsterEditorImpl implements AsterEditor {
         node.textBetween(0, node.content.size, undefined, (leaf) => {
           if (leaf.type.name === 'hardBreak') {
             return '\n';
+          }
+          if (leaf.type.name === TAB_NODE_NAME) {
+            return TAB_TEXT;
           }
           return leaf.type.name === VARIABLE_NODE_NAME ? variableText(leaf, values) : '';
         }),

@@ -2,12 +2,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   MAX_COLSPAN,
   MAX_ROWSPAN,
+  TABLE_ALIGN_ATTRIBUTE,
   cellLayoutDeclarations,
   isCellPadding,
   isCellVerticalAlign,
+  isTableAlign,
   parseCellPadding,
   parseSpan,
+  parseTableAlign,
   parseTableWidth,
+  tableAlignFallbackStyle,
   tableLayoutDeclarations,
 } from './table-layout';
 import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount';
@@ -294,11 +298,115 @@ describe('TableLayout', () => {
     });
   });
 
+  describe('align (session 4, L41-C)', () => {
+    /** Élément `<table>` du premier tableau rendu dans `getHTML()`. */
+    const outputTable = (): HTMLElement | null => {
+      const template = document.createElement('template');
+      template.innerHTML = bodyHtml(mounted.editor);
+      return template.content.querySelector('table');
+    };
+
+    it('helpers purs : parseTableAlign, isTableAlign, tableAlignFallbackStyle', () => {
+      const table = document.createElement('table');
+      expect(parseTableAlign(table)).toBeNull();
+      table.setAttribute('style', 'margin-left: auto; margin-right: auto');
+      expect(parseTableAlign(table)).toBe('center');
+      table.setAttribute('style', 'margin-left: AUTO');
+      expect(parseTableAlign(table)).toBe('right');
+      table.setAttribute('style', 'margin-right: auto');
+      expect(parseTableAlign(table)).toBeNull();
+      table.setAttribute(TABLE_ALIGN_ATTRIBUTE, 'Right');
+      expect(parseTableAlign(table)).toBe('right');
+      // Attribut inconnu : on retombe sur le style (ici `margin-right: auto` seul, rien).
+      table.setAttribute(TABLE_ALIGN_ATTRIBUTE, 'justify');
+      expect(parseTableAlign(table)).toBeNull();
+      table.setAttribute('style', 'margin-left: auto');
+      expect(parseTableAlign(table)).toBe('right');
+      expect(isTableAlign('center')).toBe(true);
+      expect(isTableAlign('middle')).toBe(false);
+      expect(tableAlignFallbackStyle('center')).toBe('margin: 0 auto');
+      expect(tableAlignFallbackStyle('right')).toBe('margin-left: auto');
+      expect(tableAlignFallbackStyle('left')).toBeNull();
+      expect(tableAlignFallbackStyle(null)).toBeNull();
+    });
+
+    it.each([
+      ['center', '<table data-align="center"><tbody><tr><td><p>a</p></td></tr></tbody></table>'],
+      ['right', '<table data-align="right"><tbody><tr><td><p>a</p></td></tr></tbody></table>'],
+      ['left', '<table data-align="left"><tbody><tr><td><p>a</p></td></tr></tbody></table>'],
+      [
+        'après style et data-docx-style',
+        '<table style="width: 450pt; border-top: 1pt solid #000000" data-docx-style="TableGrid" data-align="center"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      ],
+    ])('%s : rendu exact (data-align seul) et idempotence', (_name, html) => {
+      mounted.editor.setHTML(html);
+      expect(bodyHtml(mounted.editor)).toBe(html);
+      expectIdempotent(mounted);
+    });
+
+    it('relit l’ancienne forme margin auto et ne la réémet pas en style', () => {
+      mounted.editor.setHTML(
+        '<table style="margin-left: auto; margin-right: auto; width: 50%"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expect(attrsOf(mounted, 'table')).toMatchObject({ align: 'center', width: '50%' });
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table style="width: 50%" data-align="center"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expectIdempotent(mounted);
+      mounted.editor.setHTML(
+        '<table style="margin-left: auto"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expect(outputTable()?.getAttribute(TABLE_ALIGN_ATTRIBUTE)).toBe('right');
+      expect(outputTable()?.getAttribute('style')).toBeNull();
+    });
+
+    it('une valeur inconnue est ignorée, align null n’émet rien', () => {
+      mounted.editor.setHTML(
+        '<table data-align="justify"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expect(attrsOf(mounted, 'table')).toMatchObject({ align: null });
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+    });
+
+    it('la vue d’édition porte data-align et le CSS de repli, retirés quand l’attribut disparaît', () => {
+      const editedTable = (): HTMLElement | null =>
+        mounted.editor.contentElement.querySelector<HTMLElement>('.tableWrapper table');
+      mounted.editor.setHTML(
+        '<table style="width: 100%" data-align="center"><tbody><tr><td><p>a</p></td></tr></tbody></table>',
+      );
+      expect(editedTable()?.getAttribute(TABLE_ALIGN_ATTRIBUTE)).toBe('center');
+      expect(editedTable()?.style.marginLeft).toBe('auto');
+      expect(editedTable()?.style.marginRight).toBe('auto');
+      expect(editedTable()?.style.width).toBe('100%');
+      const update = (align: string | null): void => {
+        const pos = findNodePos(mounted.editor, 'table');
+        const node = mounted.editor.tiptap.state.doc.nodeAt(pos);
+        mounted.editor.tiptap.view.dispatch(
+          mounted.editor.tiptap.state.tr.setNodeMarkup(pos, undefined, { ...node?.attrs, align }),
+        );
+      };
+      update('right');
+      expect(editedTable()?.style.marginLeft).toBe('auto');
+      expect(editedTable()?.style.marginRight).toBe('');
+      expect(editedTable()?.getAttribute(TABLE_ALIGN_ATTRIBUTE)).toBe('right');
+      update(null);
+      expect(editedTable()?.style.marginLeft).toBe('');
+      expect(editedTable()?.getAttribute(TABLE_ALIGN_ATTRIBUTE)).toBeNull();
+      expect(editedTable()?.style.width).toBe('100%');
+    });
+  });
+
   describe('cellules', () => {
     it.each([
       [
         'bordures',
         '<table><tbody><tr><td style="border-top: 0.5pt solid #000000; border-bottom: 0.5pt solid #000000"><p>a</p></td></tr></tbody></table>',
+      ],
+      [
+        'bordures avec spacePt (padding-<côté>) puis padding composite, qui prime en CSS (session 4)',
+        '<table><tbody><tr><td style="border-top: 0.5pt solid #000000; border-left: 0.5pt solid #000000; padding-top: 2pt; padding-left: 1pt; padding: 0pt 5.4pt 0pt 5.4pt"><p>a</p></td></tr></tbody></table>',
       ],
       [
         'fond',
@@ -325,6 +433,26 @@ describe('TableLayout', () => {
       mounted.editor.setHTML(html);
       expect(bodyHtml(mounted.editor)).toBe(html);
       expectIdempotent(mounted);
+    });
+
+    it('arbitrage spacePt / paddingPt : chacun à sa place, un padding-* sans bordure est ignoré', () => {
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td style="border-bottom: 1pt solid #000000; padding-bottom: 3pt; padding-top: 9pt; padding: 2pt"><p>a</p></td></tr></tbody></table>',
+      );
+      expect(attrsOf(mounted, 'tableCell')).toMatchObject({
+        borders: [{ side: 'bottom', style: 'solid', widthPt: 1, color: '#000000', spacePt: 3 }],
+        paddingPt: [2, 2, 2, 2],
+      });
+      expect(bodyHtml(mounted.editor)).toBe(
+        '<table><tbody><tr><td style="border-bottom: 1pt solid #000000; padding-bottom: 3pt; padding: 2pt 2pt 2pt 2pt"><p>a</p></td></tr></tbody></table>',
+      );
+      expectIdempotent(mounted);
+      expect(
+        cellLayoutDeclarations({
+          borders: [{ side: 'top', style: 'solid', widthPt: 1, color: '#000000', spacePt: 2 }],
+          paddingPt: [1, 1, 1, 1],
+        }),
+      ).toEqual(['border-top: 1pt solid #000000', 'padding-top: 2pt', 'padding: 1pt 1pt 1pt 1pt']);
     });
 
     it('relit les variantes : raccourci border, padding court, rgb()', () => {

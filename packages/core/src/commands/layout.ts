@@ -12,6 +12,7 @@ import {
   normalizeParagraphLayoutValue,
 } from '../extensions/paragraph-layout';
 import { isCaps, type RunCaps } from '../extensions/run-layout';
+import { TAB_NODE_NAME, sanitizeTabStop } from '../extensions/tab';
 import { defineStandardCommand, iconIdFor } from './define';
 
 /** Arguments de `text.setLetterSpacing` : espacement en points, `null` pour retirer. */
@@ -24,6 +25,11 @@ export interface SetCapsArgs {
   caps: RunCaps;
 }
 
+/** Arguments de `text.insertTab` : position du taquet en points, absente par défaut. */
+export interface InsertTabArgs {
+  stopPt?: number | null;
+}
+
 /** Identifiants des commandes de run de mise en page, enregistrées en plus de `STANDARD_COMMAND_IDS`. */
 export const TEXT_LAYOUT_COMMAND_IDS = [
   'text.setLetterSpacing',
@@ -32,6 +38,11 @@ export const TEXT_LAYOUT_COMMAND_IDS = [
 ] as const;
 
 export type TextLayoutCommandId = (typeof TEXT_LAYOUT_COMMAND_IDS)[number];
+
+/** Identifiant de la commande de tabulation (session 4), enregistrée en plus, hors contrat. */
+export const TAB_COMMAND_IDS = ['text.insertTab'] as const;
+
+export type TabCommandId = (typeof TAB_COMMAND_IDS)[number];
 
 const LAYOUT_TYPES: readonly string[] = PARAGRAPH_LAYOUT_TYPES;
 
@@ -224,7 +235,7 @@ function readArgs(args: unknown): Record<string, unknown> {
 }
 
 function defineTextLayoutCommand(
-  id: TextLayoutCommandId,
+  id: TextLayoutCommandId | TabCommandId,
   spec: Pick<AsterCommand, 'run' | 'canRun' | 'isActive'>,
 ): AsterCommand {
   const command: AsterCommand = {
@@ -308,5 +319,23 @@ export const TEXT_LAYOUT_COMMANDS: readonly AsterCommand[] = [
       const caps: unknown = editor.tiptap.getAttributes('textStyle')['caps'];
       return isCaps(caps);
     },
+  }),
+];
+
+/**
+ * Commande additive `text.insertTab { stopPt? }` (session 4) : insère un nœud `tab` à la
+ * sélection, avec la position de taquet si elle est donnée et valide (nombre de mise en
+ * page ≥ 0 ; une valeur invalide est ignorée, pas refusée). C'est l'équivalent de la
+ * touche Tab dans un paragraphe, sans la réserve des listes et des tables.
+ */
+export const TAB_COMMANDS: readonly AsterCommand[] = [
+  defineTextLayoutCommand('text.insertTab', {
+    run: (editor, args) => {
+      const stopPt = sanitizeTabStop(readArgs(args)['stopPt']);
+      const content =
+        stopPt === null ? { type: TAB_NODE_NAME } : { type: TAB_NODE_NAME, attrs: { stopPt } };
+      return editor.tiptap.chain().focus().insertContent(content).run();
+    },
+    canRun: (editor) => editor.tiptap.can().insertContent({ type: TAB_NODE_NAME }),
   }),
 ];
