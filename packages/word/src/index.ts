@@ -12,6 +12,9 @@
 export type {
   DocxImportOptions,
   DocxImportResult,
+  DocxLostKind,
+  DocxLostObject,
+  DocxLostWhere,
   DocxImportWarning,
   DocxImportWarningCode,
   DocxInput,

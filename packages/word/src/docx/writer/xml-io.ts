@@ -137,12 +137,16 @@ export class PartStore {
     this.zip.file(path, content);
   }
 
-  /** Sérialise les parties XML modifiées dans l'archive, déclaration d'origine en tête. */
+  /**
+   * Sérialise les parties XML modifiées dans l'archive, déclaration d'origine en tête.
+   * Chromium réémet lui-même la déclaration `<?xml …?>` dans `serializeToString` (jsdom
+   * non) : on retire celle du sérialiseur pour ne jamais en écrire deux.
+   */
   async commit(): Promise<void> {
     for (const [path, pending] of this.cache) {
       const part = await pending;
       if (!part?.changed) continue;
-      this.zip.file(path, part.declaration + this.codec.serialize(part.doc));
+      this.zip.file(path, part.declaration + stripXmlDeclaration(this.codec.serialize(part.doc)));
       part.changed = false;
     }
   }
@@ -255,4 +259,12 @@ export function emptyDocumentLike(model: Document): Document {
     }
   }
   return doc;
+}
+
+/**
+ * Retire la déclaration `<?xml …?>` que certains sérialiseurs (Chromium) placent en tête :
+ * la partie est réécrite avec sa déclaration d'origine, jamais avec deux.
+ */
+export function stripXmlDeclaration(xml: string): string {
+  return xml.replace(/^\s*<\?xml[^>]*\?>\s*/u, '');
 }
