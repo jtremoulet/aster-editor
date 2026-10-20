@@ -1,4 +1,5 @@
 import type { AsterEditor } from './editor';
+import type { ParagraphLayoutAttrName, ParagraphLayoutAttrs } from './layout';
 
 /**
  * Identifiants des commandes standard fournies par le core. La toolbar et le wrapper
@@ -62,6 +63,9 @@ export const STANDARD_COMMAND_IDS = [
   // Variables (champs de fusion)
   'variable.insert',
   'variable.remove',
+  // Mise en page des paragraphes (session 3)
+  'paragraph.setLayout',
+  'paragraph.unsetLayout',
   // Historique et divers
   'undo',
   'redo',
@@ -96,6 +100,10 @@ export interface StandardCommandArgs {
   fontFamily: { family: string | null };
   fontSize: { size: string | null };
   'variable.insert': { name: string; label?: string };
+  /** Fusionne les attributs donnés dans les paragraphes et titres de la sélection ; `null` efface un attribut. */
+  'paragraph.setLayout': ParagraphLayoutAttrs;
+  /** Efface les attributs nommés, ou tous sans argument. */
+  'paragraph.unsetLayout': { attrs?: readonly ParagraphLayoutAttrName[] } | undefined;
 }
 
 /** Type d'argument d'une commande standard, `undefined` si elle n'en prend pas. */

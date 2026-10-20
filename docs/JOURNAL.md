@@ -355,3 +355,13 @@
 1. Lire `BILAN_SESSION2.md` (5 min), puis `docs/ROADMAP_SESSION2.md` pour ce qui a été différé.
 2. Tester dans Word réel avec `samples/README.md` et déposer un `.docx` client dans `fixtures/docx/`.
 3. Prochain contrat à dégeler (additif) : `VariableStore.allowUnknown` / `canInsert`, événements `formatPainterChange` / `sourceViewChange`, option `headingIds`.
+
+## 🌙 Session 3 — fidélité de mise en page Word (20 octobre 2026)
+
+### 20/10 16:32 — GO, phase 0
+
+- Point de départ : 0.4.3 sur `develop`, 1 262 tests + 35 e2e verts, paquets publiés (0.4.3 en validation npm pour `ui` et `angular`). Aucun `.docx` client déposé : la session démarre sur les fixtures générées (L22).
+- Contrat figé (additif) : `core/src/api/layout.ts` (`DocumentLayout`, `ParagraphLayoutAttrs` et leur sérialisation HTML exacte, `RunLayoutAttrs`, `ListLayoutAttrs`, `TableLayoutAttrs`, `CellLayoutAttrs`, `PageViewOptions`), `AsterOptions.pageView`, commandes `paragraph.setLayout` / `paragraph.unsetLayout` ; `word` : `DocxImportOptions.fidelity`, `DocxImportResult.layout` / `template` / `lost`, `DocxLostObject`, `DocxExportOptions.template` / `layout`, codes d'avertissement `image-skipped`, `object-lost`, `reader`.
+- Squelette du lecteur OOXML (`word/src/docx/reader/`) : `types.ts` (interfaces figées), `package.ts` (zip, parties, relations), `index.ts` (orchestrateur), dix stubs à signature figée que L24 et L25 remplacent fichier par fichier. `importDocx({ fidelity: 'styled' })` fonctionne de bout en bout en texte brut, variables comprises (5 tests). Défaut encore `semantic` : bascule à l'intégration de L24+L25.
+- Décision : les deux lots du lecteur se partagent un dossier mais pas un fichier ; ils ne se parlent que par `ConverterContext`. Les polices et tailles sont posées sur les runs, jamais sur les blocs (Tiptap ne lit pas `font-size` sur `<p>`).
+- Lancé : L22 fixtures (16:58). À suivre : L23 core, L24 reader runs, L25 reader blocs, L26 ui.

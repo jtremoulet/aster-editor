@@ -1,5 +1,5 @@
-import type { AsterDocument, VariableValues } from '@aster-editor/core';
-import type { HtmlParser } from '../docx/types';
+import type { AsterDocument, DocumentLayout, VariableValues } from '@aster-editor/core';
+import type { DocxInput, HtmlParser } from '../docx/types';
 
 /**
  * Codes stables des avertissements d'export :
@@ -198,6 +198,20 @@ export interface DocxExportOptions {
   numberedHeadings?: boolean | DocxNumberedHeadingsOptions;
   /** Surcharges des styles de titres (couleur, taille…). Par défaut, titres de Word. */
   headingStyles?: DocxHeadingStyles;
+  /**
+   * Export dans le gabarit : le `.docx` donné (en général `DocxImportResult.template`) est
+   * conservé tel quel, seul son corps est régénéré depuis le contenu. Styles, numérotation,
+   * thème, polices, en-têtes, pieds, sections et propriétés restent identiques. Les
+   * options `page`, `header`, `footer`, `defaultFont`, `lang`, `headingStyles` sont alors
+   * ignorées (le gabarit les porte) ; `variables`, `toc`, `numberedHeadings` s'appliquent.
+   */
+  template?: DocxInput;
+  /**
+   * Mise en page de l'export neuf (sans `template`) : englobe `page`, `header`, `footer`,
+   * `defaultFont` et `lang`, qui restent acceptés et priment champ par champ quand les deux
+   * sont donnés. En général `DocxImportResult.layout`, modifié ou non.
+   */
+  layout?: DocumentLayout;
   /**
    * Reçoit chaque avertissement au fil de la conversion. `exportDocx` rend un `Blob`
    * nu pour rester simple à brancher sur un bouton : c'est ici que remontent les

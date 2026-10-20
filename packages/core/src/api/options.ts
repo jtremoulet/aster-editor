@@ -2,6 +2,7 @@ import type { AnyExtension } from '@tiptap/core';
 import type { AsterCommand } from './commands';
 import type { AsterDocument } from './document';
 import type { AsterLocale } from './i18n';
+import type { PageViewOptions } from './layout';
 import type { PasteTransformer } from './paste';
 import type { VariableSource } from './variables';
 
@@ -46,6 +47,11 @@ export interface AsterOptions {
   linkPolicy?: LinkPolicy;
   /** Variables de document (champs de fusion) : déclarations, valeurs, résolveur. */
   variables?: VariableSource;
+  /**
+   * Vue page : feuille aux dimensions et marges de `layout.page`, en-têtes et pieds
+   * affichés en lecture seule. `true` = A4 portrait par défaut. Pas de pagination.
+   */
+  pageView?: boolean | PageViewOptions;
   /**
    * Désactive des commandes standard par identifiant. Utile pour une toolbar réduite
    * qui veut aussi bloquer le raccourci clavier correspondant.

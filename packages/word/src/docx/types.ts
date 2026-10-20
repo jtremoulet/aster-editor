@@ -1,4 +1,4 @@
-import type { AsterVariable, UploadHandler } from '@aster-editor/core';
+import type { AsterVariable, DocumentLayout, UploadHandler } from '@aster-editor/core';
 
 /**
  * Entrée acceptée par `importDocx` : un `File` du navigateur, les octets bruts, ou une
@@ -20,7 +20,10 @@ export type DocxImportWarningCode =
   | 'image-upload-failed'
   | 'footnotes-dropped'
   | 'unsupported-style'
-  | 'variables-preprocess-failed';
+  | 'variables-preprocess-failed'
+  | 'image-skipped'
+  | 'object-lost'
+  | 'reader';
 
 /** Avertissement remonté par l'import : un élément Word n'a pas pu être converti fidèlement. */
 export interface DocxImportWarning {
@@ -81,6 +84,43 @@ export interface DocxImportOptions {
    * utile pour nettoyer un document Word qui espace ses blocs avec des lignes vides.
    */
   emptyParagraphs?: 'keep' | 'drop';
+  /**
+   * Chemin de lecture. `styled` (défaut à partir de 0.5.0) : lecteur OOXML d'Aster, HTML
+   * stylé (polices, interlignes, bordures, tableaux complets, listes fidèles), `layout`
+   * renseigné. `semantic` : mammoth, HTML sémantique sans mise en forme, comportement
+   * des versions 0.4.x.
+   */
+  fidelity?: 'styled' | 'semantic';
+}
+
+/** Nature d'un objet Word que l'éditeur ne sait pas représenter. */
+export type DocxLostKind =
+  | 'textbox'
+  | 'shape'
+  | 'smartart'
+  | 'chart'
+  | 'equation'
+  | 'comment'
+  | 'revision'
+  | 'field'
+  | 'embedded-object'
+  | 'unknown';
+
+/** Où l'objet se trouvait dans le document. */
+export type DocxLostWhere = 'body' | 'header' | 'footer' | 'footnote' | 'endnote';
+
+/**
+ * Objet non représentable rencontré à l'import. Hors du corps, il est conservé tel quel
+ * dans le gabarit ; dans le corps, il est remplacé par son texte quand il en a un et
+ * signalé ici (et par un avertissement `object-lost`).
+ */
+export interface DocxLostObject {
+  readonly kind: DocxLostKind;
+  readonly where: DocxLostWhere;
+  /** Texte de remplacement inséré dans le corps, s'il y en a un. */
+  readonly text?: string;
+  /** Détail lisible : nom de la forme, type d'objet incorporé… */
+  readonly detail?: string;
 }
 
 /**
@@ -98,4 +138,18 @@ export interface DocxImportResult {
    * en-têtes et pieds de page, que mammoth ne rend pas. Vide si aucune.
    */
   variables: readonly AsterVariable[];
+  /**
+   * Mise en page lue dans la dernière section du document (format, orientation, marges,
+   * colonnes, police par défaut, langue, en-têtes et pieds en HTML stylé). Objet vide en
+   * mode `semantic`.
+   */
+  layout: DocumentLayout;
+  /**
+   * Le `.docx` d'origine, intact, à repasser à `exportDocx({ template })` pour que tout ce
+   * qui n'est pas le corps (styles, numérotation, thème, en-têtes, sections) ressorte
+   * identique. C'est le tampon reçu, pas une copie.
+   */
+  template: ArrayBuffer;
+  /** Objets non représentables rencontrés dans le corps ou les parties lues. Vide en mode `semantic`. */
+  lost: readonly DocxLostObject[];
 }

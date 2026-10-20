@@ -18,6 +18,31 @@ export type { AsterEditor } from './editor';
 export type { AsterEventName, AsterEvents, Unsubscribe } from './events';
 export type { AsterDictionary, AsterLocale, I18n, TranslateParams } from './i18n';
 export type { AsterOptions, LinkPolicy, UploadHandler } from './options';
+export type {
+  BlockBorder,
+  BorderSide,
+  BorderStyle,
+  CellLayoutAttrs,
+  CellVerticalAlign,
+  DecorationStyle,
+  DefaultFont,
+  DocumentLayout,
+  HeaderFooterContent,
+  HeaderFooterSet,
+  ListLayoutAttrs,
+  OrderedListType,
+  PageDimensions,
+  PageMargins,
+  PageOrientation,
+  PageSetup,
+  PageSizeName,
+  PageViewOptions,
+  ParagraphLayoutAttrName,
+  ParagraphLayoutAttrs,
+  RunLayoutAttrs,
+  TableLayoutAttrs,
+} from './layout';
+export { PARAGRAPH_LAYOUT_ATTR_NAMES } from './layout';
 export type { PasteContext, PasteTransformer } from './paste';
 export type {
   AsterVariable,
