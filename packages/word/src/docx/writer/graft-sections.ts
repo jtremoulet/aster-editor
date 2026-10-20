@@ -1,4 +1,5 @@
 import type { DocumentLayout, SectionLayout } from '@aster-editor/core';
+import { sectionHeaderFooterSets, sectionLayoutOf } from '../../export/section-layout';
 import { childNamed, childrenNamed } from '../preprocess/xml-utils';
 import type { HeadersFootersResult } from '../reader/headers';
 import { readSectionProperties } from '../reader/sections';
@@ -22,7 +23,10 @@ import { createSibling, insertOrdered, wordAttr } from './xml-io';
  * références d'en-tête et de pied (les parties existent déjà). Sinon il est régénéré depuis
  * le `w:sectPr` généré par la lib `docx` (`layout.sections[n]`), ses en-têtes et pieds
  * copiés dans le gabarit. Les références des sections du gabarit **abandonnées** sont
- * transmises à la section suivante conservée, comme Word les faisait hériter.
+ * transmises à la section suivante conservée, comme Word les faisait hériter ; pas
+ * `w:titlePg`, que Word n'hérite pas (R43-06). « Quelle `SectionLayout` pour quel
+ * segment » suit la règle partagée avec l'export neuf (`export/section-layout.ts`,
+ * segments numérotés par position, R43-01 / R43-04).
  */
 
 /** Tous les `w:sectPr` du corps dans l'ordre : ceux des `w:pPr` (fins de section) puis le final. */
@@ -40,16 +44,6 @@ export function allSectPrs(body: Element): Element[] {
 
 /** Éléments du `w:sectPr` qui doivent précéder tout le reste (ordre du schéma). */
 const SECTION_REFERENCES = ['headerReference', 'footerReference'] as const;
-
-/** Enfants du `w:sectPr` placés après `w:titlePg` dans l'ordre du schéma. */
-const AFTER_TITLE_PAGE: ReadonlySet<string> = new Set([
-  'textDirection',
-  'bidi',
-  'rtlGutter',
-  'docGrid',
-  'printerSettings',
-  'sectPrChange',
-]);
 
 export interface SectionGraftInput {
   readonly templateBody: Element;
@@ -154,7 +148,7 @@ function matchSections(
     .map((sectPr) => sectionSignature(readSectionProperties(sectPr)));
   let next = 0;
   for (let index = 0; index < last; index += 1) {
-    const section = layout?.sections?.[index];
+    const section = sectionLayoutOf(layout, index, segments.length);
     if (!section) continue;
     const wanted = sectionSignature(section);
     const found = signatures.findIndex(
@@ -167,10 +161,13 @@ function matchSections(
   return used;
 }
 
-/** Références d'en-tête et de pied (et `w:titlePg`) en attente d'héritage. */
+/**
+ * Références d'en-tête et de pied en attente d'héritage. `w:titlePg` n'en fait pas partie :
+ * Word n'hérite que les références d'une section à l'autre, une référence `first` héritée
+ * reste inerte sans `w:titlePg` propre à la section (R43-06).
+ */
 interface Pending {
   readonly references: Map<string, Element>;
-  titlePage: Element | null;
 }
 
 function referenceKey(element: Element): string {
@@ -182,8 +179,6 @@ function collectPending(sectPr: Element, pending: Pending): void {
   for (const child of Array.from(sectPr.children)) {
     if (child.localName === 'headerReference' || child.localName === 'footerReference') {
       pending.references.set(referenceKey(child), child);
-    } else if (child.localName === 'titlePg') {
-      pending.titlePage = child;
     }
   }
 }
@@ -191,7 +186,7 @@ function collectPending(sectPr: Element, pending: Pending): void {
 /**
  * Complète un `w:sectPr` conservé des références que les sections abandonnées avant lui
  * lui transmettaient par héritage : insérées en tête, en-têtes avant pieds (ordre du
- * schéma), `w:titlePg` à sa place. Vide ensuite l'attente.
+ * schéma). Vide ensuite l'attente.
  */
 function completeFromPending(sectPr: Element, pending: Pending): void {
   const own = new Set(
@@ -207,14 +202,7 @@ function completeFromPending(sectPr: Element, pending: Pending): void {
       sectPr.insertBefore(sectPr.ownerDocument.importNode(element, true), sectPr.firstChild);
     }
   }
-  if (pending.titlePage && !childNamed(sectPr, 'titlePg')) {
-    const after = Array.from(sectPr.children).find((child) =>
-      AFTER_TITLE_PAGE.has(child.localName),
-    );
-    sectPr.insertBefore(sectPr.ownerDocument.importNode(pending.titlePage, true), after ?? null);
-  }
   pending.references.clear();
-  pending.titlePage = null;
 }
 
 /** Pose un `w:sectPr` dans le `w:pPr` d'un paragraphe (créé en tête s'il manque). */
@@ -242,7 +230,7 @@ export async function graftSections(input: SectionGraftInput): Promise<SectionGr
   const used = matchSections(segments, templateSectPrs, templateFinal !== null, layout);
 
   for (const child of Array.from(templateBody.childNodes)) templateBody.removeChild(child);
-  const pending: Pending = { references: new Map(), titlePage: null };
+  const pending: Pending = { references: new Map() };
   let nextTemplate = 0;
   let even = false;
   const record = (result: HeaderFooterGraftResult): void => {
@@ -262,8 +250,11 @@ export async function graftSections(input: SectionGraftInput): Promise<SectionGr
     if (templateIndex !== null) nextTemplate = templateIndex + 1;
 
     if (index === last) {
+      // Même règle que l'export neuf : `sections[dernier]` quand la liste a autant d'entrées
+      // que de segments, sinon les champs de premier niveau du `layout` (R43-01).
+      const wanted = sectionHeaderFooterSets(layout, index, segments.length);
       if (!templateFinal) {
-        if (wantsHeadersFooters({ headers: layout?.headers, footers: layout?.footers })) {
+        if (wantsHeadersFooters(wanted)) {
           headerFooter.warnings.push({
             code: 'template-section-missing',
             message:
@@ -278,14 +269,14 @@ export async function graftSections(input: SectionGraftInput): Promise<SectionGr
         await graftHeadersFooters(headerFooter, {
           sectPr: templateFinal,
           generatedSectPr: segment.generatedSectPr,
-          wanted: { headers: layout?.headers, footers: layout?.footers },
+          wanted,
           existing: input.templateHeadersFooters,
         }),
       );
       break;
     }
 
-    const section = layout?.sections?.[index];
+    const section = sectionLayoutOf(layout, index, segments.length);
     let sectPr: Element;
     if (templateIndex !== null) {
       const source = templateSectPrs[templateIndex];

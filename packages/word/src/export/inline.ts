@@ -31,7 +31,7 @@ export {
   type InlineState,
   type UnderlineStyle,
 } from './inline-state';
-export type { InlineCollector } from './inline-pieces';
+export { MAX_TAB_STOP_TWIPS, type InlineCollector, type TabStop } from './inline-pieces';
 
 /** Nœud inline de tabulation du contrat (`TabAttrs`). */
 const TAB_ATTRIBUTE = 'data-tab';
@@ -60,7 +60,7 @@ async function collectPieces(
     return;
   }
   if (node.hasAttribute(TAB_ATTRIBUTE)) {
-    pushTab(node, state, options, pieces);
+    pushTab(node, state, ctx, options, pieces);
     return;
   }
   if (SILENT_TAGS.includes(tag)) return;

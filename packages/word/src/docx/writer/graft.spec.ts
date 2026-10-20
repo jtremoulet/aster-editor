@@ -481,7 +481,8 @@ describe('en-têtes et pieds du gabarit', () => {
     expect(sectPr).toContain('<w:headerReference w:type="first" r:id="rId7"/>');
     expect(sectPr).toContain('<w:footerReference w:type="first" r:id="rId9"/>');
     expect(sectPr).toContain('<w:headerReference w:type="default" r:id="rId10"/>');
-    expect(sectPr).toContain('<w:titlePg/>');
+    // `w:titlePg` de la section 1 abandonnée n'est pas hérité : Word ne le fait pas (R43-06).
+    expect(sectPr).not.toContain('<w:titlePg/>');
     expect(sectPr).toContain('<w:cols w:space="720" w:num="2" w:equalWidth="true"/>');
   });
 

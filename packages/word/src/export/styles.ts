@@ -72,11 +72,17 @@ export function paragraphBorderSpace(side: string, sides: ReadonlySet<string>): 
 }
 
 /**
+ * Espace texte-trait maximal d'une bordure (`w:space`, `ST_PointMeasure`) : Word limite
+ * l'interface à 31 pt et n'affiche pas au-delà (R43-07).
+ */
+export const MAX_BORDER_SPACE_PT = 31;
+
+/**
  * Bordure CSS → `IBorderOptions` : épaisseur en huitièmes de point, couleur `RRGGBB`,
- * espace texte-trait lu dans `padding-<côté>` (`BlockBorder.spacePt`, session 4) ou, à
- * défaut, déduit par `paragraphBorderSpace` (`sides` = côtés bordés du bloc ; pour une
- * cellule, un ensemble vide donne 1 pt partout). Le style `solid` du contrat est le
- * `single` de Word.
+ * espace texte-trait lu dans `padding-<côté>` (`BlockBorder.spacePt`, session 4, plafonné
+ * à `MAX_BORDER_SPACE_PT`) ou, à défaut, déduit par `paragraphBorderSpace` (`sides` =
+ * côtés bordés du bloc ; pour une cellule, un ensemble vide donne 1 pt partout). Le style
+ * `solid` du contrat est le `single` de Word.
  */
 export function borderOptions(
   border: CssBorder,
@@ -87,7 +93,7 @@ export function borderOptions(
     style: border.style === 'solid' ? 'single' : border.style,
     size: Math.max(2, Math.round(border.widthPt * 8)),
     color: border.color,
-    space: border.spacePt ?? paragraphBorderSpace(side, sides),
+    space: Math.min(MAX_BORDER_SPACE_PT, border.spacePt ?? paragraphBorderSpace(side, sides)),
   };
 }
 

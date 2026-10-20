@@ -1,3 +1,4 @@
+import type { TabAlign, TabLeader } from '@aster-editor/core';
 import type { ImageRun } from 'docx';
 import { warn, type ExportContext } from './context';
 import { parsePoints, pointsToTwips } from './css';
@@ -7,7 +8,8 @@ import { resolvedValue, splitVariables } from './variables';
 /**
  * Morceaux inline (`Piece`) accumulés pendant la descente : texte, sauts, images,
  * champs de fusion, tabulations et appels de note, avec les règles d'émission de chacun.
- * Module de `inline.ts` (ré-exporté par lui) : découpage L45, aucune logique modifiée.
+ * Module de `inline.ts` (ré-exporté par lui) : découpage L45 ; taquets avec alignement et
+ * points de suite, position plafonnée (F43).
  */
 
 export type Piece =
@@ -34,18 +36,68 @@ export type Piece =
 /** Attribut d'un `<sup>` qui porte un appel de note explicite. */
 const FOOTNOTE_REF_ATTRIBUTE = 'data-footnote-ref';
 
-/** Position du taquet (points) d'un nœud inline de tabulation du contrat (`TabAttrs`). */
+/** Position du taquet (points) d'un nœud inline de tabulation du contrat (`TabAttrs.stopPt`). */
 const TAB_STOP_ATTRIBUTE = 'data-stop';
+
+/** Alignement du taquet (`TabAttrs.align`), `left` quand absent. */
+const TAB_ALIGN_ATTRIBUTE = 'data-align';
+
+/** Points de suite du taquet (`TabAttrs.leader`), aucun quand absent. */
+const TAB_LEADER_ATTRIBUTE = 'data-leader';
+
+/**
+ * Position maximale d'un taquet dans Word : 22 pouces (31 680 twips). Au-delà, Word
+ * refuse la valeur dans son interface, et un `w:pos` hors `xsd:int` rend le fichier
+ * illisible (R43-02) : la position est ramenée à ce plafond.
+ */
+export const MAX_TAB_STOP_TWIPS = 31_680;
 
 /** Espace cadratin par lequel le lecteur de la 0.5 représentait `w:tab` : toujours accepté. */
 const EM_SPACE = String.fromCharCode(0x2003);
 
+/** Un taquet déclaré par une tabulation du paragraphe : position en twips, alignement, points de suite. */
+export interface TabStop {
+  readonly position: number;
+  readonly align: TabAlign;
+  readonly leader: TabLeader | undefined;
+}
+
 /**
- * Ce que la conversion inline remonte au paragraphe : les positions (twips) des taquets
- * déclarés par ses tabulations (`data-stop`), écrites en `w:tabs` sur le paragraphe.
+ * Ce que la conversion inline remonte au paragraphe : les taquets déclarés par ses
+ * tabulations (`data-stop`, `data-align`, `data-leader`), écrits en `w:tabs` sur le
+ * paragraphe, dédoublonnés par position et alignement (clé `position:align`, le premier
+ * déclaré gagne).
  */
 export interface InlineCollector {
-  readonly tabStopsTwips: Set<number>;
+  readonly tabStops: Map<string, TabStop>;
+}
+
+/** `data-align` → alignement du contrat, `left` pour toute autre valeur. */
+function tabAlignOf(value: string | null): TabAlign {
+  switch (value?.trim().toLowerCase()) {
+    case 'center':
+      return 'center';
+    case 'right':
+      return 'right';
+    case 'decimal':
+      return 'decimal';
+    default:
+      return 'left';
+  }
+}
+
+/** `data-leader` → points de suite du contrat, `undefined` pour toute autre valeur. */
+function tabLeaderOf(value: string | null): TabLeader | undefined {
+  switch (value?.trim().toLowerCase()) {
+    case 'dot':
+      return 'dot';
+    case 'hyphen':
+      return 'hyphen';
+    case 'underscore':
+      return 'underscore';
+    default:
+      return undefined;
+  }
 }
 
 /** Texte d'un appel de note tel que l'import le produit : `[1]`. */
@@ -133,17 +185,39 @@ export function pushText(
 }
 
 /**
- * `<span data-tab data-stop="36pt">` : une tabulation, dont le taquet (s'il est connu)
- * est remonté au paragraphe. Le contenu du nœud (vide par contrat) est ignoré.
+ * `<span data-tab data-stop="36pt" data-align="center" data-leader="dot">` : une
+ * tabulation, dont le taquet (s'il est connu) est remonté au paragraphe avec son
+ * alignement et ses points de suite. Une position au-delà de `MAX_TAB_STOP_TWIPS` est
+ * ramenée au plafond avec avertissement. Le contenu du nœud (vide par contrat) est ignoré.
  */
 export function pushTab(
   element: Element,
   state: InlineState,
+  ctx: ExportContext,
   options: CollectOptions,
   pieces: Piece[],
 ): void {
   const stop = parsePoints(element.getAttribute(TAB_STOP_ATTRIBUTE));
-  if (stop !== null && stop > 0) options.collector?.tabStopsTwips.add(pointsToTwips(stop));
+  if (stop !== null && stop > 0 && options.collector) {
+    let position = pointsToTwips(stop);
+    if (position > MAX_TAB_STOP_TWIPS) {
+      warn(
+        ctx,
+        'page-margins-clamped',
+        `Taquet à ${String(stop)} pt au-delà de 22 pouces, ramené au plafond de Word`,
+      );
+      position = MAX_TAB_STOP_TWIPS;
+    }
+    const align = tabAlignOf(element.getAttribute(TAB_ALIGN_ATTRIBUTE));
+    const key = `${String(position)}:${align}`;
+    if (!options.collector.tabStops.has(key)) {
+      options.collector.tabStops.set(key, {
+        position,
+        align,
+        leader: tabLeaderOf(element.getAttribute(TAB_LEADER_ATTRIBUTE)),
+      });
+    }
+  }
   pieces.push({ kind: 'tab', state });
 }
 

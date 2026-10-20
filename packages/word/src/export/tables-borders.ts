@@ -40,8 +40,9 @@ const TABLE_ALIGN_ATTRIBUTE = 'data-align';
 
 /**
  * Alignement horizontal du tableau (`w:jc`) : `data-align="center|right"` du contrat, ou
- * le centrage CSS usuel (`margin: 0 auto`, `margin-left/right: auto`). `undefined` pour
- * `left` ou sans déclaration : Word aligne à gauche par défaut.
+ * le centrage CSS usuel (`margin: auto`, `margin: 0 auto`, `margin-left/right: auto`), le
+ * raccourci `margin` étant lu selon la règle TRBL à 1, 2 ou 4 valeurs (R43-08).
+ * `undefined` pour `left` ou sans déclaration : Word aligne à gauche par défaut.
  */
 export function tableAlignment(
   table: Element,
@@ -60,8 +61,9 @@ export function tableAlignment(
       break;
   }
   const margin = style.get('margin')?.trim().toLowerCase().split(/\s+/) ?? [];
-  const left = style.get('margin-left')?.trim().toLowerCase() ?? margin[3] ?? margin[1];
-  const right = style.get('margin-right')?.trim().toLowerCase() ?? margin[1];
+  const left =
+    style.get('margin-left')?.trim().toLowerCase() ?? margin[3] ?? margin[1] ?? margin[0];
+  const right = style.get('margin-right')?.trim().toLowerCase() ?? margin[1] ?? margin[0];
   if (left === 'auto' && right === 'auto') return AlignmentType.CENTER;
   if (left === 'auto' && right !== undefined) return AlignmentType.RIGHT;
   return undefined;

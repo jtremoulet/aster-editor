@@ -150,30 +150,34 @@ export async function buildFooters(
 }
 
 /**
- * En-têtes d'une section intermédiaire (`layout.sections[n].headers`) : le jeu du contrat
- * seul, `options.header` ne s'appliquant qu'à la dernière section.
+ * En-têtes d'une section intermédiaire (`layout.sections[n].headers`) : le jeu du contrat,
+ * `options.header` en **repli** du type `default` quand la section n'en déclare pas
+ * (R43-03 : les options explicites portent sur tout le document, comme en 0.5, mais une
+ * section qui a son propre en-tête le garde).
  */
 export async function buildSectionHeaders(
   sets: HeaderFooterSet | undefined,
+  options: DocxExportOptions,
   ctx: ExportContext,
-  parse: HtmlParser | undefined,
 ): Promise<HeaderFooterGroup<Header>> {
+  const { parse } = options;
   const group: { -readonly [K in keyof HeaderFooterGroup<Header>]: Header | undefined } = {
-    default: await buildHeader(layoutOption(sets, 'default'), ctx, parse),
+    default: await buildHeader(layoutOption(sets, 'default') ?? options.header, ctx, parse),
     first: await buildHeader(layoutOption(sets, 'first'), ctx, parse),
     even: await buildHeader(layoutOption(sets, 'even'), ctx, parse),
   };
   return compact(group);
 }
 
-/** Pieds d'une section intermédiaire (`layout.sections[n].footers`). */
+/** Pieds d'une section intermédiaire (`layout.sections[n].footers`), `options.footer` en repli `default`. */
 export async function buildSectionFooters(
   sets: HeaderFooterSet | undefined,
+  options: DocxExportOptions,
   ctx: ExportContext,
-  parse: HtmlParser | undefined,
 ): Promise<HeaderFooterGroup<Footer>> {
+  const { parse } = options;
   const group: { -readonly [K in keyof HeaderFooterGroup<Footer>]: Footer | undefined } = {
-    default: await buildFooter(layoutOption(sets, 'default'), ctx, parse),
+    default: await buildFooter(layoutOption(sets, 'default') ?? options.footer, ctx, parse),
     first: await buildFooter(layoutOption(sets, 'first'), ctx, parse),
     even: await buildFooter(layoutOption(sets, 'even'), ctx, parse),
   };

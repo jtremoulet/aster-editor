@@ -57,8 +57,8 @@ function knownStyles(options: DocxExportOptions, target: BuildTarget): ReadonlyS
  * collectées (et retirées du corps) avant la conversion, pour que leurs appels
  * trouvent leur identifiant Word. La mise en page vient de `options.layout` (contrat),
  * les options explicites primant champ par champ ; le corps est découpé en sections aux
- * `<hr data-section-break>` (`sections.ts`), la dernière portant la mise en page de
- * premier niveau du `layout`.
+ * `<hr data-section-break>` (`sections.ts`, segments numérotés par position), la dernière
+ * portant la mise en page de premier niveau du `layout`.
  */
 export async function buildDocx(
   dom: Document,
@@ -92,11 +92,10 @@ export async function buildDocx(
   const sections: ISectionOptions[] = [];
   let even = false;
   for (const [index, segment] of segments.entries()) {
-    const last = index === segments.length - 1;
     let children = await convertChildren(segment.container, ROOT_SCOPE, ctx);
     if (index === 0 && options.toc) children = [...buildToc(options.toc, ctx), ...children];
-    const resolved = resolveSection(options, segment, index, segments.length, warnings);
-    const built = await buildSection(resolved, children, last, options, ctx);
+    const resolved = resolveSection(options, index, segments.length, warnings);
+    const built = await buildSection(resolved, children, index, segments.length, options, ctx);
     sections.push(built.section);
     even = even || built.even;
   }

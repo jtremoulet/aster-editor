@@ -1,4 +1,4 @@
-import type { DocumentLayout, SectionLayout, SectionStart } from '@aster-editor/core';
+import type { SectionLayout, SectionStart } from '@aster-editor/core';
 import type { FileChild, Footer, Header, ISectionOptions, ISectionPropertiesOptions } from 'docx';
 import type { ExportContext } from './context';
 import { SECTION_BREAK_ATTRIBUTE, isElement } from './dom';
@@ -9,19 +9,23 @@ import {
   buildSectionHeaders,
   type HeaderFooterGroup,
 } from './header-footer';
+import { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout';
 import { resolvePageLayout, type PageLayout } from './styles';
 import type { DocxExportOptions, DocxExportWarning } from './types';
 
 /**
  * Sections de l'export neuf (session 4). Le corps HTML est découpé à chaque
- * `<hr data-section-break="n">` de premier niveau ; chaque segment devient une `section`
- * de la lib `docx` avec les propriétés de `layout.sections[n - 1]` (page, colonnes,
- * `titlePage`, `start` → `w:type`, en-têtes et pieds). Le dernier segment prend
- * `layout.sections[dernier]` quand la liste a autant d'entrées que de segments, sinon les
- * champs de premier niveau du `layout` (comportement 0.5, un corps sans saut = une section).
+ * `<hr data-section-break>` de premier niveau ; le segment `n` (1..k, par position)
+ * devient une `section` de la lib `docx` avec les propriétés de `layout.sections[n - 1]`
+ * (page, colonnes, `titlePage`, `start` → `w:type`, en-têtes et pieds). Le dernier segment
+ * prend `layout.sections[dernier]` quand la liste a autant d'entrées que de segments,
+ * sinon les champs de premier niveau du `layout` (comportement 0.5, un corps sans saut =
+ * une section). La règle est celle de `section-layout.ts`, partagée avec la greffe.
  */
 
-/** Un segment du corps : son conteneur et le numéro (à partir de 1) de la section qu'il forme. */
+export { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout';
+
+/** Un segment du corps : son conteneur et le numéro (à partir de 1, par position) de la section qu'il forme. */
 export interface BodySegment {
   readonly container: Element;
   readonly number: number;
@@ -31,8 +35,8 @@ export interface BodySegment {
  * Découpe le corps aux sauts de section de premier niveau. Sans saut, le corps lui-même
  * est l'unique segment (aucun nœud déplacé) ; sinon les nœuds de chaque segment sont
  * déplacés dans un `<div>` neuf, que `convertChildren` traverse comme un conteneur.
- * Le numéro d'un segment vient de l'attribut du saut qui le termine (`n`), le dernier
- * segment porte le numéro suivant.
+ * Les segments sont numérotés 1..k par position : l'attribut du saut n'est pas lu
+ * (R43-04), la greffe numérote de la même façon.
  */
 export function splitSections(body: Element): BodySegment[] {
   const nodes = Array.from(body.childNodes);
@@ -46,14 +50,11 @@ export function splitSections(body: Element): BodySegment[] {
       container.appendChild(node);
       continue;
     }
-    const declared = Number.parseInt(node.getAttribute(SECTION_BREAK_ATTRIBUTE) ?? '', 10);
-    const number = Number.isFinite(declared) && declared > 0 ? declared : segments.length + 1;
-    segments.push({ container, number });
+    segments.push({ container, number: segments.length + 1 });
     node.remove();
     container = body.ownerDocument.createElement('div');
   }
-  const last = segments[segments.length - 1];
-  segments.push({ container, number: (last?.number ?? 0) + 1 });
+  segments.push({ container, number: segments.length + 1 });
   return segments;
 }
 
@@ -87,43 +88,34 @@ export interface ResolvedSection {
 }
 
 /**
- * Section du contrat pour le segment `index` (0-based) sur `count` : `layout.sections[n]`
- * pour un segment intermédiaire ; pour le dernier, `layout.sections[dernier]` seulement si
- * la liste compte autant de sections que de segments, sinon les champs de premier niveau.
- */
-function sectionLayoutOf(
-  layout: DocumentLayout | undefined,
-  segment: BodySegment,
-  index: number,
-  count: number,
-): SectionLayout | undefined {
-  const sections = layout?.sections ?? [];
-  const last = index === count - 1;
-  if (!last) return sections[segment.number - 1];
-  if (sections.length === count) return sections[count - 1];
-  return undefined;
-}
-
-/**
- * Résout la mise en page d'un segment. Pour le dernier (ou l'unique), les options
- * explicites (`page`, `pageSize`) priment champ par champ comme en 0.5 ; une section
- * intermédiaire ne connaît que son `SectionLayout`, complété par les champs de premier
- * niveau du `layout` (format du document) quand elle n'en déclare pas.
+ * Résout la mise en page du segment `index` (0-based) sur `count`. Les options explicites
+ * (`page`, `pageSize`) portent sur tout le document, comme en 0.5 : elles priment champ par
+ * champ pour le dernier segment ; pour un segment intermédiaire, sa `SectionLayout.page`
+ * fait foi quand elle existe, sinon les options puis `layout.page` (R43-03). Colonnes et
+ * `titlePage` : ceux de la section, ou les champs de premier niveau pour le dernier
+ * segment ou un segment sans section.
  */
 export function resolveSection(
   options: DocxExportOptions,
-  segment: BodySegment,
   index: number,
   count: number,
   warnings: DocxExportWarning[],
 ): ResolvedSection {
   const layout = options.layout;
-  const section = sectionLayoutOf(layout, segment, index, count);
+  const section = sectionLayoutOf(layout, index, count);
   const last = index === count - 1;
   const { page: _page, pageSize: _pageSize, ...withoutPage } = options;
-  const pageOptions: DocxExportOptions = last
-    ? { ...options, layout: { ...layout, ...(section?.page ? { page: section.page } : {}) } }
-    : { ...withoutPage, layout: { page: section?.page ?? layout?.page } };
+  let pageOptions: DocxExportOptions;
+  if (last) {
+    pageOptions = {
+      ...options,
+      layout: { ...layout, ...(section?.page ? { page: section.page } : {}) },
+    };
+  } else if (section?.page) {
+    pageOptions = { ...withoutPage, layout: { page: section.page } };
+  } else {
+    pageOptions = { ...options, layout: { page: layout?.page } };
+  }
   const columns = section?.columns ?? (last || !section ? layout?.columns : undefined);
   return {
     page: resolvePageLayout(pageOptions, warnings),
@@ -172,23 +164,27 @@ export interface BuiltSection {
 }
 
 /**
- * Assemble une section : en-têtes et pieds (ceux des options pour la dernière, ceux du
- * `SectionLayout` sinon), propriétés de page et enfants. Word exige au moins un paragraphe
- * par section.
+ * Assemble la section du segment `index` sur `count` : en-têtes et pieds selon la règle
+ * partagée (`sectionHeaderFooterSets`), `options.header` / `options.footer` primant dans
+ * la dernière section et servant de repli `default` dans les autres (R43-03), propriétés
+ * de page et enfants. Word exige au moins un paragraphe par section.
  */
 export async function buildSection(
   resolved: ResolvedSection,
   children: readonly FileChild[],
-  last: boolean,
+  index: number,
+  count: number,
   options: DocxExportOptions,
   ctx: ExportContext,
 ): Promise<BuiltSection> {
+  const last = index === count - 1;
+  const sets = sectionHeaderFooterSets(options.layout, index, count);
   const headers: HeaderFooterGroup<Header> = last
-    ? await buildHeaders(options, ctx, resolved.layout?.headers ?? options.layout?.headers)
-    : await buildSectionHeaders(resolved.layout?.headers, ctx, options.parse);
+    ? await buildHeaders(options, ctx, sets.headers)
+    : await buildSectionHeaders(sets.headers, options, ctx);
   const footers: HeaderFooterGroup<Footer> = last
-    ? await buildFooters(options, ctx, resolved.layout?.footers ?? options.layout?.footers)
-    : await buildSectionFooters(resolved.layout?.footers, ctx, options.parse);
+    ? await buildFooters(options, ctx, sets.footers)
+    : await buildSectionFooters(sets.footers, options, ctx);
   const section: ISectionOptions = {
     properties: sectionProperties(resolved, ctx),
     ...(Object.keys(headers).length > 0 ? { headers } : {}),

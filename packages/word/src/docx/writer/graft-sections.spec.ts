@@ -147,7 +147,8 @@ describe('sections dans le gabarit : aller-retour sans modification', () => {
     expect(sectPrs[0]).toContain('<w:headerReference w:type="default" r:id="rId9"/>');
     expect(sectPrs[0]).toContain('<w:headerReference w:type="first" r:id="rId7"/>');
     expect(sectPrs[0]).toContain('<w:footerReference w:type="default" r:id="rId8"/>');
-    expect(sectPrs[0]).toContain('<w:titlePg/>');
+    // Word n'hérite pas `w:titlePg` (R43-06) : la section 2 du gabarit n'en avait pas, elle n'en a pas.
+    expect(sectPrs[0]).not.toContain('<w:titlePg/>');
     expect(sectPrs[0]).not.toContain('rId6');
     // Le porteur du gabarit est un paragraphe vide : il est recréé après le dernier paragraphe.
     const body = normalizeXml(bodyOf(textOf(result.parts, 'word/document.xml')));
@@ -228,8 +229,16 @@ describe('sections dans le gabarit : aller-retour sans modification', () => {
       differingParts(original, result.parts).filter((path) => path === 'word/document.xml'),
     );
     const document = textOf(result.parts, 'word/document.xml');
+    // Taquets d'origine restitués avec leur alignement (R43-05) : left 2 cm, center 8 cm,
+    // right 14 cm, decimal 10 cm, comme dans le `w:tabs` du gabarit.
     expect(document).toContain('<w:tabs><w:tab w:val="left" w:pos="1134"/></w:tabs>');
-    expect(document).toContain('<w:tabs><w:tab w:val="left" w:pos="7938"/></w:tabs>');
+    expect(document).toContain('<w:tabs><w:tab w:val="center" w:pos="4536"/></w:tabs>');
+    expect(document).toContain('<w:tabs><w:tab w:val="right" w:pos="7938"/></w:tabs>');
+    expect(document).toContain('<w:tabs><w:tab w:val="decimal" w:pos="5670"/></w:tabs>');
+    const originalXml = textOf(original, 'word/document.xml');
+    expect(document.match(/<w:tabs>[\s\S]*?<\/w:tabs>/g)).toEqual(
+      originalXml.match(/<w:tabs>[\s\S]*?<\/w:tabs>/g),
+    );
     expect((document.match(/<w:tab\/>/g) ?? []).length).toBe(9);
     expect(document).toContain('w:space="8"');
     expect(document).toContain('w:color="BFBFBF"');

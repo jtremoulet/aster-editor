@@ -1,5 +1,5 @@
 import type { IParagraphOptions, Paragraph } from 'docx';
-import { resolveDocxStyle, type ExportContext } from './context';
+import { resolveDocxStyle, warn, type ExportContext } from './context';
 import {
   parseAlignment,
   parseBorder,
@@ -12,12 +12,13 @@ import {
   type ParagraphAlignment,
 } from './css';
 import { PAGE_BREAK_ATTRIBUTE, tagOf } from './dom';
-import { inlineChildren, type InlineCollector, type InlineState } from './inline';
+import { inlineChildren, type InlineCollector, type InlineState, type TabStop } from './inline';
 import { sanitizeXmlText } from './sanitize';
 import {
   DOCX_STYLE_ATTRIBUTE,
   HEADING_NUMBERING_REFERENCE,
   LIST_INDENT,
+  MAX_BORDER_SPACE_PT,
   NIL_BORDER,
   NUM_INDENT_ATTRIBUTE,
   STYLE_IDS,
@@ -27,7 +28,8 @@ import {
 /**
  * Paragraphes de l'export : scope hérité par les blocs, propriétés directes du contrat
  * (`ParagraphLayoutAttrs`), titres, `<pre>`, filets et sauts de page. Module de
- * `blocks.ts` (qui ré-exporte le scope) : découpage L45, aucune logique modifiée.
+ * `blocks.ts` (qui ré-exporte le scope) : découpage L45 ; taquets alignés et espace de
+ * bordure plafonné (F43).
  */
 
 /** `data-keep-next` : garder avec le paragraphe suivant (`w:keepNext`). */
@@ -122,13 +124,15 @@ type MutableBorders = {
  * Mise en page du contrat (`ParagraphLayoutAttrs`, sérialisée en `style` inline et
  * `data-*`) → propriétés directes du paragraphe : interligne et espacements
  * (`w:spacing`), retraits (`w:ind`, sauf `data-docx-num-indent` : la numérotation les
- * porte), bordures (`w:pBdr`), fond (`w:shd`), `w:keepNext`, `w:pageBreakBefore`. Les
- * longueurs sont lues en `pt` (ou toute unité absolue), les couleurs en `#hex` ou `rgb()`.
+ * porte), bordures (`w:pBdr`, espace texte-trait plafonné à 31 pt avec avertissement),
+ * fond (`w:shd`), `w:keepNext`, `w:pageBreakBefore`. Les longueurs sont lues en `pt` (ou
+ * toute unité absolue), les couleurs en `#hex` ou `rgb()`.
  */
 function applyParagraphLayout(
   options: MutableParagraphOptions,
   element: Element,
   style: ReadonlyMap<string, string>,
+  ctx: ExportContext,
 ): void {
   const spacing: MutableSpacing = {};
   const lineHeight = parseLineHeight(style.get('line-height'));
@@ -163,6 +167,13 @@ function applyParagraphLayout(
   const parsed = Array.from(parseBorders(style));
   const sides = new Set(parsed.filter(([, border]) => border !== null).map(([side]) => side));
   for (const [side, border] of parsed) {
+    if (border?.spacePt !== undefined && border.spacePt > MAX_BORDER_SPACE_PT) {
+      warn(
+        ctx,
+        'page-margins-clamped',
+        `padding-${side}: ${String(border.spacePt)}pt d'une bordure ramené à ${String(MAX_BORDER_SPACE_PT)} pt, plafond de Word`,
+      );
+    }
     borders[side] = border ? borderOptions(border, side, sides) : NIL_BORDER;
   }
   const between = parseBorder(element.getAttribute(BORDER_BETWEEN_ATTRIBUTE) ?? undefined);
@@ -204,14 +215,42 @@ function paragraphOptions(
       options.indent = { left: LIST_INDENT * (scope.list.level + 1) };
     }
   }
-  if (element) applyParagraphLayout(options, element, style);
+  if (element) applyParagraphLayout(options, element, style, ctx);
   if (element && hasPageBreakBefore(element, style)) options.pageBreakBefore = true;
   return options;
 }
 
+/** Ordre des alignements de taquets à position égale (celui du contrat `TabAlign`). */
+const TAB_ALIGN_ORDER: readonly string[] = ['left', 'center', 'right', 'decimal'];
+
+/** Taquet du contrat → définition `docx` (`w:tab w:val w:pos w:leader`). */
+function tabStopDefinition(
+  stop: TabStop,
+  ctx: ExportContext,
+): NonNullable<IParagraphOptions['tabStops']>[number] {
+  const { LeaderType, TabStopType } = ctx.docx;
+  const types = {
+    left: TabStopType.LEFT,
+    center: TabStopType.CENTER,
+    right: TabStopType.RIGHT,
+    decimal: TabStopType.DECIMAL,
+  } as const;
+  const leaders = {
+    dot: LeaderType.DOT,
+    hyphen: LeaderType.HYPHEN,
+    underscore: LeaderType.UNDERSCORE,
+  } as const;
+  return {
+    type: types[stop.align],
+    position: stop.position,
+    ...(stop.leader ? { leader: leaders[stop.leader] } : {}),
+  };
+}
+
 /**
- * Enfants inline d'un paragraphe, et ses taquets (`w:tabs`) : un taquet `left` par position
- * déclarée par une tabulation (`data-stop`), dédoublonnés et triés.
+ * Enfants inline d'un paragraphe, et ses taquets (`w:tabs`) : un taquet par position et
+ * alignement déclarés par une tabulation (`data-stop`, `data-align`, `data-leader`),
+ * dédoublonnés et triés par position.
  */
 async function inlineContent(
   nodes: readonly Node[],
@@ -219,7 +258,7 @@ async function inlineContent(
   scope: BlockScope,
   ctx: ExportContext,
 ): Promise<void> {
-  const collector: InlineCollector = { tabStopsTwips: new Set() };
+  const collector: InlineCollector = { tabStops: new Map() };
   options.children = await inlineChildren(
     nodes,
     ctx,
@@ -227,10 +266,14 @@ async function inlineContent(
     scope.notesAllowed ?? true,
     collector,
   );
-  if (collector.tabStopsTwips.size > 0) {
-    options.tabStops = Array.from(collector.tabStopsTwips)
-      .sort((a, b) => a - b)
-      .map((position) => ({ type: ctx.docx.TabStopType.LEFT, position }));
+  if (collector.tabStops.size > 0) {
+    options.tabStops = Array.from(collector.tabStops.values())
+      .sort(
+        (a, b) =>
+          a.position - b.position ||
+          TAB_ALIGN_ORDER.indexOf(a.align) - TAB_ALIGN_ORDER.indexOf(b.align),
+      )
+      .map((stop) => tabStopDefinition(stop, ctx));
   }
 }
 
