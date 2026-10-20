@@ -62,9 +62,9 @@ describe('convertRuns', () => {
         '<w:rPr><w:rStyle w:val="Code"/><w:b/><w:i/><w:u w:val="double"/><w:strike/><w:vertAlign w:val="superscript"/>' +
         '<w:color w:val="C00000"/><w:highlight w:val="yellow"/><w:spacing w:val="20"/><w:caps/></w:rPr>';
       expect(await convert(runXml('x', rPr))).toBe(
-        '<strong><em><u style="text-decoration-style: double"><s><sup>' +
-          '<span style="font-family: Consolas; font-size: 10pt; color: #c00000; background-color: #ffff00; letter-spacing: 1pt; text-transform: uppercase" data-docx-run-style="Code">x</span>' +
-          '</sup></s></u></em></strong>',
+        '<span style="background-color: #ffff00; color: #c00000; font-family: Consolas; font-size: 10pt; letter-spacing: 1pt; text-transform: uppercase" data-docx-run-style="Code">' +
+          '<strong><em><s><u style="text-decoration-style: double"><sup>x</sup></u></s></em></strong>' +
+          '</span>',
       );
     });
 
@@ -74,7 +74,7 @@ describe('convertRuns', () => {
           runXml('x', '<w:rPr><w:dstrike/><w:vertAlign w:val="subscript"/><w:smallCaps/></w:rPr>'),
         ),
       ).toBe(
-        '<s style="text-decoration-style: double"><sub><span style="font-variant: small-caps">x</span></sub></s>',
+        '<span style="font-variant: small-caps"><s style="text-decoration-style: double"><sub>x</sub></s></span>',
       );
     });
 
@@ -83,7 +83,7 @@ describe('convertRuns', () => {
         runXml('Titre') + runXml(' suite'),
         '<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>',
       );
-      expect(html).toBe('<strong><span style="font-size: 16pt">Titre suite</span></strong>');
+      expect(html).toBe('<span style="font-size: 16pt"><strong>Titre suite</strong></span>');
     });
 
     it('fusionne les runs voisins aux mêmes propriétés et sépare les autres', async () => {
@@ -103,8 +103,8 @@ describe('convertRuns', () => {
         close: '',
       });
       expect(renderRunTags({ underline: 'solid', strike: 'dashed' }, {})).toEqual({
-        open: '<u><s style="text-decoration-style: dashed">',
-        close: '</s></u>',
+        open: '<s style="text-decoration-style: dashed"><u>',
+        close: '</u></s>',
       });
       expect(renderRunTags({ runStyle: 'A"B' }, {}).open).toBe(
         '<span data-docx-run-style="A&quot;B">',
@@ -154,7 +154,7 @@ describe('convertRuns', () => {
           '</w:hyperlink>',
       );
       expect(html).toBe(
-        '<a href="https://example.com/a?b=1&amp;c=2"><u><span style="color: #0563c1" data-docx-run-style="Hyperlink">lien</span></u></a>',
+        '<a href="https://example.com/a?b=1&amp;c=2"><span style="color: #0563c1" data-docx-run-style="Hyperlink"><u>lien</u></span></a>',
       );
     });
 

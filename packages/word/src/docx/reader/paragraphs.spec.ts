@@ -172,7 +172,7 @@ describe('convertParagraph', () => {
         } as ConverterContext['tableStyle'],
       };
       expect(await html(runXml('x'), '', inTable)).toBe(
-        '<p style="line-height: 1; margin-bottom: 0pt" data-docx-style="Normal"><strong><span style="font-size: 9pt">x</span></strong></p>',
+        '<p style="line-height: 1; margin-bottom: 0pt" data-docx-style="Normal"><span style="font-size: 9pt"><strong>x</strong></span></p>',
       );
       expect(
         await html(
@@ -181,7 +181,7 @@ describe('convertParagraph', () => {
           inTable,
         ),
       ).toBe(
-        '<p style="line-height: 15pt; margin-bottom: 6pt" data-docx-style="Normal"><strong><span style="font-size: 12pt">x</span></strong></p>',
+        '<p style="line-height: 15pt; margin-bottom: 6pt" data-docx-style="Normal"><span style="font-size: 12pt"><strong>x</strong></span></p>',
       );
     });
 
@@ -239,7 +239,7 @@ describe('fixtures 11-13 (chemin styled)', () => {
       '<p data-docx-style="Normal">Police du thème (sans police explicite)</p>',
     );
     expect(out).toMatch(
-      /<strong><em><u style="text-decoration-style: double"><s><sup><span style="[^"]+">Tout cumulé/,
+      /<span style="[^"]+"><strong><em><s><u style="text-decoration-style: double"><sup>Tout cumulé/,
     );
   });
 
@@ -284,16 +284,16 @@ describe('fixtures 11-13 (chemin styled)', () => {
       '<p style="line-height: 1.15; margin-bottom: 8pt" data-docx-style="Normal">Paragraphe Normal',
     );
     expect(out).toMatch(
-      /<h1 style="line-height: 1.15; margin-top: 12pt; margin-bottom: 4pt" data-docx-style="Heading1" data-keep-next=""><strong><span style="font-size: 16pt; color: #2f5496">Titre 1/,
+      /<h1 style="line-height: 1.15; margin-top: 12pt; margin-bottom: 4pt" data-docx-style="Heading1" data-keep-next=""><span style="color: #2f5496; font-size: 16pt"><strong>Titre 1/,
     );
     expect(out).toContain(
       '<p style="line-height: 1.15; margin-bottom: 8pt; margin-left: 28.35pt; border-left: 1.5pt solid #808080" data-docx-style="Citation"><em>Paragraphe Citation',
     );
     expect(out).toContain(
-      'data-docx-style="Important"><strong><em><span style="color: #c00000">Paragraphe Important',
+      'data-docx-style="Important"><span style="color: #c00000"><strong><em>Paragraphe Important',
     );
     expect(out).toContain(
-      'data-docx-style="Citation"><em><span style="color: #00b050">Citation avec couleur directe',
+      'data-docx-style="Citation"><span style="color: #00b050"><em>Citation avec couleur directe',
     );
     // Calibri 11 vient des docDefaults : jamais répété sur les runs.
     expect(out).not.toContain('font-family: Calibri');
@@ -327,7 +327,7 @@ describe('fixtures 11-13 (chemin styled)', () => {
   // bordures fusionnées en `border-width/style/color`, `data-keep-next` avant
   // `data-docx-style` et `<hr data-page-break>` sans son attribut. À réactiver quand le
   // core sérialise le contrat à l'identique.
-  it.skip.each(['11-styles-inline', '12-paragraphes', '13-styles-nommes'])(
+  it.each(['11-styles-inline', '12-paragraphes', '13-styles-nommes'])(
     '%s survit à setHTML puis getHTML dans le core (strict)',
     async (name) => {
       const { html: out } = await importDocx(loadFixture(`${name}.docx`), { fidelity: 'styled' });

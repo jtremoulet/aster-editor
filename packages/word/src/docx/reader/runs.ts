@@ -90,10 +90,12 @@ export function renderRunTags(props: ResolvedRunProps, baseline: ResolvedRunProp
   const spacing = differs('letterSpacingPt');
   const caps = differs('caps');
   const style = styleAttr([
+    // Ordre des déclarations = celui que le core sérialise (attributs de `textStyle`), pour
+    // que `setHTML(getHTML())` dans l'éditeur rende exactement ce HTML.
+    ['background-color', differs('highlight')],
+    ['color', differs('color')],
     ['font-family', differs('fontFamily')],
     ['font-size', fontSize === undefined ? undefined : pt(fontSize)],
-    ['color', differs('color')],
-    ['background-color', differs('highlight')],
     ['letter-spacing', spacing === undefined ? undefined : pt(spacing)],
     ['text-transform', caps === 'all' ? 'uppercase' : undefined],
     ['font-variant', caps === 'small' ? 'small-caps' : undefined],
@@ -105,13 +107,15 @@ export function renderRunTags(props: ResolvedRunProps, baseline: ResolvedRunProp
     open.push(`<${tag}${attrs}>`);
     close.unshift(`</${tag}>`);
   };
+  // Du plus extérieur au plus intérieur : l'imbrication est celle du schéma du core
+  // (`<span><strong><em><s><u><sup>`), sans quoi l'aller-retour dans l'éditeur réordonne.
+  if (style || runStyle) wrap('span', `${style}${runStyle}`);
   if (props.bold) wrap('strong');
   if (props.italic) wrap('em');
-  if (props.underline) wrap('u', decorationAttr(props.underline));
   if (props.strike) wrap('s', decorationAttr(props.strike));
+  if (props.underline) wrap('u', decorationAttr(props.underline));
   if (props.superscript) wrap('sup');
   else if (props.subscript) wrap('sub');
-  if (style || runStyle) wrap('span', `${style}${runStyle}`);
   return { open: open.join(''), close: close.join('') };
 }
 
