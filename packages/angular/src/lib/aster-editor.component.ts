@@ -16,12 +16,14 @@ import {
 import type { ElementRef, Signal } from '@angular/core';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import type { ControlValueAccessor } from '@angular/forms';
+import { PAGE_VIEW_CHANGE_EVENT } from '@aster-editor/core';
 import type {
   AsterDocument,
   AsterEditor,
   AsterLocale,
   AsterTheme,
   AsterVariable,
+  DocumentLayout,
   GetHtmlOptions,
   PasteTransformer,
   ToolbarConfig,
@@ -32,36 +34,26 @@ import type {
 } from '@aster-editor/core';
 import { createAster } from '@aster-editor/ui';
 import type { AsterInstance, AsterUiOptions } from '@aster-editor/ui';
-import type { DocxExportOptions, DocxImportResult } from '@aster-editor/word';
+import type { DocxExportOptions, DocxImportResult, FidelityReport } from '@aster-editor/word';
+import { applyAriaAttributes, applyPlaceholder } from './editor-dom';
+import {
+  applyLayoutToPageView,
+  readPageViewLayout,
+  resolvePageViewOptions,
+  setPageView,
+} from './page-view';
+import type { PageViewInput } from './page-view';
 import { ASTER_CONFIG } from './provide-aster';
 import { ASTER_UPLOAD_HANDLER } from './tokens';
-
-/** Vue minimale des options de l'extension Tiptap `Placeholder`, pour la changer à chaud. */
-interface PlaceholderExtensionOptions {
-  placeholder?: unknown;
-}
-
-type TiptapEditor = AsterEditor['tiptap'];
-type ProseMirrorPlugin = Parameters<TiptapEditor['registerPlugin']>[0];
-
-/** Signature de `addProseMirrorPlugins` d'une extension Tiptap (hors nœud et marque). */
-type ExtensionPluginFactory = (this: {
-  name: string;
-  options: PlaceholderExtensionOptions;
-  storage: unknown;
-  editor: TiptapEditor;
-  type: null;
-  parent: undefined;
-}) => ProseMirrorPlugin[];
-
-/** Pose l'attribut quand une valeur est fournie, le retire sinon. */
-function setOrRemoveAttribute(element: HTMLElement, name: string, value: string | undefined): void {
-  if (value === undefined || value === '') {
-    element.removeAttribute(name);
-  } else {
-    element.setAttribute(name, value);
-  }
-}
+import {
+  compareWithTemplate,
+  declareImportedVariables,
+  exportWord,
+  importWord,
+  loadWordPasteTransformer,
+  resolveExportOptions,
+} from './word';
+import type { DocxImportFidelity, DocxLostObject } from './word';
 
 /** Égalité de deux listes de noms, pour ne pas notifier `variableNames` sans changement réel. */
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
@@ -100,6 +92,13 @@ interface VariableSnapshot {
  * `variableSuggestion` de `createAster`. `variableNames` expose les noms présents dans le
  * document, `variablesChanged` relaie `variablesChange`, `exportDocx` produit le `.docx` avec
  * les valeurs du magasin.
+ *
+ * Fidélité Word (session 3) : `importDocx` lit le `.docx` en mode stylé et conserve le
+ * gabarit (`importedTemplate`), la mise en page (`layout`) et les objets non représentables
+ * (`lostObjects`) ; `exportDocx` réutilise le gabarit par défaut (`exportInTemplate`) et
+ * transmet la mise en page ; `pageView` active la vue page, `layout` (input) impose une mise
+ * en page, `layoutChanged` signale celle que montre la vue page (dialogue « Mise en page »
+ * compris) ; `compareWithTemplate` mesure la fidélité de l'export dans le gabarit.
  */
 @Component({
   selector: 'aster-editor',
@@ -155,6 +154,32 @@ export class AsterEditorComponent implements ControlValueAccessor {
   readonly allowUnknownVariables = input<boolean | undefined>(undefined);
   /** Menu de suggestion déclenché par `{{` dans le contenu. Défaut effectif : `true`. Lu au montage. */
   readonly variableSuggestion = input<boolean | undefined>(undefined);
+  /**
+   * Chemin de lecture d'`importDocx` : `styled` (lecteur OOXML d'Aster, HTML stylé, mise en
+   * page et gabarit renseignés) ou `semantic` (mammoth, HTML sémantique, mise en page vide).
+   * Défaut effectif : `styled`. Lu à chaque import.
+   */
+  readonly importFidelity = input<DocxImportFidelity | undefined>(undefined);
+  /**
+   * `exportDocx` sans `options.template` réutilise le gabarit du dernier import quand il
+   * existe : tout ce qui n'est pas le corps ressort identique. `false` pour l'export neuf
+   * (un `options.template` explicite reste honoré). Défaut : `true`. Lu à chaque export.
+   */
+  readonly exportInTemplate = input<boolean>(true);
+  /**
+   * Vue page (`AsterUiOptions.pageView`) : `true` pour les défauts d'Aster (A4 portrait), un
+   * objet pour la mise en page, la pagination et l'affichage des en-têtes. La mise en page
+   * effective du composant (`layout()`) prime sur `pageView.layout`. À chaud : la vue est
+   * remontée. Le dialogue « Mise en page » de la toolbar peut aussi l'activer ou la modifier.
+   */
+  readonly pageView = input<PageViewInput>(undefined);
+  /**
+   * Mise en page imposée (input `layout`) : prime sur celle de l'import et sur celle posée
+   * par le dialogue, se répercute sur la vue page active et sur `exportDocx`. Laisse
+   * `undefined` pour suivre l'import ; avec une liaison, tiens-la à jour depuis
+   * `layoutChanged` pour que le dialogue « Mise en page » reste pris en compte.
+   */
+  readonly layoutOverride = input<DocumentLayout | undefined>(undefined, { alias: 'layout' });
 
   /** L'éditeur est monté et prêt. Réémis après un remontage (changement de `toolbar`). */
   readonly ready = output<AsterEditor>();
@@ -170,10 +195,33 @@ export class AsterEditorComponent implements ControlValueAccessor {
   readonly blurred = output<void>();
   /** Les valeurs ou déclarations de variables ont changé (`setValues`, `define`, `resolve`, import). */
   readonly variablesChanged = output<VariableValues>();
+  /**
+   * La mise en page effective a changé : import, input `layout`, ou dialogue « Mise en page »
+   * de la toolbar (la vue page est alors relue). Jamais émis pour `null` (vue page retirée).
+   */
+  readonly layoutChanged = output<DocumentLayout>();
 
   private readonly editorState = signal<AsterEditor | null>(null);
   /** Éditeur courant, `null` avant le montage et après la destruction. */
   readonly editor: Signal<AsterEditor | null> = this.editorState.asReadonly();
+
+  private readonly importedTemplateState = signal<ArrayBuffer | null>(null);
+  /** Le `.docx` du dernier import, intact, réutilisé comme gabarit à l'export. `null` sans import. */
+  readonly importedTemplate: Signal<ArrayBuffer | null> = this.importedTemplateState.asReadonly();
+
+  private readonly lostObjectsState = signal<readonly DocxLostObject[]>([]);
+  /** Objets Word non représentables rencontrés par le dernier import (vide en mode `semantic`). */
+  readonly lostObjects: Signal<readonly DocxLostObject[]> = this.lostObjectsState.asReadonly();
+
+  /** Mise en page lue par l'import ou posée par le dialogue « Mise en page ». */
+  private readonly layoutState = signal<DocumentLayout | null>(null);
+  /**
+   * Mise en page effective : l'input `layout` s'il est fourni, sinon celle du dernier import
+   * ou du dialogue « Mise en page ». `null` avant tout import sans vue page.
+   */
+  readonly layout: Signal<DocumentLayout | null> = computed(
+    () => this.layoutOverride() ?? this.layoutState(),
+  );
 
   private readonly variableNamesState = signal<readonly string[]>([], { equal: sameNames });
   /**
@@ -224,9 +272,15 @@ export class AsterEditorComponent implements ControlValueAccessor {
   private readonly resolvedVariableSuggestion = computed<boolean | undefined>(
     () => this.variableSuggestion() ?? this.mergedConfig().variableSuggestion,
   );
+  private readonly resolvedPageView = computed<PageViewInput>(
+    () => this.pageView() ?? this.mergedConfig().pageView,
+  );
 
   private instance: AsterInstance | null = null;
   private mountedToolbar: ToolbarConfig | null = null;
+  private mountedPageView: PageViewInput = undefined;
+  /** Dernière mise en page émise par `layoutChanged`, pour ne pas la réémettre. */
+  private emittedLayout: DocumentLayout | null = null;
   private subscriptions: Unsubscribe[] = [];
   /** Valeur reçue par `writeValue` avant le montage, appliquée comme contenu initial. */
   private pendingValue: string | null = null;
@@ -270,7 +324,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
       const placeholder = this.resolvedPlaceholder();
       untracked(() => {
         if (this.instance) {
-          this.applyPlaceholder(this.instance.editor, placeholder);
+          applyPlaceholder(this.instance.editor, placeholder);
         }
       });
     });
@@ -279,7 +333,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
       const labelledBy = this.ariaLabelledBy();
       untracked(() => {
         if (this.instance) {
-          this.applyAriaAttributes(this.instance.editor, label, labelledBy);
+          applyAriaAttributes(this.instance.editor, label, labelledBy);
         }
       });
     });
@@ -320,27 +374,56 @@ export class AsterEditorComponent implements ControlValueAccessor {
         }
       });
     });
+    // Au montage, la vue page passe par `options.pageView` ; cet effet ne couvre que les
+    // changements d'input sur un éditeur déjà monté.
+    effect(() => {
+      const pageView = this.resolvedPageView();
+      untracked(() => {
+        if (this.instance && this.mountedPageView !== pageView) {
+          this.mountedPageView = pageView;
+          setPageView(this.instance.editor, resolvePageViewOptions(pageView, this.layout()));
+        }
+      });
+    });
+    // Mise en page effective : répercutée sur la vue page active, signalée par `layoutChanged`.
+    effect(() => {
+      const layout = this.layout();
+      untracked(() => {
+        if (layout && this.instance) {
+          applyLayoutToPageView(this.instance.editor, layout);
+        }
+        this.notifyLayout(layout);
+      });
+    });
   }
 
   // --- API publique --------------------------------------------------------
 
   /**
-   * Importe un `.docx` via `@aster-editor/word` (chargé à la demande, mammoth reste dans
+   * Importe un `.docx` via `@aster-editor/word` (chargé à la demande, le lecteur reste dans
    * un chunk séparé), remplace le contenu de l'éditeur en émettant `change` pour que le
    * formulaire voie la nouvelle valeur, et rend le résultat avec ses avertissements.
-   * Le hook d'upload de l'éditeur est réutilisé pour les images embarquées. Si le
-   * composant est détruit ou remonté pendant l'import, le résultat est rendu mais aucun
-   * contenu n'est écrit : l'instance vivante est relue après chaque `await`.
+   * Le hook d'upload de l'éditeur est réutilisé pour les images embarquées. En mode `styled`
+   * (défaut, voir `importFidelity`), le gabarit, la mise en page et les objets non
+   * représentables sont conservés dans `importedTemplate`, `layout` et `lostObjects`, et la
+   * mise en page est appliquée à la vue page si elle est active. Si le composant est détruit
+   * ou remonté pendant l'import, le résultat est rendu mais rien n'est écrit ni conservé :
+   * l'instance vivante est relue après chaque `await`.
    */
   async importDocx(file: File): Promise<DocxImportResult> {
     this.requireEditor('importDocx');
-    const upload = untracked(() => this.resolvedOptions().upload);
-    const { importDocx } = await import('@aster-editor/word');
-    const result = await importDocx(file, upload ? { upload } : {});
+    const defaults = untracked(() => ({
+      upload: this.resolvedOptions().upload,
+      fidelity: this.importFidelity() ?? 'styled',
+    }));
+    const result = await importWord(file, defaults);
     const editor = this.instance?.editor;
     if (editor && !editor.isDestroyed()) {
       editor.setHTML(result.html, true);
-      this.declareImportedVariables(editor, result.variables);
+      declareImportedVariables(editor, result.variables, () => this.variableValues());
+      this.importedTemplateState.set(result.template);
+      this.lostObjectsState.set(result.lost);
+      this.layoutState.set(result.layout);
     }
     return result;
   }
@@ -350,16 +433,34 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * demande, la lib `docx` reste dans son chunk). Les valeurs du magasin de variables sont
    * transmises quand `options.variables.values` n'est pas fourni : `mode: 'resolve'` substitue
    * donc ce que l'utilisateur a saisi, `'fields'` produit des champs de fusion Word avec ces
-   * valeurs comme résultat. Rend le `Blob`, à passer à `downloadDocx` ou à un upload.
+   * valeurs comme résultat. Sans `options.template`, le gabarit du dernier import est utilisé
+   * si `exportInTemplate` est vrai ; sans `options.layout`, la mise en page effective
+   * (`layout()`) est transmise. Rend le `Blob`, à passer à `downloadDocx` ou à un upload.
    */
   async exportDocx(options: DocxExportOptions = {}): Promise<Blob> {
     const editor = this.requireEditor('exportDocx');
-    const { exportDocx } = await import('@aster-editor/word');
-    const variables = {
-      ...options.variables,
-      values: options.variables?.values ?? editor.variables.getValues(),
-    };
-    return exportDocx(editor.getHTML(), { ...options, variables });
+    const resolved = untracked(() =>
+      resolveExportOptions(editor, options, {
+        template: this.importedTemplate(),
+        layout: this.layout(),
+        inTemplate: this.exportInTemplate(),
+      }),
+    );
+    return exportWord(editor, resolved);
+  }
+
+  /**
+   * Rapport de fidélité du document courant : export dans le gabarit du dernier import
+   * (valeurs du magasin de variables, mise en page effective) puis `compareDocx(gabarit,
+   * export)`. `null` sans gabarit importé. Le comparateur est chargé à la demande.
+   */
+  async compareWithTemplate(): Promise<FidelityReport | null> {
+    const template = this.importedTemplate();
+    if (!template) {
+      return null;
+    }
+    const exported = await this.exportDocx({ template });
+    return compareWithTemplate(template, exported);
   }
 
   /**
@@ -430,8 +531,17 @@ export class AsterEditorComponent implements ControlValueAccessor {
     const editor = instance.editor;
     this.instance = instance;
     this.mountedToolbar = options.toolbar ?? 'standard';
+    this.mountedPageView = untracked(() => this.resolvedPageView());
     this.pendingValue = null;
+    // Le dialogue « Mise en page » de la toolbar pose sa mise en page via `setPageView` sans
+    // passer par le composant : le core signale chaque changement de vue page par un
+    // événement DOM sur le contenteditable, on y relit la mise en page en vigueur.
+    const onPageViewChange = (): void => this.readLayoutFromPageView(editor);
+    editor.contentElement.addEventListener(PAGE_VIEW_CHANGE_EVENT, onPageViewChange);
     this.subscriptions = [
+      () => editor.contentElement.removeEventListener(PAGE_VIEW_CHANGE_EVENT, onPageViewChange),
+    ];
+    this.subscriptions.push(
       editor.on('ready', ({ editor: ready }) => this.ready.emit(ready)),
       editor.on('change', ({ editor: changed }) => {
         const html = changed.getHTML();
@@ -453,8 +563,11 @@ export class AsterEditorComponent implements ControlValueAccessor {
         this.onTouched?.();
         this.blurred.emit();
       }),
-    ];
-    untracked(() => this.applyAriaAttributes(editor, this.ariaLabel(), this.ariaLabelledBy()));
+    );
+    untracked(() => applyAriaAttributes(editor, this.ariaLabel(), this.ariaLabelledBy()));
+    // Une vue page montée depuis `options.pageView` sans import : sa mise en page devient
+    // celle du composant (le dialogue de la toolbar part de la même base).
+    this.readLayoutFromPageView(editor);
     if (untracked(() => this.wordPaste())) {
       this.loadWordPaste();
     }
@@ -470,6 +583,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
     this.instance?.destroy();
     this.instance = null;
     this.mountedToolbar = null;
+    this.mountedPageView = undefined;
     this.editorState.set(null);
     this.variableNamesState.set([]);
   }
@@ -527,7 +641,39 @@ export class AsterEditorComponent implements ControlValueAccessor {
       upload: merged.upload ?? this.uploadHandler ?? undefined,
       variables: variableSource,
       variableSuggestion: this.resolvedVariableSuggestion(),
+      pageView: resolvePageViewOptions(this.resolvedPageView(), this.layout()),
     };
+  }
+
+  /**
+   * Relit la mise en page de la vue page active et l'adopte. Si l'input `layout` la masque,
+   * `layoutChanged` est émis directement pour que l'application puisse l'adopter ; sinon
+   * l'effet sur `layout()` s'en charge.
+   */
+  private readLayoutFromPageView(editor: AsterEditor): void {
+    const current = readPageViewLayout(editor);
+    // Rien à relire si la vue montre déjà l'état connu, ou l'input `layout` que le composant
+    // vient lui-même de poser : l'état garde alors la mise en page de l'import, retrouvée
+    // quand l'input repasse à `undefined`.
+    if (
+      !current ||
+      current === untracked(() => this.layoutState()) ||
+      current === untracked(() => this.layoutOverride())
+    ) {
+      return;
+    }
+    this.layoutState.set(current);
+    if (untracked(() => this.layout()) !== current) {
+      this.notifyLayout(current);
+    }
+  }
+
+  /** Émet `layoutChanged` une seule fois par mise en page (même référence = déjà émise). */
+  private notifyLayout(layout: DocumentLayout | null): void {
+    if (layout && layout !== this.emittedLayout) {
+      this.emittedLayout = layout;
+      this.layoutChanged.emit(layout);
+    }
   }
 
   /** Éditeur monté, sinon erreur explicite nommant la méthode appelée trop tôt. */
@@ -544,39 +690,13 @@ export class AsterEditorComponent implements ControlValueAccessor {
     this.variableNamesState.set(editor.variables.getNames());
   }
 
-  /**
-   * Après un import : déclare les variables trouvées dans le `.docx` (libellé et valeur des
-   * contrôles de contenu compris), puis réapplique l'input `variableValues` pour les noms que
-   * Word a lui-même valorisés, l'application restant la source de vérité des valeurs.
-   */
-  private declareImportedVariables(editor: AsterEditor, found: readonly AsterVariable[]): void {
-    if (found.length === 0) {
-      return;
-    }
-    editor.variables.define(found);
-    const known = untracked(() => this.variableValues());
-    if (!known) {
-      return;
-    }
-    const overrides: Record<string, string> = {};
-    for (const variable of found) {
-      const value = known[variable.name];
-      if (variable.value !== undefined && value !== undefined && value !== variable.value) {
-        overrides[variable.name] = value;
-      }
-    }
-    if (Object.keys(overrides).length > 0) {
-      editor.variables.setValues(overrides);
-    }
-  }
-
   private loadWordPaste(): void {
     if (this.wordTransformer || this.wordLoading) {
       return;
     }
-    this.wordLoading = import('@aster-editor/word')
-      .then((word) => {
-        this.wordTransformer = word.wordPasteTransformer();
+    this.wordLoading = loadWordPasteTransformer()
+      .then((transformer) => {
+        this.wordTransformer = transformer;
       })
       .catch((error: unknown) => {
         this.wordLoading = null;
@@ -585,52 +705,5 @@ export class AsterEditorComponent implements ControlValueAccessor {
           error,
         );
       });
-  }
-
-  /** Nom accessible du contenteditable : `aria-label` et/ou `aria-labelledby`, retirés si vides. */
-  private applyAriaAttributes(
-    editor: AsterEditor,
-    label: string | undefined,
-    labelledBy: string | undefined,
-  ): void {
-    setOrRemoveAttribute(editor.contentElement, 'aria-label', label);
-    setOrRemoveAttribute(editor.contentElement, 'aria-labelledby', labelledBy);
-  }
-
-  /**
-   * Change le placeholder à chaud. L'extension `Placeholder` lit ses options au moment où
-   * son plugin ProseMirror est créé (et `extension.options` est une copie à chaque accès),
-   * donc on refabrique le plugin via `addProseMirrorPlugins` avec un `placeholder` surchargé
-   * et on le substitue à l'ancien par `unregisterPlugin`/`registerPlugin`, API publiques de
-   * Tiptap. Le repli sur la chaîne i18n `editor.placeholder` est conservé.
-   */
-  private applyPlaceholder(editor: AsterEditor, placeholder: string | undefined): void {
-    const tiptap = editor.tiptap;
-    const extension = tiptap.extensionManager.extensions.find(
-      (candidate) => candidate.name === 'placeholder',
-    );
-    if (extension?.type !== 'extension') {
-      return;
-    }
-    const factory = extension.config.addProseMirrorPlugins as ExtensionPluginFactory | undefined;
-    if (!factory) {
-      return;
-    }
-    const options: PlaceholderExtensionOptions = {
-      ...extension.options,
-      placeholder: (): string => placeholder ?? editor.i18n.t('editor.placeholder'),
-    };
-    const plugins = factory.call({
-      name: extension.name,
-      options,
-      storage: extension.storage,
-      editor: tiptap,
-      type: null,
-      parent: undefined,
-    });
-    for (const plugin of plugins) {
-      tiptap.unregisterPlugin(plugin.spec.key ?? extension.name);
-      tiptap.registerPlugin(plugin);
-    }
   }
 }

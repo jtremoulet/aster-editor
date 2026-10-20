@@ -8,6 +8,8 @@
 export { AsterEditorComponent } from './lib/aster-editor.component';
 export { ASTER_CONFIG, provideAster } from './lib/provide-aster';
 export { ASTER_UPLOAD_HANDLER } from './lib/tokens';
+export type { PageViewInput } from './lib/page-view';
+export type { DocxImportFidelity, DocxLostObject } from './lib/word';
 
 export type {
   AsterCounts,
@@ -16,8 +18,14 @@ export type {
   AsterLocale,
   AsterTheme,
   AsterVariable,
+  DocumentLayout,
   GetHtmlOptions,
+  HeaderFooterContent,
+  HeaderFooterSet,
   LinkPolicy,
+  PageMargins,
+  PageSetup,
+  PageViewOptions,
   PasteTransformer,
   ToolbarConfig,
   ToolbarPreset,
@@ -35,4 +43,8 @@ export type {
   DocxImportResult,
   DocxImportWarning,
   DocxVariableMode,
+  FidelityExample,
+  FidelityProperty,
+  FidelityPropertyGroup,
+  FidelityReport,
 } from '@aster-editor/word';

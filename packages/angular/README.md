@@ -92,22 +92,26 @@ export class ArticleFormComponent {
 
 ## 🎛️ Inputs et outputs
 
-| Input                   | Type                       | Défaut effectif | À chaud                                                     |
-| ----------------------- | -------------------------- | --------------- | ----------------------------------------------------------- |
-| `toolbar`               | `ToolbarConfig`            | `'standard'`    | Remonte l'éditeur : contenu conservé, historique perdu      |
-| `theme`                 | `AsterTheme`               | `'light'`       | Oui                                                         |
-| `locale`                | `AsterLocale`              | `'fr'`          | Oui, toolbar comprise                                       |
-| `placeholder`           | `string \| undefined`      | chaîne i18n     | Oui                                                         |
-| `readonly`              | `boolean`                  | `false`         | Oui, cumulé avec le `disabled` du formulaire                |
-| `config`                | `Partial<AsterUiOptions>`  | `{}`            | Seules les clés ci-dessus sont relues ; le reste au montage |
-| `wordPaste`             | `boolean`                  | `true`          | Oui                                                         |
-| `ariaLabel`             | `string \| undefined`      | aucun           | Oui : `aria-label` sur le contenteditable                   |
-| `ariaLabelledBy`        | `string \| undefined`      | aucun           | Oui : `aria-labelledby` sur le contenteditable              |
-| `variables`             | `readonly AsterVariable[]` | aucune          | Oui : `editor.variables.define(...)`, fusion par nom        |
-| `variableValues`        | `VariableValues`           | aucune          | Oui : `editor.variables.setValues(...)`, fusion par nom     |
-| `variableResolver`      | `VariableResolver`         | aucun           | Non, lu au montage                                          |
-| `allowUnknownVariables` | `boolean`                  | `true`          | Non, lu au montage                                          |
-| `variableSuggestion`    | `boolean`                  | `true`          | Non, lu au montage                                          |
+| Input                   | Type                          | Défaut effectif | À chaud                                                     |
+| ----------------------- | ----------------------------- | --------------- | ----------------------------------------------------------- |
+| `toolbar`               | `ToolbarConfig`               | `'standard'`    | Remonte l'éditeur : contenu conservé, historique perdu      |
+| `theme`                 | `AsterTheme`                  | `'light'`       | Oui                                                         |
+| `locale`                | `AsterLocale`                 | `'fr'`          | Oui, toolbar comprise                                       |
+| `placeholder`           | `string \| undefined`         | chaîne i18n     | Oui                                                         |
+| `readonly`              | `boolean`                     | `false`         | Oui, cumulé avec le `disabled` du formulaire                |
+| `config`                | `Partial<AsterUiOptions>`     | `{}`            | Seules les clés ci-dessus sont relues ; le reste au montage |
+| `wordPaste`             | `boolean`                     | `true`          | Oui                                                         |
+| `ariaLabel`             | `string \| undefined`         | aucun           | Oui : `aria-label` sur le contenteditable                   |
+| `ariaLabelledBy`        | `string \| undefined`         | aucun           | Oui : `aria-labelledby` sur le contenteditable              |
+| `variables`             | `readonly AsterVariable[]`    | aucune          | Oui : `editor.variables.define(...)`, fusion par nom        |
+| `variableValues`        | `VariableValues`              | aucune          | Oui : `editor.variables.setValues(...)`, fusion par nom     |
+| `variableResolver`      | `VariableResolver`            | aucun           | Non, lu au montage                                          |
+| `allowUnknownVariables` | `boolean`                     | `true`          | Non, lu au montage                                          |
+| `variableSuggestion`    | `boolean`                     | `true`          | Non, lu au montage                                          |
+| `importFidelity`        | `'styled' \| 'semantic'`      | `'styled'`      | Lu à chaque `importDocx`                                    |
+| `exportInTemplate`      | `boolean`                     | `true`          | Lu à chaque `exportDocx`                                    |
+| `pageView`              | `boolean \| PageViewOptions`  | `false`         | Oui : la vue page est remontée                              |
+| `layout`                | `DocumentLayout \| undefined` | aucune          | Oui : vue page et export, voir « Fidélité Word »            |
 
 Un contenteditable ne s'associe pas à un `<label for>` : nomme la zone de saisie avec
 `ariaLabel`, ou `ariaLabelledBy` pointant sur l'`id` de ton libellé visible. Les deux sont
@@ -127,6 +131,7 @@ dans l'éditeur.
 | `focused`          | `void`           | Focus du contenu                                                                               |
 | `blurred`          | `void`           | Focus perdu vers l'extérieur de l'éditeur (pas vers la toolbar) ; marque le contrôle `touched` |
 | `variablesChanged` | `VariableValues` | Valeurs ou déclarations de variables changées (`setValues`, `define`, `resolve`, import)       |
+| `layoutChanged`    | `DocumentLayout` | Mise en page effective changée : import, input `layout`, dialogue « Mise en page »             |
 
 API publique du composant :
 
@@ -134,10 +139,17 @@ API publique du composant :
   `commands.run(...)`, `tiptap`…), `null` avant le montage et après la destruction.
 - `variableNames` : `Signal<readonly string[]>`, noms des variables présentes dans le document,
   relus sur `change` et `variablesChange`.
+- `importedTemplate` : `Signal<ArrayBuffer | null>`, le `.docx` du dernier import, intact.
+- `layout` : `Signal<DocumentLayout | null>`, mise en page effective (input `layout`, sinon
+  import ou dialogue « Mise en page »).
+- `lostObjects` : `Signal<readonly DocxLostObject[]>`, objets Word non représentables du dernier
+  import.
 - `getHTML(options?)` : HTML du document, `{ variables: 'resolve' }` substitue les valeurs.
 - `resolveVariables()` : appelle le résolveur pour les variables sans valeur, rend les valeurs.
 - `importDocx(file: File): Promise<DocxImportResult>` : voir plus bas.
-- `exportDocx(options?: DocxExportOptions): Promise<Blob>` : voir « Variables et modèles ».
+- `exportDocx(options?: DocxExportOptions): Promise<Blob>` : voir « Variables et modèles » et
+  « Fidélité Word ».
+- `compareWithTemplate(): Promise<FidelityReport | null>` : voir « Fidélité Word ».
 
 La vue source, le plein écran et le menu contextuel de table de `@aster-editor/ui` sont montés
 par `createAster` et donc disponibles dans le composant : via les widgets `source` /
@@ -151,7 +163,10 @@ Types réexportés pour ne pas dépendre de `core`, `ui` ou `word` : `AsterEdito
 `PasteTransformer`, `ToolbarConfig`, `ToolbarPreset`, `UploadHandler`, `AsterVariable`,
 `VariableValues`, `VariableResolver`, `VariableSource`, `VariableRenderMode`, `GetHtmlOptions`,
 `AsterUiOptions`, `DocxImportResult`, `DocxImportWarning`, `DocxExportOptions`,
-`DocxExportVariableOptions`, `DocxExportWarning`, `DocxVariableMode`.
+`DocxExportVariableOptions`, `DocxExportWarning`, `DocxVariableMode`, et pour la fidélité Word :
+`DocumentLayout`, `PageSetup`, `PageMargins`, `HeaderFooterSet`, `HeaderFooterContent`,
+`PageViewOptions`, `PageViewInput`, `DocxImportFidelity`, `DocxLostObject`, `FidelityReport`,
+`FidelityProperty`, `FidelityPropertyGroup`, `FidelityExample`.
 
 Un input dédié laissé à `undefined` n'écrase pas la valeur venue de `config` ou de
 `provideAster`. Passe des objets **stables** dans `config` (champ de classe, pas un littéral dans
@@ -234,10 +249,14 @@ export class ImportComponent {
 }
 ```
 
-`importDocx` charge `@aster-editor/word` par `import()` : mammoth reste dans un chunk séparé et
-n'est téléchargé qu'au premier import. Le contenu est remplacé avec émission de `change`, un
+`importDocx` charge `@aster-editor/word` par `import()` : le lecteur reste dans un chunk séparé
+et n'est téléchargé qu'au premier import. Le contenu est remplacé avec émission de `change`, un
 formulaire lié voit donc la nouvelle valeur. Le handler d'upload de l'éditeur est réutilisé pour
-les images embarquées. Appelé avant le montage, il rejette avec une erreur explicite.
+les images embarquées. Appelé avant le montage, il rejette avec une erreur explicite. Par défaut
+l'import est **stylé** (`importFidelity: 'styled'`) : polices, tailles, couleurs, interlignes,
+bordures, tableaux et listes sont conservés, et le composant garde le gabarit et la mise en page
+du document, voir « Fidélité Word ». `importFidelity: 'semantic'` retrouve le HTML propre de
+mammoth (comportement 0.4.x), sans mise en page.
 
 > ⚠️ **Vite à froid** : sur `ng serve`, le tout premier `importDocx` d'une session déclenche
 > l'optimisation de `mammoth` par Vite et **recharge la page** en plein import, sans erreur.
@@ -367,6 +386,84 @@ Pour un aperçu résolu sans export, `editor().getHTML({ variables: 'resolve' })
 avec les valeurs substituées en texte brut ; `resolveVariables()` appelle d'abord le résolveur
 pour les variables manquantes.
 
+## 📐 Fidélité Word
+
+Objectif : un `.docx` importé **ressort comme l'original** partout où l'utilisateur n'a rien
+touché. Le composant enchaîne les quatre briques de `@aster-editor/word` sans que l'application
+ait à les connaître.
+
+### Import stylé et mise en page
+
+`importDocx` (mode `styled` par défaut) conserve trois choses dans des signals :
+
+- `importedTemplate()` : le `.docx` d'origine, intact (`ArrayBuffer`) ;
+- `layout()` : la mise en page lue dans la dernière section (`DocumentLayout` : format,
+  orientation, marges, colonnes, police par défaut, langue, en-têtes et pieds en HTML stylé) ;
+- `lostObjects()` : les objets Word que l'éditeur ne sait pas représenter (zones de texte, formes,
+  équations, commentaires, révisions…), avec leur position (`body`, `header`…).
+
+### Vue page
+
+```html
+<aster-editor [pageView]="true" (layoutChanged)="layout = $event" />
+```
+
+`pageView` (`true`, ou `{ layout, pagination, showHeadersFooters }`) rend une feuille aux
+dimensions et marges de `layout()`, avec les en-têtes et pieds `default` en lecture seule
+au-dessus et au-dessous du corps ; importe `@aster-editor/ui/themes/page.css` (inclus dans
+`aster.css`). Après un import, la mise en page lue est appliquée à la vue page active. Le bouton
+« Mise en page » de la toolbar (presets `standard` et `full`) peut l'activer, la modifier ou la
+retirer : le composant relit alors la mise en page, `layout()` suit et `layoutChanged` est émis.
+
+L'input `layout` impose une mise en page : il prime sur celle de l'import et sur celle du
+dialogue, se répercute sur la vue page active et sur `exportDocx`. Comme il masque ce que le
+dialogue pose ensuite, tiens-le à jour depuis `layoutChanged` (`[layout]="layout()"` +
+`(layoutChanged)="layout.set($event)"`) : c'est ce que fait la page « Modèle » de la démo pour
+ses éditeurs d'en-tête et de pied.
+
+### Export dans le gabarit
+
+```ts
+const blob = await this.editor().exportDocx({ variables: { mode: 'fields' } });
+```
+
+Sans `options.template`, `exportDocx` réutilise `importedTemplate()` dès qu'il existe
+(`exportInTemplate`, vrai par défaut) : styles, numérotation, thème, polices, en-têtes, pieds,
+sections et propriétés du document ressortent **identiques à l'octet**, seul le corps est
+régénéré depuis l'éditeur. La mise en page effective (`layout()`) est transmise elle aussi : avec
+un gabarit, elle ne sert qu'à régénérer un en-tête ou un pied dont le HTML a changé (le reste
+vient du gabarit) ; sans gabarit, elle pilote l'export neuf (format, marges, en-têtes, pieds,
+police par défaut). `exportInTemplate: false` force l'export neuf, un `options.template`
+explicite reste honoré.
+
+### Rapport de fidélité
+
+```ts
+const report = await this.editor().compareWithTemplate();
+if (report) console.log(report.score, report.properties, report.changedParts);
+```
+
+`compareWithTemplate()` exporte le document courant dans son gabarit puis le compare à
+l'original propriété par propriété (`compareDocx` de `word`) : score pondéré entre 0 et 1,
+propriétés conservées / perdues par groupe (`text`, `paragraph-format`, `run-format`, `table`,
+`header-footer`, `package-part`…) avec des exemples, parties du paquet identiques ou non,
+objets perdus. `null` sans gabarit importé. Un aller-retour sans modification vise un score ≥
+0,98 ; c'est le critère d'acceptation, pas une impression visuelle.
+
+### Limites
+
+- **Pas de pagination exacte** : la vue page donne le format, les marges, les en-têtes et pieds,
+  les sauts de page explicites, et une pagination **approximative** (coupures visuelles, numéros
+  de page) qui ne garantit pas le même nombre de pages que Word.
+- **Objets non représentables** : conservés tels quels dans le gabarit quand ils sont hors du
+  corps (en-têtes, pieds), remplacés par leur texte et listés dans `lostObjects()` quand ils sont
+  dans le corps édité.
+- Avec un gabarit, les options `page`, `header`, `footer`, `defaultFont`, `lang`,
+  `headingStyles` de l'export sont ignorées : le gabarit les porte.
+- Seuls les en-têtes et pieds `default` sont affichés par la vue page ; `first` et `even` sont
+  conservés dans le gabarit et dans `layout()`.
+- Le chemin `semantic` ne renseigne ni `layout()` (objet vide) ni `lostObjects()`.
+
 ## 📋 Collage depuis Word
 
 Avec `wordPaste` (vrai par défaut), le composant charge `@aster-editor/word` au montage (jamais
@@ -380,15 +477,18 @@ et le collage reste brut. Passer `wordPaste` à `false` laisse le module chargé
 `apps/demo` (`npm run demo`, http://localhost:4200) montre cinq pages chargées à la demande,
 chacune avec son titre de document : `/` playground (preset, thème, langue, lecture seule,
 compteurs, sortie HTML / JSON), `/form` reactive form avec validateur « requis » sur le contenu
-riche, `/import` dépôt de `.docx` avec avertissements, `/readonly` rendu figé en thème `night`,
-`/template` modèle à variables (exemple `08-variables-braces.docx` servi depuis
-`public/samples/`, formulaire généré, aperçu puces / résolu, export dans les trois modes).
+riche, `/import` dépôt de `.docx` avec sélecteur `styled` / `semantic`, mise en page lue et
+avertissements (exemple `13-styles-nommes.docx`), `/readonly` rendu figé en thème `night`,
+`/template` modèle à variables (exemples `08-variables-braces.docx` et `16-sections.docx` servis
+depuis `public/samples/`, formulaire généré, aperçu puces / résolu, vue page, en-tête et pied
+éditables, export dans les trois modes ou dans le gabarit, rapport de fidélité, objets non
+représentables).
 
 ## 🧪 Tests
 
 ```bash
-npx ng test aster-angular --watch=false   # 39 tests du composant et de provideAster
-npx ng test demo --watch=false            # 23 tests des pages de la démo
+npx ng test aster-angular --watch=false   # 49 tests du composant et de provideAster
+npx ng test demo --watch=false            # 30 tests des pages de la démo
 npm run e2e -- --project=demo             # tests Playwright sur la démo, page Modèle comprise (ng serve lancé par Playwright)
 ```
 

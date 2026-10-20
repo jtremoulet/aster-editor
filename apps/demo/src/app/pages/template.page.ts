@@ -1,9 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, signal, viewChild } from '@angular/core';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { AsterEditorComponent } from '@aster-editor/angular';
 import type {
   AsterVariable,
+  DocumentLayout,
   DocxImportWarning,
+  DocxLostObject,
   DocxVariableMode,
+  FidelityReport,
   VariableValues,
 } from '@aster-editor/angular';
 
@@ -16,9 +20,11 @@ interface VariableField {
 
 type PreviewTab = 'chips' | 'resolved';
 
-/** Fixture servie depuis `apps/demo/public/samples/`, copiée depuis `fixtures/docx/`. */
-const SAMPLE_URL = 'samples/08-variables-braces.docx';
-const SAMPLE_NAME = '08-variables-braces.docx';
+/** Fixtures servies depuis `apps/demo/public/samples/`, copiées depuis `fixtures/docx/`. */
+const SAMPLES = {
+  variables: { url: 'samples/08-variables-braces.docx', name: '08-variables-braces.docx' },
+  styled: { url: 'samples/16-sections.docx', name: '16-sections.docx' },
+} as const;
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 /** Nom de fichier téléchargé selon le mode d'export des variables. */
@@ -27,6 +33,9 @@ const EXPORT_NAMES: Readonly<Record<DocxVariableMode, string>> = {
   fields: 'modele-champs-word.docx',
   placeholders: 'modele.docx',
 };
+
+/** Export dans le gabarit : les champs de fusion du modèle sont conservés (`fields`). */
+const TEMPLATE_EXPORT_NAME = 'modele-gabarit.docx';
 
 /**
  * Déclenche le téléchargement d'un `Blob` via un lien `<a download>` éphémère. Évite
@@ -45,21 +54,32 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** Libellé lisible d'un objet non représentable. */
+function describeLost(lost: DocxLostObject): string {
+  const parts = [lost.kind, `(${lost.where})`];
+  if (lost.detail) {
+    parts.push(`— ${lost.detail}`);
+  }
+  return parts.join(' ');
+}
+
 /**
  * Modèle : import d'un `.docx` à variables (`{{client.nom}}`, champs de fusion), formulaire
  * généré depuis `variableNames()`, aperçu puces / résolu, export dans les trois modes.
+ * Session 3 : vue page, en-têtes et pieds éditables (répercutés sur la vue page et sur
+ * l'export), export dans le gabarit, rapport de fidélité et objets non représentables.
  */
 @Component({
   selector: 'app-template',
-  imports: [AsterEditorComponent],
+  imports: [AsterEditorComponent, ReactiveFormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="demo-page">
       <h1>Modèle</h1>
       <p class="demo-lead">
         Importe un modèle Word à variables (<code>{{ example }}</code
-        >, champs de fusion), remplis les valeurs, puis exporte le document résolu ou avec champs
-        Word.
+        >, champs de fusion), remplis les valeurs, puis exporte le document résolu, avec champs
+        Word, ou dans son gabarit d'origine.
       </p>
 
       <div
@@ -79,9 +99,24 @@ function downloadBlob(blob: Blob, filename: string): void {
           [disabled]="busy()"
         />
         <span>ou</span>
-        <button type="button" class="demo-button" (click)="loadSample()" [disabled]="busy()">
-          Charger l'exemple
-        </button>
+        <span class="demo-dropzone__samples">
+          <button
+            type="button"
+            class="demo-button"
+            (click)="loadSample('variables')"
+            [disabled]="busy()"
+          >
+            Charger l'exemple
+          </button>
+          <button
+            type="button"
+            class="demo-button"
+            (click)="loadSample('styled')"
+            [disabled]="busy()"
+          >
+            Charger l'exemple stylé
+          </button>
+        </span>
         @if (fileName(); as name) {
           <span>Importé : {{ name }}</span>
         }
@@ -138,6 +173,16 @@ function downloadBlob(blob: Blob, filename: string): void {
         </form>
       }
 
+      <div class="demo-controls">
+        <label>
+          <input type="checkbox" [checked]="pageView()" (change)="pageView.set(checked($event))" />
+          Vue page
+        </label>
+        @if (pageSummary(); as summary) {
+          <span class="demo-layout-summary">{{ summary }}</span>
+        }
+      </div>
+
       <div class="demo-tabs" role="tablist" aria-label="Aperçu du modèle">
         <button
           type="button"
@@ -162,8 +207,12 @@ function downloadBlob(blob: Blob, filename: string): void {
           toolbar="standard"
           placeholder="Le modèle importé apparaîtra ici…"
           [variableValues]="values()"
+          [pageView]="pageView()"
+          [layout]="editedLayout()"
+          [exportInTemplate]="false"
           (changed)="onChanged()"
           (variablesChanged)="onVariablesChanged($event)"
+          (layoutChanged)="onLayoutChanged($event)"
         />
       </div>
       @if (tab() === 'resolved') {
@@ -172,6 +221,38 @@ function downloadBlob(blob: Blob, filename: string): void {
             <div class="ProseMirror" [innerHTML]="resolvedHtml()"></div>
           </div>
         </div>
+      }
+
+      @if (fileName()) {
+        <section class="demo-panel demo-header-footer">
+          <h2>En-tête / Pied</h2>
+          <p class="demo-panel__hint">
+            Modifie l'en-tête et le pied par défaut : la vue page les reflète, l'export neuf les
+            réécrit, l'export dans le gabarit ne régénère que la partie modifiée.
+          </p>
+          <div class="demo-header-footer__grid">
+            <label class="demo-field">
+              <span>En-tête</span>
+              <aster-editor
+                toolbar="minimal"
+                ariaLabel="En-tête par défaut"
+                placeholder="Aucun en-tête"
+                [formControl]="headerControl"
+                (changed)="onHeaderChanged($event)"
+              />
+            </label>
+            <label class="demo-field">
+              <span>Pied</span>
+              <aster-editor
+                toolbar="minimal"
+                ariaLabel="Pied par défaut"
+                placeholder="Aucun pied"
+                [formControl]="footerControl"
+                (changed)="onFooterChanged($event)"
+              />
+            </label>
+          </div>
+        </section>
       }
 
       <div class="demo-controls">
@@ -200,10 +281,108 @@ function downloadBlob(blob: Blob, filename: string): void {
         >
           Télécharger modèle
         </button>
+        <button
+          type="button"
+          class="demo-button"
+          (click)="downloadInTemplate()"
+          [disabled]="!canExport()"
+        >
+          Télécharger (gabarit)
+        </button>
+        <span class="demo-spacer"></span>
+        <button
+          type="button"
+          class="demo-button"
+          (click)="compare()"
+          [disabled]="!canExport() || comparing()"
+        >
+          Rapport de fidélité
+        </button>
         @if (exporting()) {
           <span>Export en cours…</span>
         }
+        @if (comparing()) {
+          <span>Comparaison en cours…</span>
+        }
       </div>
+
+      @if (report(); as report) {
+        <section class="demo-panel demo-fidelity">
+          <h2>
+            Rapport de fidélité
+            <span class="demo-fidelity__score" [class.is-ok]="report.score >= 0.98">
+              {{ scorePercent(report) }}
+            </span>
+          </h2>
+          <p class="demo-panel__hint">
+            {{ report.identicalParts.length }} partie{{
+              report.identicalParts.length > 1 ? 's' : ''
+            }}
+            du paquet identique{{ report.identicalParts.length > 1 ? 's' : '' }} à l'octet,
+            {{ report.changedParts.length }} différente{{
+              report.changedParts.length > 1 ? 's' : ''
+            }}.
+          </p>
+          <table class="demo-fidelity__table">
+            <thead>
+              <tr>
+                <th scope="col">Groupe</th>
+                <th scope="col">Propriété</th>
+                <th scope="col">Conservé / total</th>
+                <th scope="col">Exemples de pertes</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (property of report.properties; track property.name) {
+                <tr [class.is-lost]="property.lost > 0">
+                  <td>{{ property.group }}</td>
+                  <td>
+                    <code>{{ property.name }}</code>
+                  </td>
+                  <td>{{ property.kept }} / {{ property.total }}</td>
+                  <td>
+                    @for (example of property.examples; track $index) {
+                      <div class="demo-fidelity__example">
+                        {{ example.where }} : <code>{{ example.expected }}</code> →
+                        <code>{{ example.actual }}</code>
+                      </div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          @if (report.changedParts.length > 0) {
+            <ul class="demo-fidelity__parts">
+              @for (part of report.changedParts; track part.path) {
+                <li>
+                  <code>{{ part.path }}</code> {{ part.summary }}
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
+
+      @if (lostObjects().length > 0) {
+        <section class="demo-panel demo-lost">
+          <h2>Objets non représentables</h2>
+          <p class="demo-panel__hint">
+            Conservés tels quels dans le gabarit hors du corps, remplacés par leur texte dans le
+            corps édité.
+          </p>
+          <ul>
+            @for (lost of lostObjects(); track $index) {
+              <li>
+                {{ describe(lost) }}
+                @if (lost.text) {
+                  <em>« {{ lost.text }} »</em>
+                }
+              </li>
+            }
+          </ul>
+        </section>
+      }
     </section>
   `,
 })
@@ -213,6 +392,7 @@ export class TemplatePage {
   protected readonly over = signal(false);
   protected readonly busy = signal(false);
   protected readonly exporting = signal(false);
+  protected readonly comparing = signal(false);
   protected readonly fileName = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly warnings = signal<readonly DocxImportWarning[]>([]);
@@ -220,6 +400,17 @@ export class TemplatePage {
   protected readonly resolvedHtml = signal('');
   /** Valeurs poussées dans l'input `variableValues` au clic sur « Appliquer ». */
   protected readonly values = signal<VariableValues | undefined>(undefined);
+  /** Vue page de l'éditeur principal, liée à l'input `pageView`. */
+  protected readonly pageView = signal(true);
+  /**
+   * Mise en page poussée dans l'input `layout` : celle de l'import (reçue par
+   * `layoutChanged`) avec l'en-tête et le pied édités dans le panneau.
+   */
+  protected readonly editedLayout = signal<DocumentLayout | undefined>(undefined);
+  protected readonly report = signal<FidelityReport | null>(null);
+  /** Contenu des deux petits éditeurs du panneau « En-tête / Pied ». */
+  protected readonly headerControl = new FormControl('', { nonNullable: true });
+  protected readonly footerControl = new FormControl('', { nonNullable: true });
 
   /** Déclarations connues de l'éditeur, relues à chaque `variablesChanged` (pour les libellés). */
   private readonly declared = signal<readonly AsterVariable[]>([]);
@@ -249,6 +440,42 @@ export class TemplatePage {
   protected readonly canExport = computed<boolean>(
     () => this.fileName() !== null && !this.busy() && !this.exporting(),
   );
+
+  /** Objets non représentables du dernier import, exposés par le composant. */
+  protected readonly lostObjects = computed<readonly DocxLostObject[]>(
+    () => this.editorRef()?.lostObjects() ?? [],
+  );
+
+  /** Format, orientation et marges de la mise en page effective, en une ligne. */
+  protected readonly pageSummary = computed<string | null>(() => {
+    const page = this.editedLayout()?.page;
+    if (!page) {
+      return null;
+    }
+    const size =
+      typeof page.size === 'string'
+        ? page.size
+        : page.size
+          ? `${page.size.widthMm} × ${page.size.heightMm} mm`
+          : 'A4';
+    const margins = page.margins;
+    const marginText = margins
+      ? `marges ${margins.topMm ?? 25.4} / ${margins.rightMm ?? 25.4} / ${margins.bottomMm ?? 25.4} / ${margins.leftMm ?? 25.4} mm`
+      : 'marges par défaut';
+    return `${size}, ${page.orientation ?? 'portrait'}, ${marginText}`;
+  });
+
+  protected checked(event: Event): boolean {
+    return (event.target as HTMLInputElement).checked;
+  }
+
+  protected scorePercent(report: FidelityReport): string {
+    return `${(report.score * 100).toFixed(1)} %`;
+  }
+
+  protected describe(lost: DocxLostObject): string {
+    return describeLost(lost);
+  }
 
   protected draftValue(name: string): string {
     return this.draft()[name] ?? this.storeValues()[name] ?? '';
@@ -287,6 +514,24 @@ export class TemplatePage {
     this.refreshResolved();
   }
 
+  /**
+   * Mise en page signalée par le composant (import, dialogue « Mise en page ») : adoptée
+   * comme base de l'édition, sauf si c'est déjà la nôtre.
+   */
+  protected onLayoutChanged(layout: DocumentLayout): void {
+    if (layout !== this.editedLayout()) {
+      this.editedLayout.set(layout);
+    }
+  }
+
+  protected onHeaderChanged(html: string): void {
+    this.updateHeaderFooter('headers', html);
+  }
+
+  protected onFooterChanged(html: string): void {
+    this.updateHeaderFooter('footers', html);
+  }
+
   protected onDragOver(event: DragEvent): void {
     event.preventDefault();
     this.over.set(true);
@@ -310,17 +555,18 @@ export class TemplatePage {
     input.value = '';
   }
 
-  /** Récupère la fixture servie par la démo et l'importe comme un fichier déposé. */
-  protected async loadSample(): Promise<void> {
+  /** Récupère une fixture servie par la démo et l'importe comme un fichier déposé. */
+  protected async loadSample(which: keyof typeof SAMPLES): Promise<void> {
+    const sample = SAMPLES[which];
     this.busy.set(true);
     this.error.set(null);
     try {
-      const response = await fetch(SAMPLE_URL);
+      const response = await fetch(sample.url);
       if (!response.ok) {
-        throw new Error(`Exemple introuvable (${response.status}) : ${SAMPLE_URL}`);
+        throw new Error(`Exemple introuvable (${response.status}) : ${sample.url}`);
       }
       const blob = await response.blob();
-      await this.importFile(new File([blob], SAMPLE_NAME, { type: DOCX_MIME }));
+      await this.importFile(new File([blob], sample.name, { type: DOCX_MIME }));
     } catch (cause: unknown) {
       this.error.set(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -340,11 +586,16 @@ export class TemplatePage {
     }
     this.busy.set(true);
     this.error.set(null);
+    // L'import remplace la mise en page : l'input `layout` ne doit plus masquer la nouvelle.
+    this.editedLayout.set(undefined);
+    this.report.set(null);
     try {
       const result = await editor.importDocx(file);
       this.warnings.set(result.warnings);
       this.fileName.set(file.name);
       this.draft.set({});
+      this.headerControl.setValue(result.layout.headers?.default?.html ?? '');
+      this.footerControl.setValue(result.layout.footers?.default?.html ?? '');
       // Un import sans variable n'émet pas `variablesChanged` : on relit l'état à la main.
       const instance = editor.editor();
       if (instance) {
@@ -359,8 +610,55 @@ export class TemplatePage {
     }
   }
 
-  /** Exporte le document avec les valeurs du magasin dans le mode demandé, puis le télécharge. */
+  /** Export neuf avec les valeurs du magasin dans le mode demandé, puis téléchargement. */
   protected async download(mode: DocxVariableMode): Promise<void> {
+    await this.export(
+      { title: 'Modèle', variables: { mode }, layout: this.editedLayout() },
+      EXPORT_NAMES[mode],
+    );
+  }
+
+  /**
+   * Export dans le gabarit importé : tout ce qui n'est pas le corps ressort identique, sauf
+   * un en-tête ou un pied modifié dans le panneau ; les champs de fusion sont conservés.
+   */
+  protected async downloadInTemplate(): Promise<void> {
+    const template = this.editorRef()?.importedTemplate();
+    if (!template) {
+      this.error.set("Aucun gabarit : importe d'abord un .docx.");
+      return;
+    }
+    await this.export(
+      { title: 'Modèle', template, variables: { mode: 'fields' }, layout: this.editedLayout() },
+      TEMPLATE_EXPORT_NAME,
+    );
+  }
+
+  /** Rapport de fidélité du document courant dans son gabarit. */
+  protected async compare(): Promise<void> {
+    const editor = this.editorRef();
+    if (!editor) {
+      return;
+    }
+    this.comparing.set(true);
+    this.error.set(null);
+    try {
+      const report = await editor.compareWithTemplate();
+      if (!report) {
+        this.error.set("Aucun gabarit : importe d'abord un .docx.");
+      }
+      this.report.set(report);
+    } catch (cause: unknown) {
+      this.error.set(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      this.comparing.set(false);
+    }
+  }
+
+  private async export(
+    options: Parameters<AsterEditorComponent['exportDocx']>[0],
+    filename: string,
+  ): Promise<void> {
     const editor = this.editorRef();
     if (!editor) {
       return;
@@ -368,13 +666,19 @@ export class TemplatePage {
     this.exporting.set(true);
     this.error.set(null);
     try {
-      const blob = await editor.exportDocx({ title: 'Modèle', variables: { mode } });
-      downloadBlob(blob, EXPORT_NAMES[mode]);
+      const blob = await editor.exportDocx(options);
+      downloadBlob(blob, filename);
     } catch (cause: unknown) {
       this.error.set(cause instanceof Error ? cause.message : String(cause));
     } finally {
       this.exporting.set(false);
     }
+  }
+
+  /** Remplace l'en-tête ou le pied `default` de la mise en page éditée par le HTML saisi. */
+  private updateHeaderFooter(kind: 'headers' | 'footers', html: string): void {
+    const base = this.editedLayout() ?? this.editorRef()?.layout() ?? {};
+    this.editedLayout.set({ ...base, [kind]: { ...base[kind], default: { html } } });
   }
 
   /** Recalcule le HTML résolu seulement quand l'onglet « Résolu » est affiché. */
