@@ -4,7 +4,7 @@ import { childNamed, childrenNamed } from '../preprocess/xml-utils';
 import { readHeadersFooters, type HeadersFootersResult } from './headers';
 import { escapeHtml } from './html';
 import { createImageConverter } from './images';
-import { createNumberingResolver, renderBlocks } from './lists';
+import { createNumberingResolver, registerListItem, renderBlocks } from './lists';
 import { detectLost } from './lost';
 import { createNoteRegistry } from './notes';
 import { openPackage } from './package';
@@ -29,14 +29,22 @@ import type {
  * remplacent les modules, pas cet orchestrateur.
  */
 
-/** Enfants bloc d'un conteneur Word. `w:sdt` est traversé, les signets et `w:proofErr` ignorés. */
+/**
+ * Enfants bloc d'un conteneur Word. `w:sdt` et `w:customXml` (balises XML personnalisées,
+ * bibliographies) sont traversés, les signets et `w:proofErr` ignorés. Chaque paragraphe
+ * numéroté est enregistré dans l'ordre du document (`registerListItem`), pour que la
+ * numérotation continue à travers les cellules, rendues avant le corps.
+ */
 async function convertBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
   const blocks: Block[] = [];
   for (const child of Array.from(container.children)) {
     switch (child.localName) {
-      case 'p':
-        blocks.push(await ctx.convert.paragraph(child, ctx));
+      case 'p': {
+        const block = await ctx.convert.paragraph(child, ctx);
+        registerListItem(block, ctx);
+        blocks.push(block);
         break;
+      }
       case 'tbl':
         blocks.push(await ctx.convert.table(child, ctx));
         break;
@@ -45,6 +53,10 @@ async function convertBlocks(container: Element, ctx: ConverterContext): Promise
         if (content) blocks.push(...(await convertBlocks(content, ctx)));
         break;
       }
+      case 'customXml':
+        blocks.push(...(await convertBlocks(child, ctx)));
+        break;
+      case 'customXmlPr':
       case 'sectPr':
       case 'bookmarkStart':
       case 'bookmarkEnd':
@@ -137,7 +149,10 @@ export async function readDocx(buffer: ArrayBuffer, options: ReaderOptions): Pro
   const notesHtml = options.footnotes ? await notes.render(ctx) : '';
   const lang = await readDocumentLang(pkg);
   const headersFooters = await readEffectiveHeadersFooters(body, ctx);
-  const layout: DocumentLayout = { ...readSectionLayout(sectPr, styles, lang), ...headersFooters };
+  const layout: DocumentLayout = {
+    ...readSectionLayout(sectPr, styles, lang, warnings),
+    ...headersFooters,
+  };
 
   return { html: bodyHtml + notesHtml, layout, lost, warnings };
 }

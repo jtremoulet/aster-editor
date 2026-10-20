@@ -15,8 +15,10 @@
  * - `16-sections.docx` : A4 portrait puis Letter paysage 2 colonnes, marges, en-têtes
  *   `default` / `first` / `even`, pied `PAGE` / `NUMPAGES`, `w:lang` et police par défaut.
  * - `17-objets-perdus.docx` : objets que l'éditeur ne représente pas. Équation, commentaire,
- *   révisions et champ `DATE` viennent de la lib ; zone de texte, forme et objet incorporé sont
- *   injectés par patch XML (`document.xml`, relations, content types).
+ *   révisions et champ `DATE` viennent de la lib ; zone de texte, forme, objet incorporé, zone
+ *   de texte enveloppée dans `mc:AlternateContent` (forme réelle de Word 2010+, avec repli VML)
+ *   et conteneur de bloc `w:customXml` sont injectés par patch XML (`document.xml`, relations,
+ *   content types).
  *
  * Reproductible : `node scripts/generate-fixtures-layout.ts` (Node 24, type stripping).
  * Unités de la lib `docx` : tailles en demi-points, espacements et retraits en twips
@@ -656,7 +658,8 @@ function sections(): Document {
 
 /**
  * Fixture 17 : chaque objet est entouré de paragraphes normaux. Les marqueurs `[[TEXTBOX]]`,
- * `[[SHAPE]]` et `[[OBJECT]]` sont remplacés par du XML Word dans `patchLostObjects`.
+ * `[[SHAPE]]`, `[[OBJECT]]` et `[[ALTERNATE]]` sont remplacés par du XML Word inline dans
+ * `patchLostObjects` ; le paragraphe `[[CUSTOMXML]]` est remplacé par un bloc `w:customXml`.
  */
 function lostObjects(): Document {
   const author = { author: 'Aster', date: FIXED_DATE };
@@ -730,6 +733,12 @@ function lostObjects(): Document {
           new Paragraph('Avant l’objet incorporé'),
           new Paragraph('Objet incorporé (w:object) : [[OBJECT]]'),
           new Paragraph('Après l’objet incorporé'),
+          new Paragraph('Avant la zone de texte Word 2010+'),
+          new Paragraph('Zone de texte enveloppée (mc:AlternateContent) : [[ALTERNATE]]'),
+          new Paragraph('Après la zone de texte Word 2010+'),
+          new Paragraph('Avant le bloc customXml'),
+          new Paragraph('[[CUSTOMXML]]'),
+          new Paragraph('Après le bloc customXml'),
         ],
       },
     ],
@@ -760,6 +769,39 @@ function drawing(id: number, name: string, geometry: string, textbox: string): s
 const TEXTBOX =
   `<wps:txbx><w:txbxContent><w:p><w:r><w:t>Texte dans la zone de texte</w:t></w:r></w:p>` +
   `</w:txbxContent></wps:txbx>`;
+
+const ALTERNATE_TEXT = 'Texte dans la zone de texte Word 2010+';
+
+/**
+ * Zone de texte telle que Word 2010+ l'écrit réellement : `mc:AlternateContent` avec le dessin
+ * `wps` dans `mc:Choice` et un repli VML (`v:shape` + `v:textbox`) dans `mc:Fallback`. Le
+ * lecteur ne doit convertir que le `Choice`, jamais les deux.
+ */
+function alternateTextbox(id: number, name: string): string {
+  const textbox =
+    `<wps:txbx><w:txbxContent><w:p><w:r><w:t>${ALTERNATE_TEXT}</w:t></w:r></w:p>` +
+    `</w:txbxContent></wps:txbx>`;
+  const choice = drawing(id, name, 'rect', textbox)
+    .replace(/^<\/w:t><\/w:r><w:r>/, '')
+    .replace(/<\/w:r><w:r><w:t xml:space="preserve">$/, '');
+  const fallback =
+    `<w:pict><v:shape id="${name}" type="#_x0000_t202" style="width:180pt;height:72pt">` +
+    `<v:textbox><w:txbxContent><w:p><w:r><w:t>${ALTERNATE_TEXT}</w:t></w:r></w:p></w:txbxContent></v:textbox>` +
+    `</v:shape></w:pict>`;
+  return (
+    `</w:t></w:r><w:r><mc:AlternateContent><mc:Choice Requires="wps">${choice}</mc:Choice>` +
+    `<mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent></w:r><w:r><w:t xml:space="preserve">`
+  );
+}
+
+/** Bloc `w:customXml` (balise XML personnalisée) contenant deux paragraphes, à la place du marqueur. */
+const CUSTOM_XML =
+  `<w:customXml w:uri="urn:aster:fixture" w:element="section"><w:customXmlPr><w:placeholder w:val="Section"/></w:customXmlPr>` +
+  `<w:p><w:r><w:t>Paragraphe 1 dans w:customXml</w:t></w:r></w:p>` +
+  `<w:p><w:r><w:t>Paragraphe 2 dans w:customXml</w:t></w:r></w:p></w:customXml>`;
+
+/** Paragraphe de la lib contenant le marqueur donné, remplacé en entier. */
+const CUSTOM_XML_PARAGRAPH = /<w:p>(?:(?!<\/w:p>).)*?\[\[CUSTOMXML\]\](?:(?!<\/w:p>).)*?<\/w:p>/;
 
 /** Objet OLE incorporé : `w:object` avec `v:shape` et `o:OLEObject` liés à `embeddings/`. */
 const OBJECT =
@@ -813,6 +855,9 @@ async function patchLostObjects(zip: JSZip): Promise<void> {
   xml = xml.replace('[[TEXTBOX]]', drawing(101, 'Zone de texte 1', 'rect', TEXTBOX));
   xml = xml.replace('[[SHAPE]]', drawing(102, 'Ellipse 2', 'ellipse', ''));
   xml = xml.replace('[[OBJECT]]', OBJECT);
+  xml = xml.replace('[[ALTERNATE]]', alternateTextbox(103, 'Zone de texte 3'));
+  if (!CUSTOM_XML_PARAGRAPH.test(xml)) throw new Error('Marqueur [[CUSTOMXML]] introuvable');
+  xml = xml.replace(CUSTOM_XML_PARAGRAPH, CUSTOM_XML);
   zip.file(docPath, xml);
 
   const relsPath = 'word/_rels/document.xml.rels';

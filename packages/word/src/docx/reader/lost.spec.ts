@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { detectLost, detectLostInline } from './lost';
+import { alternateContentChoice, detectLost, detectLostInline, textboxLost } from './lost';
 import { buildPackage, createTestContext, fragment, renderBody } from './testing-blocks';
 import type { ConverterContext } from './types';
 
@@ -83,6 +83,55 @@ describe('detectLost / detectLostInline', () => {
         ctx,
       ),
     ).toBeNull();
+    // R25-02 : un `a:blip` hors `pic:pic` (fond de forme) ne fait pas une image.
+    expect(
+      detectLostInline(
+        fragment(
+          '<w:drawing><wp:anchor><wp:docPr id="2" name="Zone de texte 9"/><a:graphic><a:graphicData><wps:wsp><wps:spPr><a:blipFill><a:blip r:embed="rId5"/></a:blipFill></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>T</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>',
+        ),
+        ctx,
+      ),
+    ).toEqual({ kind: 'textbox', where: 'body', text: 'T', detail: 'Zone de texte 9' });
+    expect(textboxLost(fragment(SHAPE), ctx)).toBeNull();
+    expect(textboxLost(fragment(TEXTBOX), ctx)?.text).toBe('Ligne 1\nLigne 2');
+  });
+
+  it('R25-04 : mc:AlternateContent classé par son mc:Choice, repli sur mc:Fallback', () => {
+    const wrapped = `<mc:AlternateContent><mc:Choice Requires="wps">${TEXTBOX}</mc:Choice><mc:Fallback><w:pict><v:rect id="r1"/></w:pict></mc:Fallback></mc:AlternateContent>`;
+    expect(detectLostInline(fragment(wrapped), ctx)).toEqual({
+      kind: 'textbox',
+      where: 'body',
+      text: 'Ligne 1\nLigne 2',
+      detail: 'Zone de texte 1',
+    });
+    expect(
+      detectLost(
+        fragment(
+          '<mc:AlternateContent><mc:Choice Requires="x"/><mc:Fallback><w:pict><v:rect id="r1"/></w:pict></mc:Fallback></mc:AlternateContent>',
+        ),
+        ctx,
+      ),
+    ).toEqual({ kind: 'shape', where: 'body', detail: 'r1' });
+    expect(detectLost(fragment('<mc:AlternateContent/>'), ctx)).toEqual({
+      kind: 'unknown',
+      where: 'body',
+      detail: 'AlternateContent',
+    });
+    expect(alternateContentChoice(fragment(TEXTBOX))).toBeNull();
+  });
+
+  it('R25-05 : w:customXml de bloc traversé, ses paragraphes et tableaux rendus', async () => {
+    const html = await renderBody(
+      '<w:customXml w:uri="urn:x" w:element="section"><w:customXmlPr><w:placeholder w:val="x"/></w:customXmlPr>' +
+        '<w:p><w:r><w:t>Para 1</w:t></w:r></w:p><w:p><w:r><w:t>Para 2</w:t></w:r></w:p>' +
+        '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>cellule</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:customXml>',
+      ctx,
+    );
+    expect(html).toBe(
+      '<p>Para 1</p><p>Para 2</p><table><tbody><tr><td><p>cellule</p></td></tr></tbody></table>',
+    );
+    expect(ctx.lost).toEqual([]);
+    expect(ctx.warnings).toEqual([]);
   });
 
   it('équation avec son texte', () => {

@@ -97,6 +97,13 @@ describe('fixtures 14-17 en mode styled', () => {
     expect(html).toMatch(/<td colwidth="301"[^>]*><ul data-bullet="•" data-docx-num-id="5"><li>/);
     expect(count(html, /<ol/g)).toBe(8);
     expect(count(html, /<ul/g)).toBe(4);
+    // Le retrait venu de la numérotation (`data-docx-num-indent`) est retiré des items : la
+    // liste porte le retrait, et l'éditeur ne connaît pas l'attribut. La continuation garde le sien.
+    expect(html).not.toContain('data-docx-num-indent');
+    expect(html).toMatch(/<li><p data-docx-style="ListParagraph">Liste décimale : premier<\/p>/);
+    expect(html).toContain(
+      '<p style="margin-left: 36pt" data-docx-style="ListParagraph">Second paragraphe du même item',
+    );
     expect(normalizeHtml(html)).toBe(normalizeHtml(expected('15-listes-numerotation')));
   });
 
@@ -136,6 +143,19 @@ describe('fixtures 14-17 en mode styled', () => {
     expect(normalizeHtml(result.html)).toBe(normalizeHtml(expected('16-sections')));
   });
 
+  /** Objets perdus de la fixture 17, dans l'ordre du document, identiques par les deux chemins. */
+  const LOST_17: readonly (readonly [string, string | undefined])[] = [
+    ['textbox', 'Zone de texte 1'],
+    ['shape', 'Ellipse 2'],
+    ['equation', 'équation'],
+    ['comment', 'commentaire 0'],
+    ['revision', 'révisions (w:ins / w:del) non suivies'],
+    ['field', 'champ DATE'],
+    ['embedded-object', 'objet Package'],
+    // R25-04 : zone de texte réelle de Word 2010+ (`mc:AlternateContent`), convertie une fois.
+    ['textbox', 'Zone de texte 3'],
+  ];
+
   it('17-objets-perdus : zone de texte et forme signalées, texte conservé, aucun plantage', async () => {
     const result = await importDocx(fixture('17-objets-perdus'), { fidelity: 'styled' });
     expect(result.html).toContain(
@@ -143,40 +163,44 @@ describe('fixtures 14-17 en mode styled', () => {
     );
     // Zone de texte et forme via images.ts, le reste via runs.ts (detectLostInline) : chaque
     // objet est signalé une fois, avec un avertissement object-lost par objet.
-    const kinds = result.lost.map((lost) => lost.kind);
-    expect(kinds.slice(0, 2)).toEqual(['textbox', 'shape']);
-    for (const kind of ['equation', 'comment', 'revision', 'field', 'embedded-object']) {
-      expect(kinds).toContain(kind);
-    }
-    expect(new Set(kinds).size).toBe(kinds.length);
+    expect(result.lost.map((lost) => [lost.kind, lost.detail])).toEqual(LOST_17);
     expect(result.lost[0]).toEqual({
       kind: 'textbox',
       where: 'body',
       text: 'Texte dans la zone de texte',
       detail: 'Zone de texte 1',
     });
+    expect(result.lost[7]?.text).toBe('Texte dans la zone de texte Word 2010+');
+    // R25-04 : le `mc:Choice` est rendu, le repli VML (`mc:Fallback`) jamais (texte une seule fois).
+    expect(result.html).toMatch(
+      /<p[^>]*>Zone de texte enveloppée \(mc:AlternateContent\) : Texte dans la zone de texte Word 2010\+<\/p>/,
+    );
+    expect(count(result.html, /Texte dans la zone de texte Word 2010\+/g)).toBe(1);
+    // R25-05 : le bloc `w:customXml` est traversé, ses paragraphes rendus, rien de perdu.
+    expect(result.html).toMatch(
+      /<p[^>]*>Paragraphe 1 dans w:customXml<\/p><p[^>]*>Paragraphe 2 dans w:customXml<\/p>/,
+    );
     expect(result.warnings.filter((w) => w.code === 'object-lost')).toHaveLength(
       result.lost.length,
     );
+    expect(result.warnings.filter((w) => w.code !== 'object-lost')).toEqual([]);
     expect(normalizeHtml(result.html)).toBe(normalizeHtml(expected('17-objets-perdus')));
   });
 
   it('17-objets-perdus avec le harnais : chaque objet inline est détecté, une fois', async () => {
     const { html, ctx } = await renderWithHarness(fixture('17-objets-perdus'));
-    expect(ctx.lost.map((lost) => [lost.kind, lost.detail])).toEqual([
-      ['textbox', 'Zone de texte 1'],
-      ['shape', 'Ellipse 2'],
-      ['equation', 'équation'],
-      ['comment', 'commentaire 0'],
-      ['revision', 'révisions (w:ins / w:del) non suivies'],
-      ['field', 'champ DATE'],
-      ['embedded-object', 'objet Package'],
-    ]);
+    expect(ctx.lost.map((lost) => [lost.kind, lost.detail])).toEqual(LOST_17);
     expect(ctx.lost[2]?.text).toBe('x2+1=0');
     expect(html).toContain(
       'Révision insérée (w:ins) : texte inséré ; révision supprimée (w:del) : </p>',
     );
     expect(html).toContain('Champ DATE (w:fldSimple) : 20/10/2026</p>');
+    expect(html).toContain(
+      '<p>Zone de texte enveloppée (mc:AlternateContent) : Texte dans la zone de texte Word 2010+</p>',
+    );
+    expect(html).toContain(
+      '<p>Paragraphe 1 dans w:customXml</p><p>Paragraphe 2 dans w:customXml</p><p>Après le bloc customXml</p>',
+    );
   });
 });
 

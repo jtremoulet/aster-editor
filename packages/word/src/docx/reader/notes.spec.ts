@@ -14,7 +14,8 @@ const FOOTNOTES = partXml(
     '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' +
     '<w:footnote w:id="1"><w:p><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> Première note.</w:t></w:r></w:p></w:footnote>' +
     `<w:footnote w:id="2">${paragraphXml('Deuxième note, ligne 1')}${paragraphXml('Deuxième note, ligne 2')}</w:footnote>` +
-    '<w:footnote w:id="3"><w:p/></w:footnote>',
+    '<w:footnote w:id="3"><w:p/></w:footnote>' +
+    '<w:footnote w:id="4"><w:p><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteRef/><w:t>texte dans le run du ref</w:t></w:r><w:r><w:t xml:space="preserve"> suite</w:t></w:r></w:p></w:footnote>',
 );
 
 const ENDNOTES = partXml(
@@ -71,6 +72,16 @@ describe('createNoteRegistry', () => {
       '<ol data-footnotes=""><li data-footnote="1"><p></p></li><li data-footnote="2"><p></p></li></ol>',
     );
     expect(ctx.warnings).toEqual([{ code: 'reader', message: expect.stringContaining('99') }]);
+  });
+
+  it('R25-13 : seul l’appel w:footnoteRef est retiré, pas le run qui le porte', async () => {
+    const ctx = await createTestContext(await notesPackage());
+    await renderBody(`<w:p>${ref('4')}${ref('1')}</w:p>`, ctx);
+    expect(await ctx.notes.render(ctx)).toBe(
+      '<ol data-footnotes=""><li data-footnote="1"><p>texte dans le run du ref suite</p></li>' +
+        '<li data-footnote="2"><p>Première note.</p></li></ol>',
+    );
+    expect(ctx.warnings).toEqual([]);
   });
 
   it('footnotes: false supprime appels et liste avec un seul avertissement', async () => {

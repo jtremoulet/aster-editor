@@ -45,9 +45,10 @@ async function loadNotePart(pkg: DocxPackage, kind: NoteKind): Promise<NotePart 
 }
 
 /**
- * Copie de la note sans son appel initial (`w:footnoteRef` / `w:endnoteRef`, dans le
- * premier run) ni l'espace que Word place juste après. On clone : le document du paquet
- * n'est jamais modifié.
+ * Copie de la note sans son appel initial (`w:footnoteRef` / `w:endnoteRef`) ni l'espace
+ * que Word place juste après. Seul l'élément d'appel est retiré, jamais son run : un run
+ * qui porte l'appel et du texte garde son texte. On clone : le document du paquet n'est
+ * jamais modifié.
  */
 function noteContentClone(note: Element, kind: NoteKind): Element {
   const clone = note.cloneNode(true) as Element;
@@ -55,7 +56,7 @@ function noteContentClone(note: Element, kind: NoteKind): Element {
   const run = ref?.parentElement;
   if (ref && run && run.localName === 'r') {
     const paragraph = run.parentElement;
-    run.remove();
+    ref.remove();
     const firstText = paragraph?.getElementsByTagNameNS('*', 't')[0];
     if (firstText && (firstText.textContent ?? '').startsWith(' ')) {
       firstText.textContent = (firstText.textContent ?? '').slice(1);

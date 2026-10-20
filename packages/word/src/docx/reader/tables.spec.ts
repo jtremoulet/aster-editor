@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { convertTable } from './tables';
+import { MAX_COLUMNS, convertTable } from './tables';
 import {
   buildPackage,
   createTestContext,
@@ -239,6 +239,79 @@ describe('convertTable', () => {
     );
     expect(html).toBe(
       '<table><tbody><tr><td><p>Externe</p><table><tbody><tr><td><p>Interne</p></td></tr></tbody></table><p></p></td></tr></tbody></table>',
+    );
+  });
+
+  it('R25-01 : gridSpan géant plafonné à 63 sans grille, aux colonnes restantes avec grille', async () => {
+    const started = performance.now();
+    const html = await convert(
+      `<w:tbl>${row(cell('A', '<w:gridSpan w:val="100000000"/>') + cell('B'))}</w:tbl>`,
+    );
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(html).toContain(`<td colspan="${String(MAX_COLUMNS)}"><p>A</p></td><td><p>B</p></td>`);
+    const gridded = await convert(
+      '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/></w:tblGrid>' +
+        row(cell('A') + cell('BC', '<w:gridSpan w:val="1000000000"/>')) +
+        '</w:tbl>',
+    );
+    expect(gridded).toContain(
+      '<td colwidth="100"><p>A</p></td><td colspan="2" colwidth="100,100"><p>BC</p></td>',
+    );
+    // Cellule au-delà de la grille : colspan 1, sans colwidth.
+    const beyond = await convert(
+      '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/></w:tblGrid>' +
+        row(cell('A') + cell('B', '<w:gridSpan w:val="4"/>')) +
+        '</w:tbl>',
+    );
+    expect(beyond).toContain('<td colwidth="100"><p>A</p></td><td><p>B</p></td>');
+  });
+
+  it('R25-08 : gridSpan au-delà de la grille plafonné ; continuation d’une autre largeur non fusionnée', async () => {
+    const over = await convert(
+      '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/></w:tblGrid>' +
+        row(cell('A', '<w:gridSpan w:val="3"/>')) +
+        row(cell('B') + cell('C')) +
+        '</w:tbl>',
+    );
+    expect(over).toContain(
+      '<tr><td colspan="2" colwidth="100,100"><p>A</p></td></tr><tr><td><p>B</p></td><td><p>C</p></td></tr>',
+    );
+    const narrower = await convert(
+      '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/></w:tblGrid>' +
+        row(cell('A', '<w:gridSpan w:val="2"/><w:vMerge w:val="restart"/>') + cell('B')) +
+        row(cell('', '<w:vMerge/>') + cell('X') + cell('Y')) +
+        row(cell('', '<w:vMerge/>') + cell('Z', '<w:gridSpan w:val="2"/>')) +
+        '</w:tbl>',
+    );
+    // L'origine (2 colonnes) n'absorbe pas une continuation d'une colonne : pas de chevauchement,
+    // et l'origine est fermée pour les lignes suivantes.
+    expect(narrower).toBe(
+      '<table><tbody>' +
+        '<tr><td colspan="2" colwidth="100,100"><p>A</p></td><td colwidth="100"><p>B</p></td></tr>' +
+        '<tr><td><p></p></td><td><p>X</p></td><td><p>Y</p></td></tr>' +
+        '<tr><td><p></p></td><td colspan="2"><p>Z</p></td></tr>' +
+        '</tbody></table>',
+    );
+  });
+
+  it('R25-09 : tableau sans ligne → rien, avec avertissement reader ; ligne vide conservée', async () => {
+    const fresh = await createTestContext(pkg);
+    expect((await convertTable(fragment('<w:tbl><w:tblPr/></w:tbl>'), fresh)).html).toBe('');
+    expect(fresh.warnings).toEqual([
+      { code: 'reader', message: expect.stringContaining('sans ligne') },
+    ]);
+    expect(
+      await renderBody(
+        '<w:p><w:r><w:t>avant</w:t></w:r></w:p><w:tbl/><w:p><w:r><w:t>après</w:t></w:r></w:p>',
+        fresh,
+      ),
+    ).toBe('<p>avant</p><p>après</p>');
+    // Imbriqué dans une cellule : la cellule reste valide (`<p></p>`).
+    expect(await convert('<w:tbl><w:tr><w:tc><w:tbl/></w:tc></w:tr></w:tbl>')).toBe(
+      '<table><tbody><tr><td><p></p></td></tr></tbody></table>',
+    );
+    expect(await convert('<w:tbl><w:tr/><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>')).toBe(
+      '<table><tbody><tr></tr><tr><td><p></p></td></tr></tbody></table>',
     );
   });
 

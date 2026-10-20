@@ -48,6 +48,9 @@ interface RowRecord {
   readonly cells: CellRecord[];
 }
 
+/** Nombre maximal de colonnes d'un tableau Word : borne dure du `colspan` (R25-01). */
+export const MAX_COLUMNS = 63;
+
 /** `w:tblW` → `width` CSS : `pct` en pourcentage (cinquantièmes ou `NN%`), `dxa` en points. */
 function tableWidth(tblW: Element | null): string | undefined {
   if (!tblW) return undefined;
@@ -146,6 +149,11 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
   const defaultPadding = readCellMargins(tblPr ? childNamed(tblPr, 'tblCellMar') : null);
   const grid = readGridColumns(table);
   const rows = childrenNamed(table, 'tr');
+  if (rows.length === 0) {
+    // Un `<table>` sans ligne est rejeté par l'éditeur (`tableRow+`) : autant ne rien émettre.
+    ctx.warnings.push({ code: 'reader', message: 'Tableau sans ligne ignoré.' });
+    return { kind: 'table', html: '' };
+  }
   const tableCtx = deriveContext(ctx, { tableStyle: style });
 
   // Une cellule `vMerge restart` reste ouverte sur sa colonne de grille tant que les lignes
@@ -161,14 +169,19 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
     let column = 0;
     for (const [cellIndex, tc] of tcs.entries()) {
       const tcPr = childNamed(tc, 'tcPr');
-      const colspan = Math.max(
-        1,
-        Math.floor(numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1),
+      // `gridSpan` plafonné aux colonnes restantes de la grille (sinon à 63, le maximum de
+      // Word) : un `colspan` géant tue l'éditeur à l'analyse.
+      const gridSpan = Math.floor(
+        numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1,
       );
+      const remaining = grid.length > 0 ? grid.length - column : MAX_COLUMNS;
+      const colspan = Math.max(1, Math.min(gridSpan, remaining, MAX_COLUMNS));
       const vMerge = tcPr ? childNamed(tcPr, 'vMerge') : null;
       if (isMergeContinuation(vMerge)) {
         const origin = openMerges.get(column);
-        if (origin) {
+        // Une continuation d'une autre largeur que son origine n'est pas fusionnée : elle
+        // reste une cellule ordinaire, sans chevauchement avec le `rowspan` de l'origine.
+        if (origin && origin.colspan === colspan) {
           origin.rowspan += 1;
           column += colspan;
           continue;

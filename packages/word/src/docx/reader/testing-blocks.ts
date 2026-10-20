@@ -2,8 +2,8 @@ import JSZip from 'jszip';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import { escapeHtml } from './html';
 import { createImageConverter } from './images';
-import { createNumberingResolver, renderBlocks } from './lists';
-import { detectLost, detectLostInline } from './lost';
+import { createNumberingResolver, registerListItem, renderBlocks } from './lists';
+import { alternateContentChoice, detectLost, detectLostInline } from './lost';
 import { createNoteRegistry } from './notes';
 import { openPackage } from './package';
 import { convertTable } from './tables';
@@ -39,6 +39,8 @@ export const NAMESPACES =
   'xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" ' +
   'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" ' +
   'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" ' +
+  'xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" ' +
+  'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" ' +
   'xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" ' +
   'xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"';
 
@@ -213,6 +215,17 @@ export async function testParagraph(
       case 'pict':
         parts.push(await ctx.images.drawing(element, ctx));
         return;
+      case 'AlternateContent': {
+        // Enveloppe Word 2010+ : seul le contenu retenu (`mc:Choice`) est converti.
+        const chosen = alternateContentChoice(element);
+        if (!chosen) return;
+        if (chosen.localName === 'drawing' || chosen.localName === 'pict') {
+          parts.push(await ctx.images.drawing(chosen, ctx));
+        } else {
+          await walk(chosen);
+        }
+        return;
+      }
       case 'footnoteReference':
       case 'endnoteReference': {
         const id = wordAttribute(element, 'id');
@@ -247,14 +260,17 @@ export async function testParagraph(
   return block;
 }
 
-/** Réplique de `convertBlocks` d'`index.ts` : `p`, `tbl`, `sdt`, sinon `detectLost`. */
+/** Réplique de `convertBlocks` d'`index.ts` : `p` (enregistré), `tbl`, `sdt`, `customXml`, sinon `detectLost`. */
 export async function testBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
   const blocks: Block[] = [];
   for (const child of Array.from(container.children)) {
     switch (child.localName) {
-      case 'p':
-        blocks.push(await ctx.convert.paragraph(child, ctx));
+      case 'p': {
+        const block = await ctx.convert.paragraph(child, ctx);
+        registerListItem(block, ctx);
+        blocks.push(block);
         break;
+      }
       case 'tbl':
         blocks.push(await ctx.convert.table(child, ctx));
         break;
@@ -263,6 +279,10 @@ export async function testBlocks(container: Element, ctx: ConverterContext): Pro
         if (content) blocks.push(...(await testBlocks(content, ctx)));
         break;
       }
+      case 'customXml':
+        blocks.push(...(await testBlocks(child, ctx)));
+        break;
+      case 'customXmlPr':
       case 'sectPr':
       case 'bookmarkStart':
       case 'bookmarkEnd':

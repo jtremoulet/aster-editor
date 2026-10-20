@@ -1,4 +1,4 @@
-import { allNamed, textOf, wordAttribute } from '../preprocess/xml-utils';
+import { allNamed, childNamed, textOf, wordAttribute } from '../preprocess/xml-utils';
 import type { DocxLostKind, DocxLostObject } from '../types';
 import type { ConverterContext } from './types';
 
@@ -7,8 +7,9 @@ import type { ConverterContext } from './types';
  * logique : `detectLost` au niveau bloc (appelé par `index.ts` pour tout enfant du corps
  * qui n'est ni `p`, ni `tbl`, ni `sdt`) et `detectLostInline` au niveau run (à appeler
  * par L24 pour `m:oMath`, `w:object`, `w:commentReference`, `w:ins`, `w:del`,
- * `w:fldSimple` inconnu…). Les dessins (`w:drawing`, `w:pict`) passent d'abord par
- * `ctx.images.drawing`, qui délègue ici quand ils ne contiennent pas d'image.
+ * `w:fldSimple` inconnu…). Les dessins (`w:drawing`, `w:pict`, ou leur enveloppe
+ * `mc:AlternateContent`) passent d'abord par `ctx.images.drawing`, qui délègue ici quand
+ * ils ne contiennent pas d'image.
  *
  * Rien n'est retiré du DOM : on classe, on extrait le texte de remplacement et un détail
  * lisible, l'appelant pousse l'objet dans `ctx.lost` et l'avertissement `object-lost`.
@@ -48,6 +49,25 @@ const REVISION_ELEMENTS: ReadonlySet<string> = new Set([
 
 function hasDescendant(element: Element, localName: string): boolean {
   return element.getElementsByTagNameNS('*', localName).length > 0;
+}
+
+/**
+ * Contenu retenu d'un `mc:AlternateContent` (forme que Word 2010+ écrit pour toute zone
+ * de texte ou forme `wps`) : premier élément du `mc:Choice`, sinon du `mc:Fallback`.
+ * `null` si l'élément n'est pas un `AlternateContent` ou s'il est vide.
+ */
+export function alternateContentChoice(element: Element): Element | null {
+  if (element.localName !== 'AlternateContent') return null;
+  return (
+    childNamed(element, 'Choice')?.firstElementChild ??
+    childNamed(element, 'Fallback')?.firstElementChild ??
+    null
+  );
+}
+
+/** Vrai si le dessin porte une image : `pic:pic` (DrawingML) ou `v:imagedata` (VML). */
+export function hasPicture(element: Element): boolean {
+  return hasDescendant(element, 'pic') || hasDescendant(element, 'imagedata');
 }
 
 /** Texte des paragraphes d'une zone de texte (`w:txbxContent`), un paragraphe par ligne. */
@@ -103,14 +123,24 @@ function alreadyLost(ctx: ConverterContext, kind: DocxLostKind, detail?: string)
   );
 }
 
+/**
+ * Zone de texte contenue dans un dessin (`w:txbxContent`), avec son texte, que le dessin
+ * porte ou non une image par ailleurs. `null` sans zone de texte. Sert à `images.ts` pour
+ * signaler la zone d'un dessin dont l'image est rendue.
+ */
+export function textboxLost(element: Element, ctx: ConverterContext): DocxLostObject | null {
+  if (!hasDescendant(element, 'txbxContent')) return null;
+  return lost(ctx, 'textbox', drawingName(element) ?? 'zone de texte', textboxText(element));
+}
+
 /** Dessin DrawingML ou VML sans image : zone de texte, SmartArt, graphique, forme. */
 function classifyDrawing(element: Element, ctx: ConverterContext): DocxLostObject | null {
-  // Une image (`a:blip`, `v:imagedata`) est du ressort d'`images.ts`, pas une perte.
-  if (hasDescendant(element, 'blip') || hasDescendant(element, 'imagedata')) return null;
+  // Une image (`pic:pic`, `v:imagedata`) est du ressort d'`images.ts`, pas une perte. Un
+  // `a:blip` seul (fond d'une forme, d'une zone de texte) n'en fait pas une image.
+  if (hasPicture(element)) return null;
+  const textbox = textboxLost(element, ctx);
+  if (textbox) return textbox;
   const name = drawingName(element);
-  if (hasDescendant(element, 'txbxContent')) {
-    return lost(ctx, 'textbox', name ?? 'zone de texte', textboxText(element));
-  }
   if (hasDescendant(element, 'relIds') || hasDescendant(element, 'dataModel')) {
     return lost(ctx, 'smartart', name ?? 'SmartArt');
   }
@@ -135,6 +165,11 @@ function classify(element: Element, ctx: ConverterContext): DocxLostObject | nul
     case 'drawing':
     case 'pict':
       return classifyDrawing(element, ctx);
+    case 'AlternateContent': {
+      // Word 2010+ enveloppe zones de texte et formes : on classe le contenu retenu.
+      const chosen = alternateContentChoice(element);
+      return chosen ? classify(chosen, ctx) : lost(ctx, 'unknown', 'AlternateContent');
+    }
     case 'txbxContent':
       return lost(ctx, 'textbox', 'zone de texte', textboxText(element.parentElement ?? element));
     case 'oMath':

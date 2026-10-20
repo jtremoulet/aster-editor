@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { importDocx } from '../import-docx';
+import { buildDocx } from '../preprocess/minimal-docx';
 import { relsPathOf, resolveTarget } from './package';
 
 const FIXTURES = join(import.meta.env.ASTER_FIXTURES, 'docx');
@@ -44,6 +45,28 @@ describe('lecteur OOXML (squelette de phase 0)', () => {
     const semantic = await importDocx(buffer, { fidelity: 'semantic' });
     expect(styled.variables.map((v) => v.name)).toEqual(semantic.variables.map((v) => v.name));
     expect(styled.html).toContain('data-aster-variable=');
+  });
+
+  it('R25-05 : w:customXml de bloc traversé par le lecteur réel, paragraphes et tableau conservés', async () => {
+    const body =
+      '<w:customXml w:element="section"><w:p><w:r><w:t>Para 1</w:t></w:r></w:p><w:p><w:r><w:t>Para 2</w:t></w:r></w:p>' +
+      '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>cellule</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:customXml>';
+    const result = await importDocx(await buildDocx(body), { fidelity: 'styled' });
+    expect(result.html).toMatch(
+      /^<p[^>]*>Para 1<\/p><p[^>]*>Para 2<\/p><table[^>]*><tbody><tr><td[^>]*><p[^>]*>cellule<\/p><\/td><\/tr><\/tbody><\/table>$/,
+    );
+    expect(result.lost).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('R25-11 : mise en page hors des bornes Word ignorée avec avertissements reader', async () => {
+    const body =
+      '<w:p><w:r><w:t>x</w:t></w:r></w:p>' +
+      '<w:sectPr><w:pgSz w:w="1000000000000" w:h="1000000000000"/><w:cols w:num="1000000000"/><w:pgMar w:top="1000000000000"/></w:sectPr>';
+    const result = await importDocx(await buildDocx(body), { fidelity: 'styled' });
+    expect(result.layout.page).toBeUndefined();
+    expect(result.layout.columns).toBeUndefined();
+    expect(result.warnings.filter((w) => w.code === 'reader')).toHaveLength(3);
   });
 
   it('le chemin sémantique renseigne aussi gabarit, mise en page vide et objets perdus', async () => {

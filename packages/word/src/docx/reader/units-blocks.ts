@@ -53,7 +53,12 @@ export function eighthsToPt(eighths: number): number {
   return round2(eighths / 8);
 }
 
-/** Nombre lu dans un attribut `w:…`, `undefined` si absent ou non numérique. */
+/**
+ * Nombre lu dans un attribut `w:…`, `undefined` si absent ou non numérique. Volontairement
+ * tolérant (`Number()`) : les modules de blocs (L25) bornent ensuite les valeurs et
+ * avertissent (`1e12` → « hors des bornes ») ; le strict `numberAttr` d'`units.ts` sert
+ * aux runs et paragraphes.
+ */
 export function numericAttribute(element: Element | null, name: string): number | undefined {
   if (!element) return undefined;
   const raw = wordAttribute(element, name);
@@ -61,6 +66,9 @@ export function numericAttribute(element: Element | null, name: string): number 
   const value = Number(raw);
   return Number.isFinite(value) ? value : undefined;
 }
+
+/** Largeur de bordure maximale acceptée par Word : 12 pt (96 huitièmes). */
+const BORDER_MAX_PT = 12;
 
 /** Vrai pour un attribut booléen Word absent (`<w:tblHeader/>` = vrai) ou valant `1`/`true`/`on`. */
 export function booleanAttribute(element: Element | null): boolean {
@@ -150,11 +158,12 @@ export function readBorderElement(element: Element, side: BorderSide): BlockBord
   const style = borderStyleOf(wordAttribute(element, 'val'));
   if (!style) return null;
   const size = numericAttribute(element, 'sz') ?? 0;
+  const widthPt = eighthsToPt(size);
   return {
     side,
     style,
-    // Un `w:sz` absent ou nul avec un style visible : Word trace un filet fin.
-    widthPt: size > 0 ? eighthsToPt(size) : 0.5,
+    // Un `w:sz` absent, nul ou hors bornes (> 12 pt) avec un style visible : filet fin.
+    widthPt: widthPt > 0 && widthPt <= BORDER_MAX_PT ? widthPt : 0.5,
     color: cssColor(wordAttribute(element, 'color')),
   };
 }

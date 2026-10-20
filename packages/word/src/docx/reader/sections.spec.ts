@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DocxImportWarning } from '../types';
 import { namedPageSize, readDocumentLang, readSectionLayout } from './sections';
 import { buildPackage, fragment, partXml, stubStyles } from './testing-blocks';
 
@@ -68,6 +69,52 @@ describe('readSectionLayout', () => {
       page: { size: { widthMm: 141.11, heightMm: 88.19 }, orientation: 'landscape' },
     });
     expect(readSectionLayout(sectPr('<w:pgSz w:w="0" w:h="abc"/>'), styles)).toEqual({});
+  });
+
+  it('R25-11 : page, marges et colonnes hors des bornes Word ignorées avec avertissement', () => {
+    const warnings: DocxImportWarning[] = [];
+    expect(
+      readSectionLayout(
+        sectPr(
+          '<w:pgSz w:w="1000000000000" w:h="1000000000000"/><w:cols w:num="1000000000"/><w:pgMar w:top="1000000000000" w:left="720"/>',
+        ),
+        styles,
+        undefined,
+        warnings,
+      ),
+    ).toEqual({ page: { margins: { leftMm: 12.7 } } });
+    expect(warnings.map((w) => w.code)).toEqual(['reader', 'reader', 'reader']);
+    expect(warnings[0]?.message).toContain('hors des bornes');
+    expect(warnings[1]?.message).toContain('Marge top');
+    expect(warnings[2]?.message).toContain('colonnes');
+    // Marge plus grande que la page connue : ignorée, les autres restent.
+    const margins: DocxImportWarning[] = [];
+    expect(
+      readSectionLayout(
+        sectPr(
+          '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="17000" w:bottom="1134" w:left="12000" w:right="1134"/>',
+        ),
+        styles,
+        undefined,
+        margins,
+      ),
+    ).toEqual({
+      page: { size: 'A4', orientation: 'portrait', margins: { rightMm: 20, bottomMm: 20 } },
+    });
+    expect(margins.map((w) => w.message)).toEqual([
+      expect.stringContaining('Marge top'),
+      expect.stringContaining('Marge left'),
+    ]);
+    // Bornes incluses : 12,7 mm (720 twips) et 558,8 mm (31 680 twips), 45 colonnes.
+    expect(
+      readSectionLayout(sectPr('<w:pgSz w:w="720" w:h="31680"/><w:cols w:num="45"/>'), styles),
+    ).toEqual({ page: { size: { widthMm: 12.7, heightMm: 558.8 } }, columns: 45 });
+    expect(readSectionLayout(sectPr('<w:cols w:num="46"/>'), styles)).toEqual({});
+    // Sans tableau d'avertissements : même résultat, silencieux. Page trop petite aussi ignorée.
+    expect(
+      readSectionLayout(sectPr('<w:pgSz w:w="1000000000000" w:h="1000000000000"/>'), styles),
+    ).toEqual({});
+    expect(readSectionLayout(sectPr('<w:pgSz w:w="719" w:h="16838"/>'), styles)).toEqual({});
   });
 
   it('sectPr absent : police par défaut et langue seulement', () => {
