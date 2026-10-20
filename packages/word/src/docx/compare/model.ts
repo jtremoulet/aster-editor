@@ -364,6 +364,9 @@ function readBlocks(container: Element, ctx: ModelContext): BlockModel[] {
     else if (child.localName === 'sdt') {
       const content = childNamed(child, 'sdtContent');
       if (content) blocks.push(...readBlocks(content, ctx));
+    } else if (child.localName === 'customXml') {
+      // Bloc `w:customXml` : conteneur transparent, comme pour le lecteur (R25-05).
+      blocks.push(...readBlocks(child, ctx));
     }
   }
   return blocks;
