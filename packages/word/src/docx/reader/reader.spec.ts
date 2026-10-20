@@ -23,7 +23,7 @@ describe('lecteur OOXML (squelette de phase 0)', () => {
   it('lit le corps en mode styled : texte, titres, gabarit et mise en page', async () => {
     const buffer = await fixture('01-headings-lists.docx');
     const result = await importDocx(buffer, { fidelity: 'styled' });
-    expect(result.html).toMatch(/<h1>|<h2>|<p>/);
+    expect(result.html).toMatch(/<h1[ >]|<h2[ >]|<p[ >]/);
     expect(result.html).not.toBe('');
     expect(result.template).toBe(buffer);
     expect(result.layout).toEqual(expect.any(Object));
