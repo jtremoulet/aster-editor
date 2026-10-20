@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { stripXmlDeclaration } from '../preprocess/xml-utils';
 
 /**
  * Accès en lecture et en écriture aux parties d'un paquet `.docx` pour la greffe : les
@@ -261,10 +262,4 @@ export function emptyDocumentLike(model: Document): Document {
   return doc;
 }
 
-/**
- * Retire la déclaration `<?xml …?>` que certains sérialiseurs (Chromium) placent en tête :
- * la partie est réécrite avec sa déclaration d'origine, jamais avec deux.
- */
-export function stripXmlDeclaration(xml: string): string {
-  return xml.replace(/^\s*<\?xml[^>]*\?>\s*/u, '');
-}
+export { stripXmlDeclaration };

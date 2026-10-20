@@ -2,7 +2,7 @@ import type { VariableSettings } from '../../export/context';
 import type { DocxExportWarning } from '../../export/types';
 import { variableValue } from '../../export/variables';
 import { transformVariablesXml, type CollectedVariable } from '../preprocess/variables';
-import { allNamed } from '../preprocess/xml-utils';
+import { allNamed, stripXmlDeclaration } from '../preprocess/xml-utils';
 import type { DocxPackage } from '../reader/types';
 import { xmlDeclarationOf, type PartStore, type XmlCodec } from './xml-io';
 
@@ -113,6 +113,9 @@ export async function resolveHeaderFooterVariables(
     if (doc.documentElement.localName === 'parsererror') continue;
     const changed = resolveVariablesInTexts(doc, input.settings, input.warnings);
     if (rewritten === null && !changed) continue;
-    input.template.write(path, xmlDeclarationOf(xml) + input.codec.serialize(doc));
+    input.template.write(
+      path,
+      xmlDeclarationOf(xml) + stripXmlDeclaration(input.codec.serialize(doc)),
+    );
   }
 }

@@ -1,5 +1,6 @@
 import type { Download, Locator, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import JSZip from 'jszip';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +28,8 @@ interface PlaygroundEditor {
   focus(position?: 'start' | 'end' | 'all'): void;
   commands: { run(id: string, args?: Record<string, unknown>): boolean };
   tiptap: { view: { pasteHTML(html: string): boolean } };
+  /** Vue page (session 3) : `false` la retire, un objet `{ layout }` l'active ou la remplace. */
+  setPageView(options: boolean | Record<string, unknown>): void;
 }
 
 interface PlaygroundWindow {
@@ -146,6 +149,94 @@ export async function getDemoHtml(page: Page): Promise<string> {
   const output = page.locator('pre.demo-output[data-kind="html"]');
   await expect(output).toBeVisible();
   return (await output.textContent()) ?? '';
+}
+
+/**
+ * Active (`{ layout }`), remplace ou retire (`false`) la vue page du playground, sans passer
+ * par le dialogue « Mise en page » : pour les scénarios qui testent la pagination seule.
+ */
+export async function setPageView(
+  page: Page,
+  options: boolean | Record<string, unknown>,
+): Promise<void> {
+  await page.evaluate((value) => {
+    const aster = (window as unknown as PlaygroundWindow).aster;
+    if (!aster) throw new Error('window.aster is not available: playground not mounted');
+    aster.editor.setPageView(value);
+  }, options);
+}
+
+/**
+ * Hôte de l'éditeur du core (`editor.element`, `.aster__content` posé par `createAster`) :
+ * c'est lui qui porte `aster--page-view` et les variables `--aster-page-*`, pas `.aster`.
+ */
+export function editorHost(page: Page): Locator {
+  return page.locator('.aster__content').first();
+}
+
+/**
+ * Valeur calculée d'une variable CSS `--aster-*` sur l'hôte de l'éditeur, chaîne vide si
+ * elle n'est pas posée. À combiner avec `expect.poll`.
+ */
+export async function hostCssVariable(page: Page, name: string): Promise<string> {
+  return editorHost(page).evaluate(
+    (host, variable) => getComputedStyle(host).getPropertyValue(variable).trim(),
+    name,
+  );
+}
+
+/**
+ * Octets d'un téléchargement intercepté, une fois le fichier entièrement écrit. Sous
+ * Windows, l'artefact fraîchement fermé par Chromium reste quelques instants inaccessible
+ * (`EPERM` à l'ouverture, antivirus ou verrou de fin d'écriture) : la lecture est réessayée
+ * jusqu'à 10 s, sans attente fixe.
+ */
+export async function downloadBytes(download: Download): Promise<Buffer> {
+  const file = await download.path();
+  let bytes: Buffer | null = null;
+  await expect(async () => {
+    bytes = await readFile(file);
+  }).toPass({ timeout: 10_000, intervals: [100, 250, 500, 1_000] });
+  if (bytes === null) throw new Error(`téléchargement illisible : ${file}`);
+  return bytes;
+}
+
+/**
+ * Archive d'un téléchargement `.docx` intercepté, ouverte avec `jszip` (dépendance de
+ * `@aster-editor/word`, présente à la racine) : pour comparer des parties à l'octet.
+ */
+export async function downloadZip(download: Download): Promise<JSZip> {
+  return JSZip.loadAsync(await downloadBytes(download));
+}
+
+/** Archive d'une fixture `.docx` de `fixtures/`, ouverte avec `jszip`. */
+export async function fixtureZip(...segments: string[]): Promise<JSZip> {
+  return JSZip.loadAsync(await readFile(fixturePath(...segments)));
+}
+
+/** Octets d'une partie d'une archive, ou erreur claire si elle manque. */
+export async function zipPart(zip: JSZip, path: string): Promise<Uint8Array> {
+  const file = zip.file(path);
+  if (!file) throw new Error(`partie absente de l'archive : ${path}`);
+  return file.async('uint8array');
+}
+
+/** Vrai si deux parties sont identiques à l'octet. */
+export function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return Buffer.from(left).equals(Buffer.from(right));
+}
+
+/**
+ * Collecte les erreurs du navigateur (console `error` et exceptions non rattrapées) pour
+ * vérifier qu'un parcours n'en produit aucune. À brancher avant la navigation.
+ */
+export function collectPageErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  page.on('pageerror', (error) => errors.push(error.message));
+  return errors;
 }
 
 /** Capture pleine page dans `e2e/output/<name>.png`, pour le bilan visuel. */

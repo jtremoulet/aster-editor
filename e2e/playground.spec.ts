@@ -135,7 +135,10 @@ test.describe('Playground vanilla', () => {
 
     await expect(editor(page).locator('h1')).toHaveText('Titre principal');
     await expect(page.locator('#out')).toContainText('importDocx(01-headings-lists.docx)');
-    expect(await getHtml(page)).toContain('<h1>Titre principal</h1>');
+    // Chemin stylé (L29) : le titre porte `data-docx-style` et un `<span>` de couleur / taille.
+    expect(await getHtml(page)).toMatch(
+      /<h1[^>]*data-docx-style="Heading1"[^>]*>(?:<span[^>]*>)?Titre principal/,
+    );
   });
 
   test('le thème night change data-theme et la couleur de fond', async ({ page }) => {

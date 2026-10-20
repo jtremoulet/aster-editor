@@ -38,10 +38,14 @@ export function defaultXmlParse(): XmlParse {
   return (xml) => parser.parseFromString(xml, 'application/xml');
 }
 
-/** Vrai si le document parsé est une erreur de parsing (`<parsererror>` de DOMParser). */
+/**
+ * Vrai si le document parsé est une erreur de parsing : `<parsererror>` en racine (jsdom,
+ * Firefox) ou injecté **dans** la racine (Chromium), d'où la recherche par nom local.
+ */
 function isParseError(doc: Document): boolean {
   const root = doc.documentElement;
-  return root === null || root.localName === 'parsererror';
+  if (root === null || root.localName === 'parsererror') return true;
+  return doc.getElementsByTagNameNS('*', 'parsererror').length > 0;
 }
 
 /**
