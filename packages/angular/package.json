@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/angular",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Composant Angular standalone pour Aster Editor : reactive forms, signals, zoneless",
   "license": "MIT",
   "author": "Joris Tremoulet",
@@ -30,9 +30,9 @@
     "@angular/common": ">=20.0.0",
     "@angular/core": ">=20.0.0",
     "@angular/forms": ">=20.0.0",
-    "@aster-editor/core": "^0.4.3",
-    "@aster-editor/ui": "^0.4.3",
-    "@aster-editor/word": "^0.4.3"
+    "@aster-editor/core": "^0.5.0",
+    "@aster-editor/ui": "^0.5.0",
+    "@aster-editor/word": "^0.5.0"
   },
   "peerDependenciesMeta": {
     "@aster-editor/word": {

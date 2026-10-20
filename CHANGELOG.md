@@ -6,6 +6,29 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
+Fidélité de mise en page Word : l'utilisateur voit le document tel qu'il est, modifie ce qu'il modifie, sauvegarde dans son gabarit. Pagination approximative, en-têtes et pieds, rapport de fidélité. 17 lots d'agents, 6 revues adverses (73 findings corrigés), 2 bugs trouvés en navigateur réel.
+
+### Added
+
+- **core** : contrat de mise en page (`DocumentLayout`, `ParagraphLayoutAttrs` et sa sérialisation HTML figée, `RunLayoutAttrs`, `ListLayoutAttrs`, `TableLayoutAttrs`, `CellLayoutAttrs`, `PageViewOptions`), extensions `ParagraphLayout` (12 attributs sur paragraphes et titres), `RunLayout` (espacement, casse, style de caractère, styles de trait sur souligné et barré), `ListLayout`, `TableLayout` (largeur, bordures, fonds, alignement vertical, marges de cellule), `AsterHorizontalRule` (`data-page-break` conservé), commandes `paragraph.setLayout` / `paragraph.unsetLayout` (52 commandes standard) et `text.setLetterSpacing` / `text.setCaps` / `text.unsetCaps`, option `pageView` (feuille aux dimensions et marges du document, en-têtes et pieds assainis), **pagination approximative** (coupures visuelles par décorations, « Page n sur N », sauts explicites, blocs insécables, sans transaction), `editor.setPageView()` / `editor.getLayout()` (hors contrat), sérialiseur HTML verbatim (`getHTML()` n'altère plus les styles inline).
+- **ui** : widgets `lineSpacing`, `paragraphSpacing`, `indentIncrease` / `indentDecrease`, `paragraphBorders`, `caps`, `underlineStyle`, `pageLayout` (24 widgets), `themes/page.css` (bureau, feuille, en-têtes et pieds, coupures, impression), variables `--aster-page-*`, dialogue d'image avec hauteur et verrou de proportions, 85 icônes, 180 clés i18n.
+- **word** : **lecteur OOXML** (`fidelity: 'styled'`) : styles résolus (docDefaults, `basedOn`, thème, styles de tableau), runs (champs simples et complexes, liens, symboles, sauts), paragraphes stylés, tableaux (grille, bordures effectives, fusions, imbrication), listes depuis `numbering.xml`, images DrawingML et VML (`mc:AlternateContent`), notes, en-têtes et pieds hérités entre sections, mise en page des sections, objets non représentables signalés (`DocxImportResult.lost`) ; `DocxImportResult.layout` et `template` ; **export dans le gabarit** (`DocxExportOptions.template`) : corps greffé, relations, médias, numérotations et styles réutilisés ou ajoutés, propriétés directes égales au style supprimées, réconciliation contre les docDefaults, notes, titres numérotés, table des matières actualisée, variables des en-têtes résolues, en-tête ou pied modifié régénéré, repli en export neuf ; `DocxExportOptions.layout` pour l'export neuf ; **rapport de fidélité** `compareDocx` et `npm run fidelity` (propriétés effectives, parties à l'octet, score pondéré) ; codes d'avertissement `image-skipped`, `object-lost`, `reader`, `template-invalid`, `template-style-missing`, `template-numbering-fallback`, `template-section-missing`.
+- **angular** : inputs `importFidelity`, `exportInTemplate`, `pageView`, `layout`, output `layoutChanged`, signals `importedTemplate`, `layout`, `lostObjects`, méthode `compareWithTemplate()` ; page démo « Modèle » avec vue page, panneau En-tête / Pied éditable, rapport de fidélité, objets non représentables, téléchargement dans le gabarit ; page « Import » avec choix du chemin et mise en page lue.
+- Fixtures de mise en page 11-17 (`scripts/generate-fixtures-layout.ts`), attendus du chemin stylé, `fixtures/docx/client/` hors dépôt pour les documents clients, e2e `fidelity.spec.ts` (42 tests e2e), 1 971 tests unitaires.
+
+### Changed
+
+- **core** : `getHTML()` sérialise les couleurs en `#rrggbb` minuscules et sans `;` final (0.4 rendait `rgb(…)`) ; un `<span style>` sans attribut `textStyle` résolu ne produit plus de `<span>` vide ; `paragraph.setLayout` ignore les valeurs invalides au lieu d'effacer ; `colspan` plafonné à 63 et `rowspan` à 1 000 au parse ; attribut `data-docx-num-indent` conservé.
+- **ui** : `indentIncrease` / `indentDecrease` remplacent `indent` / `outdent` dans les presets `full` et `standard` ; bornes Word sur retraits, espacements, interlignes, bordures et marges de page.
+- **word** : l'export conserve l'espace finale d'un paragraphe ; un `.docx` importé en `styled` ne charge pas mammoth ; le défaut de `fidelity` dans `importDocx` reste `semantic` (le composant Angular, la démo et le playground utilisent `styled`), bascule prévue en 0.6.
+
+### Fixed
+
+- **core** : XSS par `java\tscript:` dans l'assainisseur des en-têtes de la vue page, assainissement itératif plafonné, commandes de mise en page sur toutes les cellules d'une `CellSelection`, garde `suspiciousAttributes` du sérialiseur, nombres de mise en page bornés.
+- **word** : déclaration XML doublée dans Chromium (prétraitement des champs, greffe, en-têtes) qui vidait le chemin stylé des documents à champs de fusion et invalidait l'export dans le gabarit ; `gridSpan` géant, `w:sym` hors Unicode, champ `HYPERLINK` jamais fermé, nom de police injectant du CSS, chaînes de styles quadratiques, compteurs de listes à travers les tableaux, zones de texte avec image, gabarit de 50 Mo.
+
 ## [0.4.3] - 2026-10-20
 
 ### Fixed
