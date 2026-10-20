@@ -481,6 +481,130 @@ describe('compareDocx — groupes de propriétés', () => {
   });
 });
 
+describe('compareDocx — rendu Word plutôt que forme XML (L28c)', () => {
+  const PAGE_BREAK = '<w:r><w:br w:type="page"/></w:r>';
+
+  it('saut de page : « a<br page>b » vaut « a », paragraphe-saut, « b » ; le saut compte comme propriété', async () => {
+    const a = await buildDocx(`<w:p>${r('a')}${PAGE_BREAK}${r('b')}</w:p>`);
+    const b = await buildDocx(`${p('a')}<w:p>${PAGE_BREAK}</w:p>${p('b')}`);
+    const report = await compareDocx(a, b);
+    expect(report.score).toBe(1);
+    expect(property(report, 'paragraph.text')).toMatchObject({ total: 2, kept: 2 });
+    expect(property(report, 'paragraph.pageBreakAfter')).toMatchObject({
+      group: 'paragraph-format',
+      total: 1,
+      kept: 1,
+    });
+
+    const dropped = await compareDocx(a, await buildDocx(p('a') + p('b')));
+    expect(property(dropped, 'paragraph.text')).toMatchObject({ total: 2, kept: 2 });
+    expect(property(dropped, 'paragraph.pageBreakAfter').examples).toEqual([
+      { where: 'paragraphe 1', expected: 'true', actual: '(absent)' },
+    ]);
+  });
+
+  it('champ de fusion : un {{nom}} en clair vaut un MERGEFIELD de même nom, texte et runs conservés', async () => {
+    const field = `<w:p>${r('Bonjour ', '<w:b/>')}<w:fldSimple w:instr=" MERGEFIELD Nom ">${r('«Nom»', '<w:b/>')}</w:fldSimple>${r(' !')}</w:p>`;
+    const plain = `<w:p>${r('Bonjour ', '<w:b/>')}${r('{{Nom}}', '<w:b/>')}${r(' !')}</w:p>`;
+    const a = await buildDocx(field);
+    const report = await compareDocx(a, await buildDocx(plain));
+    expect(report.score).toBe(1);
+    expect(property(report, 'paragraph.text')).toMatchObject({ total: 1, kept: 1 });
+    expect(property(report, 'field.mergeField')).toMatchObject({
+      group: 'text',
+      total: 1,
+      kept: 1,
+    });
+    expect(property(report, 'run.bold')).toMatchObject({ total: 1, kept: 1 });
+    expect(names(report)).not.toContain('run.italic');
+
+    const renamed = await compareDocx(a, await buildDocx(plain.replace('{{Nom}}', '{{Prenom}}')));
+    expect(property(renamed, 'field.mergeField').examples).toEqual([
+      { where: 'paragraphe 1', expected: '["Nom"]', actual: '["Prenom"]' },
+    ]);
+    expect(property(renamed, 'paragraph.text').examples[0]).toEqual({
+      where: 'paragraphe 1',
+      expected: 'Bonjour «Nom» !',
+      actual: 'Bonjour {{Prenom}} !',
+    });
+  });
+
+  it('champ complexe : résultat affiché, instruction ignorée, alignement des blocs sur la forme canonique', async () => {
+    const complex =
+      '<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+      '<w:r><w:instrText xml:space="preserve"> MERGEFIELD Date \\* MERGEFORMAT </w:instrText></w:r>' +
+      `<w:r><w:fldChar w:fldCharType="separate"/></w:r>${r('«Date»')}<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
+    const a = await buildDocx(p('Avant') + complex + p('Après'));
+    const b = await buildDocx(p('Avant') + p('Inséré') + p('{{Date}}') + p('Après'));
+    const report = await compareDocx(a, b);
+    expect(property(report, 'paragraph.text')).toMatchObject({ total: 4, kept: 3 });
+    expect(property(report, 'paragraph.text').examples).toEqual([
+      { where: 'paragraphe 2 (résultat)', expected: '(absent)', actual: 'Inséré' },
+    ]);
+    expect(property(report, 'field.mergeField')).toMatchObject({ total: 1, kept: 1 });
+  });
+
+  it('bordures effectives : traits intérieurs distribués sur les cellules = même rendu, nil perdu = perte', async () => {
+    const cell = (text: string, tcBorders = ''): string =>
+      `<w:tc>${tcBorders ? `<w:tcPr><w:tcBorders>${tcBorders}</w:tcBorders></w:tcPr>` : ''}${p(text)}</w:tc>`;
+    const single = '<w:%s w:val="single" w:sz="4" w:color="000000"/>';
+    const side = (name: string): string => single.replace('%s', name);
+    const original =
+      '<w:tbl><w:tblPr><w:tblBorders>' +
+      `${side('top')}${side('left')}${side('bottom')}${side('right')}${side('insideH')}${side('insideV')}` +
+      `</w:tblBorders></w:tblPr><w:tr>${cell('A')}${cell('B', '<w:bottom w:val="nil"/>')}</w:tr>` +
+      `<w:tr>${cell('C')}${cell('D')}</w:tr></w:tbl>`;
+    const distributed =
+      '<w:tbl><w:tblPr><w:tblBorders>' +
+      `${side('top')}${side('left')}${side('bottom')}${side('right')}<w:insideH w:val="nil"/><w:insideV w:val="nil"/>` +
+      `</w:tblBorders></w:tblPr><w:tr>${cell('A', side('bottom') + side('right'))}${cell('B', '<w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="nil"/>')}</w:tr>` +
+      `<w:tr>${cell('C', side('top') + side('right'))}${cell('D', side('top') + side('left'))}</w:tr></w:tbl>`;
+    const a = await buildDocx(original);
+    const report = await compareDocx(a, await buildDocx(distributed));
+    expect(report.score).toBe(1);
+    expect(property(report, 'table.borders')).toMatchObject({ total: 1, kept: 1 });
+    expect(property(report, 'table.cellBorders')).toMatchObject({ total: 4, kept: 4 });
+    // Le `nil` de la cellule B remplacé par un trait : un côté de plus est rendu.
+    const forgotten = await compareDocx(
+      a,
+      await buildDocx(distributed.replace('<w:bottom w:val="nil"/>', side('bottom'))),
+    );
+    expect(property(forgotten, 'table.cellBorders')).toMatchObject({ total: 4, kept: 3 });
+    expect(property(forgotten, 'table.cellBorders').examples[0]?.where).toBe(
+      'tableau 1 cellule (1,2)',
+    );
+  });
+
+  it('largeurs : colonnes et cellules à ±0,5 pt, largeur de cellule déduite de la grille', async () => {
+    const table = (grid: number, tcW: string): string =>
+      `<w:tbl><w:tblGrid><w:gridCol w:w="${String(grid)}"/><w:gridCol w:w="2400"/></w:tblGrid>` +
+      `<w:tr><w:tc>${tcW ? `<w:tcPr>${tcW}</w:tcPr>` : ''}${p('A')}</w:tc><w:tc>${p('B')}</w:tc></w:tr></w:tbl>`;
+    const a = await buildDocx(table(4513, ''));
+    const near = await compareDocx(
+      a,
+      await buildDocx(table(4515, '<w:tcW w:w="4515" w:type="dxa"/>')),
+    );
+    expect(near.score).toBe(1);
+    expect(property(near, 'table.columnWidths')).toMatchObject({ total: 1, kept: 1 });
+    expect(property(near, 'table.cellWidth')).toMatchObject({ total: 2, kept: 2 });
+
+    const far = await compareDocx(
+      a,
+      await buildDocx(table(4000, '<w:tcW w:w="4000" w:type="dxa"/>')),
+    );
+    expect(property(far, 'table.columnWidths').examples[0]).toEqual({
+      where: 'tableau 1',
+      expected: '[225.65,120]',
+      actual: '[200,120]',
+    });
+    expect(property(far, 'table.cellWidth').examples[0]).toEqual({
+      where: 'tableau 1 cellule (1,1)',
+      expected: '225.65',
+      actual: '200',
+    });
+  });
+});
+
 describe('compareDocx — score pondéré', () => {
   it('cas calculé à la main : texte 1/2, style 2/2, section 1/1, parties 2/2', async () => {
     const a = await buildDocx(p('Un') + p('Deux'));

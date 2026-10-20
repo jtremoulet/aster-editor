@@ -66,6 +66,7 @@ export async function buildDocx(
 ): Promise<BuiltDocx> {
   const warnings: DocxExportWarning[] = [];
   const layout = resolvePageLayout(options, warnings);
+  const headingNumbering = resolveHeadingNumbering(options.numberedHeadings);
   const ctx: ExportContext = {
     docx,
     fetchImage: options.fetchImage,
@@ -78,6 +79,8 @@ export async function buildDocx(
     knownStyles: knownStyles(options, target),
     template: target.template,
     templateNumbering: target.numbering ?? null,
+    // Dans le gabarit, la numérotation des titres ne peut pas vivre dans ses styles.
+    headingNumbering: target.template ? headingNumbering : null,
   };
   await collectFootnotes(dom.body, ctx);
   let children = await convertChildren(dom.body, ROOT_SCOPE, ctx);
@@ -86,7 +89,6 @@ export async function buildDocx(
   if (children.length === 0) children = [new docx.Paragraph({ children: [] })];
   const headers = await buildHeaders(options, ctx);
   const footers = await buildFooters(options, ctx);
-  const headingNumbering = resolveHeadingNumbering(options.numberedHeadings);
   const footnotes = buildFootnotes(ctx);
   const columns = options.layout?.columns;
   const section: ISectionOptions = {
@@ -119,9 +121,9 @@ export async function buildDocx(
     title: options.title === undefined ? undefined : sanitizeXmlText(options.title),
     creator: options.creator === undefined ? undefined : sanitizeXmlText(options.creator),
     // Les références de numérotation sont connues après la conversion : une par liste.
-    numbering: buildNumbering(docx, ctx.lists, headingNumbering),
+    numbering: buildNumbering(docx, ctx.lists, headingNumbering, !target.template),
     styles: {
-      default: buildDefaultStyles(options, headingNumbering),
+      default: buildDefaultStyles(options, target.template ? null : headingNumbering),
       paragraphStyles: buildParagraphStyles(Boolean(options.toc)),
       characterStyles: buildCharacterStyles(),
     },

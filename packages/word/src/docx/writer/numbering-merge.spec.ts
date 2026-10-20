@@ -138,6 +138,29 @@ describe('createNumberingMerger', () => {
     expect(xml).not.toContain('decimal');
   });
 
+  it('borne les identifiants à xsd:int : au plafond, premier entier libre (R27-08)', async () => {
+    const template = numbering(
+      abstractNum('2147483647', 'decimal'),
+      num('1', '2147483647') + num('2147483647', '2147483647'),
+    );
+    const { template: store, generated, relationships, warnings } = await setup(template);
+    const merger = await createNumberingMerger({
+      template: store,
+      generated,
+      mainPart: 'word/document.xml',
+      templatePath: 'word/numbering.xml',
+      relationships,
+      lists: [{ reference: 'aster-bullet-1', kind: 'bullet', level: 0, start: 1 }],
+      concrete: new Map([['1', 'aster-bullet-1']]),
+      warnings,
+    });
+    expect(await merger.remap('1')).toBe('2');
+    const xml = await partText(store, 'word/numbering.xml');
+    expect(xml).toContain(abstractNum('1', 'bullet'));
+    expect(xml).toContain(num('2', '1'));
+    expect(xml).not.toContain('2147483648');
+  });
+
   it('laisse un numId inconnu du document généré tel quel', async () => {
     const { template, generated, relationships, warnings } = await setup(TEMPLATE);
     const merger = await createNumberingMerger({

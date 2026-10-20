@@ -117,6 +117,15 @@ export class PartStore {
     this.cache.set(path, Promise.resolve({ doc, declaration, changed: true }));
   }
 
+  /**
+   * Adopte un document déjà parsé par ailleurs (la partie principale, lue par le paquet
+   * du lecteur à l'ouverture du gabarit) : la partie n'est pas reparsée, le DOM est
+   * partagé et sera réécrit avec `declaration` en tête s'il est marqué modifié.
+   */
+  adopt(path: string, doc: Document, declaration: string): void {
+    this.cache.set(path, Promise.resolve({ doc, declaration, changed: false }));
+  }
+
   /** À appeler après toute mutation du DOM d'une partie : elle sera réécrite au `commit`. */
   async markChanged(path: string): Promise<void> {
     const part = await this.cached(path);
@@ -185,6 +194,48 @@ export function removeWordAttr(element: Element, name: string): void {
 export function createSibling(reference: Element, localName: string): Element {
   const prefix = reference.prefix ? `${reference.prefix}:` : '';
   return reference.ownerDocument.createElementNS(reference.namespaceURI, `${prefix}${localName}`);
+}
+
+/** Élément `w:<localName>` avec ses attributs `w:…`, dans l'espace de noms de `reference`. */
+export function wordElement(
+  reference: Element,
+  localName: string,
+  attributes: Readonly<Record<string, string>> = {},
+): Element {
+  const element = createSibling(reference, localName);
+  for (const [name, value] of Object.entries(attributes)) setWordAttr(element, name, value);
+  return element;
+}
+
+/**
+ * Insère `element` dans `container` à la place que lui donne `order` (liste des noms
+ * locaux dans l'ordre du schéma) : avant le premier enfant connu de rang supérieur, sinon
+ * en dernier. Les enfants inconnus de `order` ne contraignent rien.
+ */
+export function insertOrdered(
+  container: Element,
+  element: Element,
+  order: readonly string[],
+): void {
+  const rank = order.indexOf(element.localName);
+  const anchor = Array.from(container.children).find((child) => {
+    const childRank = order.indexOf(child.localName);
+    return childRank >= 0 && childRank > rank;
+  });
+  container.insertBefore(element, anchor ?? null);
+}
+
+/** Enfant `w:<localName>` existant ou créé à sa place dans l'ordre du schéma. */
+export function ensureChild(
+  container: Element,
+  localName: string,
+  order: readonly string[],
+): Element {
+  const existing = Array.from(container.children).find((child) => child.localName === localName);
+  if (existing) return existing;
+  const element = createSibling(container, localName);
+  insertOrdered(container, element, order);
+  return element;
 }
 
 /**

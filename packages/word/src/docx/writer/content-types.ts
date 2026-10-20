@@ -19,6 +19,8 @@ export const PART_CONTENT_TYPES = {
   footnotes: `${WORDPROCESSING}.footnotes+xml`,
   header: `${WORDPROCESSING}.header+xml`,
   footer: `${WORDPROCESSING}.footer+xml`,
+  settings: `${WORDPROCESSING}.settings+xml`,
+  coreProperties: 'application/vnd.openxmlformats-package.core-properties+xml',
 } as const;
 
 /** Types MIME des images que l'export embarque, par extension. */

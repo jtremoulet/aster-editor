@@ -32,7 +32,7 @@ export interface HeaderFooterVariablesInput {
 }
 
 /** Parties d'en-tête et de pied référencées par la partie principale (chemins du zip, dédoublonnés). */
-async function headerFooterParts(pkg: DocxPackage, mainPart: string): Promise<string[]> {
+export async function headerFooterParts(pkg: DocxPackage, mainPart: string): Promise<string[]> {
   const paths: string[] = [];
   for (const rel of (await pkg.rels(mainPart)).values()) {
     if (rel.external || !HEADER_FOOTER_TYPES.some((suffix) => rel.type.endsWith(suffix))) continue;

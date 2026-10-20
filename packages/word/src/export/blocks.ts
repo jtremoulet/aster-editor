@@ -14,6 +14,7 @@ import {
 import {
   BLOCK_TAGS,
   PAGE_BREAK_ATTRIBUTE,
+  XSD_INT_MAX,
   childElements,
   hasBlockChild,
   isElement,
@@ -26,6 +27,7 @@ import { sanitizeXmlText } from './sanitize';
 import {
   DOCX_NUM_ID_ATTRIBUTE,
   DOCX_STYLE_ATTRIBUTE,
+  HEADING_NUMBERING_REFERENCE,
   LIST_INDENT,
   NUM_INDENT_ATTRIBUTE,
   STYLE_IDS,
@@ -160,11 +162,13 @@ function applyParagraphLayout(
   }
 
   const borders: MutableBorders = {};
-  for (const [side, border] of parseBorders(style)) {
-    if (border) borders[side] = borderOptions(border, side === 'top' || side === 'bottom');
+  const parsed = Array.from(parseBorders(style)).filter(([, border]) => border !== null);
+  const sides = new Set(parsed.map(([side]) => side));
+  for (const [side, border] of parsed) {
+    if (border) borders[side] = borderOptions(border, side, sides);
   }
   const between = parseBorder(element.getAttribute(BORDER_BETWEEN_ATTRIBUTE) ?? undefined);
-  if (between) borders.between = borderOptions(between, true);
+  if (between) borders.between = borderOptions(between, 'between', sides);
   if (Object.keys(borders).length > 0) options.border = borders;
 
   const shading = parseColor(style.get('background-color'));
@@ -220,7 +224,17 @@ async function inlineParagraph(
   return new ctx.docx.Paragraph(options);
 }
 
-/** Titre `h1`..`h6`. Numéroté quand il ouvre un `li`, pour que la puce ne soit pas perdue. */
+/** Rang d'un titre `h1`..`h6` (0-5), `-1` pour tout autre tag. */
+function headingIndex(tag: string): number {
+  return /^h[1-6]$/.test(tag) ? Number(tag.slice(1)) - 1 : -1;
+}
+
+/**
+ * Titre `h1`..`h6`. Numéroté quand il ouvre un `li`, pour que la puce ne soit pas perdue.
+ * En export dans le gabarit avec `numberedHeadings`, la numérotation des titres est
+ * posée en `w:numPr` direct sur le paragraphe (`ctx.headingNumbering`) : les styles
+ * `Heading n` du gabarit ne sont jamais modifiés, elle ne peut pas y vivre.
+ */
 async function heading(
   element: Element,
   scope: BlockScope,
@@ -228,8 +242,13 @@ async function heading(
   numbered = false,
 ): Promise<Paragraph> {
   const options = paragraphOptions(element, scope, ctx, numbered);
+  const tag = tagOf(element);
   // Un style Word d'origine (`data-docx-style`) prime sur le style `Heading n` de l'export.
-  if (!options.style) options.heading = headingLevel(tagOf(element), ctx);
+  if (!options.style) options.heading = headingLevel(tag, ctx);
+  const index = headingIndex(tag);
+  if (!options.numbering && ctx.headingNumbering && index < ctx.headingNumbering.levels) {
+    options.numbering = { reference: HEADING_NUMBERING_REFERENCE, level: index };
+  }
   options.children = await inlineChildren(
     Array.from(element.childNodes),
     ctx,
@@ -373,7 +392,8 @@ async function list(element: Element, scope: BlockScope, ctx: ExportContext): Pr
   const ordered = tagOf(element) === 'ol';
   const kind = ordered ? listKindFromType(element.getAttribute('type')) : 'bullet';
   let level = Math.min(scope.list ? scope.list.level + 1 : 0, 8);
-  const start = ordered ? (positiveIntAttribute(element, 'start') ?? 1) : 1;
+  // `w:start` / `w:startOverride` sont des `ST_DecimalNumber` (xsd:int) : borné à 2^31 - 1.
+  const start = ordered ? (positiveIntAttribute(element, 'start', XSD_INT_MAX) ?? 1) : 1;
   // `data-docx-num-id` : numérotation du gabarit à réutiliser (export dans le gabarit seulement).
   const templateNumId = element.getAttribute(DOCX_NUM_ID_ATTRIBUTE)?.trim() || undefined;
   if (templateNumId && ctx.template) {

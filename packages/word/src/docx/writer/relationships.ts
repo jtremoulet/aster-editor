@@ -6,13 +6,15 @@ import { directoryOf, type PartStore } from './xml-io';
  * pour la greffe : les identifiants du corps généré (`rId1`… attribués par la lib `docx`
  * à partir de 1) entrent en collision avec ceux du gabarit, chaque relation du corps est
  * donc **remappée** : réutilisation d'une relation du gabarit de même type et même cible
- * quand elle existe, sinon ajout sous un identifiant libre.
+ * quand elle existe, sinon ajout sous un identifiant libre. Un fichier `.rels` absent
+ * n'est créé qu'au premier ajout : une partie sans relation n'en reçoit pas de vide.
  */
 
 /** Espace de noms des fichiers `.rels`. */
 export const RELATIONSHIPS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 const OFFICE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PACKAGE_RELATIONSHIPS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 /** Types de relations manipulés par la greffe. */
 export const REL_TYPE = {
@@ -21,8 +23,11 @@ export const REL_TYPE = {
   numbering: `${OFFICE_RELATIONSHIPS}/numbering`,
   footnotes: `${OFFICE_RELATIONSHIPS}/footnotes`,
   styles: `${OFFICE_RELATIONSHIPS}/styles`,
+  settings: `${OFFICE_RELATIONSHIPS}/settings`,
   header: `${OFFICE_RELATIONSHIPS}/header`,
   footer: `${OFFICE_RELATIONSHIPS}/footer`,
+  /** Propriétés du document (`docProps/core.xml`), relation du paquet (`_rels/.rels`). */
+  coreProperties: `${PACKAGE_RELATIONSHIPS}/metadata/core-properties`,
 } as const;
 
 /** Une relation : identifiant, type, cible telle qu'écrite, cible résolue en chemin du zip. */
@@ -36,7 +41,9 @@ export interface RelationshipEntry {
 
 const EMPTY_RELS = `<Relationships xmlns="${RELATIONSHIPS_NS}"/>`;
 
-/** Table des relations d'une partie, créée vide si le fichier `.rels` manque. */
+const DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+
+/** Table des relations d'une partie, créée (en mémoire) vide si le fichier `.rels` manque. */
 export class RelationshipTable {
   private readonly entries = new Map<string, RelationshipEntry>();
   private nextNumber = 1;
@@ -46,6 +53,8 @@ export class RelationshipTable {
     readonly path: string,
     private readonly partPath: string,
     private readonly doc: Document,
+    /** Vrai tant que le `.rels` n'existe pas dans le paquet : il sera créé au premier ajout. */
+    private missing: boolean,
   ) {
     for (const rel of Array.from(doc.documentElement.children)) {
       if (rel.localName !== 'Relationship') continue;
@@ -68,13 +77,9 @@ export class RelationshipTable {
   /** Ouvre les relations de `partPath`. Un `.rels` absent ou illisible donne une table vide. */
   static async open(store: PartStore, partPath: string): Promise<RelationshipTable> {
     const path = relsPathOf(partPath);
-    let doc = await store.dom(path);
-    if (!doc) {
-      const parsed = store.parse(EMPTY_RELS);
-      store.create(path, parsed, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
-      doc = parsed;
-    }
-    return new RelationshipTable(store, path, partPath, doc);
+    const existing = await store.dom(path);
+    const doc = existing ?? store.parse(EMPTY_RELS);
+    return new RelationshipTable(store, path, partPath, doc, existing === null);
   }
 
   get(id: string): RelationshipEntry | undefined {
@@ -110,7 +115,12 @@ export class RelationshipTable {
     if (external) element.setAttribute('TargetMode', 'External');
     this.doc.documentElement.appendChild(element);
     this.entries.set(id, { id, type, target: written, resolved: target, external });
-    await this.store.markChanged(this.path);
+    if (this.missing) {
+      this.store.create(this.path, this.doc, DECLARATION);
+      this.missing = false;
+    } else {
+      await this.store.markChanged(this.path);
+    }
     return id;
   }
 

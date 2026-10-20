@@ -93,6 +93,9 @@ export function hasBlockChild(element: Element): boolean {
   return childElements(element).some((child) => BLOCK_TAGS.includes(tagOf(child)));
 }
 
+/** Plus grand `xsd:int` (`ST_DecimalNumber` d'OOXML) : Word refuse au-delà. */
+export const XSD_INT_MAX = 2_147_483_647;
+
 /**
  * Attribut entier strictement positif (`colspan`, `rowspan`, `start`), `null` sinon.
  * Borné à `max` quand il est donné : un `colspan="1000000"` ferait allouer autant de

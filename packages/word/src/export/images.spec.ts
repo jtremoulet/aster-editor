@@ -18,6 +18,7 @@ async function context(overrides: Partial<ExportContext> = {}): Promise<ExportCo
     knownStyles: new Set(),
     template: false,
     templateNumbering: null,
+    headingNumbering: null,
     ...overrides,
   };
 }

@@ -150,6 +150,172 @@ export function finalSectPr(xml: string): string {
   return matches?.[matches.length - 1] ?? '';
 }
 
+const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/** Attribut dans l'espace de noms de l'élément, chaîne vide si absent. */
+function attr(element: Element, name: string): string {
+  return element.getAttributeNS(element.namespaceURI, name) ?? element.getAttribute(name) ?? '';
+}
+
+/** Chemin de zip d'une cible de relation, segments `.`/`..` repliés. */
+function resolveRelTarget(relsPath: string, target: string): string {
+  const dir = relsPath.replace(/_rels\/[^/]+$/, '');
+  const raw = target.startsWith('/') ? target.slice(1) : `${dir}${target}`;
+  const out: string[] = [];
+  for (const segment of raw.split('/')) {
+    if (segment === '..') out.pop();
+    else if (segment !== '.' && segment !== '') out.push(segment);
+  }
+  return out.join('/');
+}
+
+/**
+ * Validateur d'intégrité d'un paquet produit (protocole de la relecture R27) : chaque
+ * partie XML parse et garde sa déclaration, `[Content_Types].xml` couvre chaque partie
+ * sans doublon ni cible absente, relations à `Id` uniques et cibles internes existantes,
+ * chaque `r:id`/`r:embed`/`r:link` du corps résolu, chaque `w:numId` → `w:num`, chaque
+ * `abstractNumId` → `w:abstractNum`, chaque `pStyle`/`rStyle`/`tblStyle` → `styles.xml`
+ * (styles intégrés de Word tolérés : `ignoredStyles`), chaque `footnoteReference` →
+ * `footnotes.xml`, identifiants de notes et de styles uniques. Rend la liste des problèmes.
+ */
+export function checkIntegrity(
+  parts: ReadonlyMap<string, Uint8Array>,
+  ignoredStyles: ReadonlySet<string> = new Set(),
+): string[] {
+  const problems: string[] = [];
+  const parser = new DOMParser();
+  const docs = new Map<string, Document>();
+  for (const name of parts.keys()) {
+    if (!/\.(xml|rels)$/i.test(name)) continue;
+    const xml = textOf(parts, name);
+    const doc = parser.parseFromString(xml, 'application/xml');
+    if (doc.documentElement.localName === 'parsererror') problems.push(`XML invalide : ${name}`);
+    else docs.set(name, doc);
+    if (!xml.startsWith('<?xml') && !name.startsWith('customXml/')) {
+      problems.push(`déclaration XML absente : ${name}`);
+    }
+  }
+  const types = docs.get('[Content_Types].xml');
+  if (!types) problems.push('[Content_Types].xml absent ou invalide');
+  else {
+    const defaults = new Set<string>();
+    const overrides = new Set<string>();
+    for (const child of Array.from(types.documentElement.children)) {
+      if (child.localName === 'Default') {
+        defaults.add((child.getAttribute('Extension') ?? '').toLowerCase());
+      } else if (child.localName === 'Override') {
+        const partName = child.getAttribute('PartName') ?? '';
+        if (overrides.has(partName)) problems.push(`Override en double : ${partName}`);
+        overrides.add(partName);
+      }
+    }
+    for (const name of parts.keys()) {
+      if (name === '[Content_Types].xml') continue;
+      const extension = name.split('.').pop()?.toLowerCase() ?? '';
+      if (!overrides.has(`/${name}`) && !defaults.has(extension)) {
+        problems.push(`sans type de contenu : ${name}`);
+      }
+    }
+    for (const partName of overrides) {
+      if (!parts.has(partName.slice(1)))
+        problems.push(`Override vers partie absente : ${partName}`);
+    }
+  }
+  for (const [name, doc] of docs) {
+    if (!name.endsWith('.rels')) continue;
+    const ids = new Set<string>();
+    for (const rel of Array.from(doc.documentElement.children)) {
+      const id = rel.getAttribute('Id') ?? '';
+      if (ids.has(id)) problems.push(`${name} : Id en double ${id}`);
+      ids.add(id);
+      if (rel.getAttribute('TargetMode') === 'External') continue;
+      const target = rel.getAttribute('Target') ?? '';
+      if (!parts.has(resolveRelTarget(name, target))) {
+        problems.push(`${name} : cible absente ${target}`);
+      }
+    }
+  }
+  const main = docs.get('word/document.xml');
+  if (!main) return problems;
+  const relIds = new Set<string>();
+  const rels = docs.get('word/_rels/document.xml.rels');
+  if (rels) {
+    for (const rel of Array.from(rels.documentElement.children)) {
+      relIds.add(rel.getAttribute('Id') ?? '');
+    }
+  }
+  for (const element of Array.from(main.getElementsByTagNameNS('*', '*'))) {
+    for (const attribute of Array.from(element.attributes)) {
+      if (
+        attribute.namespaceURI === R_NS &&
+        ['id', 'embed', 'link'].includes(attribute.localName) &&
+        !relIds.has(attribute.value)
+      ) {
+        problems.push(
+          `corps : ${element.localName} r:${attribute.localName}="${attribute.value}" sans relation`,
+        );
+      }
+    }
+  }
+  const numIds = new Set<string>();
+  const abstractIds = new Set<string>();
+  const numbering = docs.get('word/numbering.xml');
+  if (numbering) {
+    for (const child of Array.from(numbering.documentElement.children)) {
+      if (child.localName === 'num') {
+        const id = attr(child, 'numId');
+        if (numIds.has(id)) problems.push(`numbering : numId en double ${id}`);
+        numIds.add(id);
+      } else if (child.localName === 'abstractNum') {
+        const id = attr(child, 'abstractNumId');
+        if (abstractIds.has(id)) problems.push(`numbering : abstractNumId en double ${id}`);
+        abstractIds.add(id);
+      }
+    }
+    for (const reference of Array.from(numbering.getElementsByTagNameNS('*', 'abstractNumId'))) {
+      const value = attr(reference, 'val');
+      if (!abstractIds.has(value)) problems.push(`numbering : abstractNumId ${value} introuvable`);
+    }
+  }
+  for (const reference of Array.from(main.getElementsByTagNameNS('*', 'numId'))) {
+    const value = attr(reference, 'val');
+    if (value !== '0' && !numIds.has(value)) problems.push(`corps : numId ${value} introuvable`);
+  }
+  const styleIds = new Set<string>();
+  const styles = docs.get('word/styles.xml');
+  if (styles) {
+    for (const style of Array.from(styles.documentElement.children)) {
+      if (style.localName !== 'style') continue;
+      const id = attr(style, 'styleId');
+      if (styleIds.has(id)) problems.push(`styles : styleId en double ${id}`);
+      styleIds.add(id);
+    }
+  }
+  for (const name of ['pStyle', 'rStyle', 'tblStyle']) {
+    for (const reference of Array.from(main.getElementsByTagNameNS('*', name))) {
+      const value = attr(reference, 'val');
+      if (!styleIds.has(value) && !ignoredStyles.has(value)) {
+        problems.push(`corps : ${name} ${value} introuvable`);
+      }
+    }
+  }
+  const noteIds = new Set<string>();
+  const footnotes = docs.get('word/footnotes.xml');
+  if (footnotes) {
+    for (const note of Array.from(footnotes.documentElement.children)) {
+      if (note.localName !== 'footnote') continue;
+      const id = attr(note, 'id');
+      if (noteIds.has(id)) problems.push(`footnotes : id en double ${id}`);
+      noteIds.add(id);
+    }
+  }
+  for (const reference of Array.from(main.getElementsByTagNameNS('*', 'footnoteReference'))) {
+    const value = attr(reference, 'id');
+    if (!noteIds.has(value)) problems.push(`corps : footnoteReference ${value} introuvable`);
+  }
+  return problems;
+}
+
 /** Blocs de premier niveau du corps (`<w:p>`, `<w:tbl>`), hors `w:sectPr`. */
 export function topLevelBlocks(body: string): string[] {
   const blocks: string[] = [];

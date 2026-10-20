@@ -24,25 +24,30 @@ const TEMPLATE_TARGET_SCORE = 0.98;
 /** Seuil bas de l'aller-retour sans gabarit : l'export neuf perd volontairement les parties annexes. */
 const ROUNDTRIP_MIN_SCORE = 0.3;
 
-/** Fixtures qui atteignent la cible dans le gabarit (score 1 mesuré le 20/10/2026). */
-const TEMPLATE_AT_TARGET = ['11-styles-inline.docx', '13-styles-nommes.docx'];
+/**
+ * Fixtures qui atteignent la cible dans le gabarit (mesure du 20/10/2026, L28c : le
+ * comparateur mesure le rendu de Word, pas la forme XML — bordures effectives, saut de page
+ * comme frontière de bloc, champs de fusion par nom, largeurs à ±0,5 pt), avec les seules
+ * propriétés encore perdues, réelles et hors périmètre du comparateur :
+ * - `11-styles-inline` (1) et `13-styles-nommes` (1) et `15-listes-numerotation` (1) : rien.
+ * - `12-paragraphes` (0,990) : `paragraph.text` ×1 — `w:tab` lu comme un espace par
+ *   l'import (« paragraphe\ttexte » → « paragraphe texte »).
+ * - `14-tableaux-riches` (0,998) : `table.align` ×1 — centrage du tableau 2 (`w:jc center`)
+ *   perdu par le writer.
+ */
+const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
+  '11-styles-inline.docx': [],
+  '12-paragraphes.docx': ['paragraph.text'],
+  '13-styles-nommes.docx': [],
+  '14-tableaux-riches.docx': ['table.align'],
+  '15-listes-numerotation.docx': [],
+};
 
 /**
- * Fixtures sous la cible dans le gabarit, avec le score mesuré le 20/10/2026 (L28b). Les
+ * Fixtures sous la cible dans le gabarit, avec le score mesuré le 20/10/2026 (L28c). Les
  * parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
  * viennent du lecteur (`reader/**`) ou du writer (`writer/**`, `export/**`), hors
  * périmètre du comparateur :
- * - `12-paragraphes` (0,970) : `paragraph.text` ×3 — `w:tab` lu comme un espace par
- *   l'import (« paragraphe\ttexte » → « paragraphe texte ») ; `w:br w:type="page"` en fin
- *   de paragraphe réécrit comme paragraphe séparé (`<hr data-page-break>`).
- * - `14-tableaux-riches` (0,930) : `table.cellBorders` ×22, `table.borders` ×3,
- *   `table.cellWidth` ×4, `table.align` ×1 — le writer distribue `insideH`/`insideV` du
- *   tableau sur les `tcBorders` de chaque cellule (rendu identique, propriété déplacée),
- *   ajoute une largeur (60 pt) aux cellules du tableau imbriqué et perd le centrage du
- *   tableau 2 (`w:jc center`).
- * - `15-listes-numerotation` (0,917) : `table.borders` ×1, `table.cellBorders` ×2,
- *   `table.cellWidth` ×2, `table.columnWidths` ×1 — même distribution des bordures, et
- *   largeurs 225,65 pt → 225,75 pt (passage par des pixels entiers).
  * - `16-sections` (0,756) : `section.count` 2 → 1, `section.pgSz`, `section.pgMar`,
  *   `section.cols`, `section.type`, `section.titlePg`, `header.*`, `footer.*` — l'import ne
  *   restitue que la dernière section (`layout`), le `w:sectPr` de la section 1 disparaît et
@@ -58,24 +63,21 @@ const TEMPLATE_AT_TARGET = ['11-styles-inline.docx', '13-styles-nommes.docx'];
  * `it.fails` échoue : la déplacer dans `TEMPLATE_AT_TARGET`.
  */
 const TEMPLATE_BELOW_TARGET: Readonly<Record<string, number>> = {
-  '12-paragraphes.docx': 0.96,
-  '14-tableaux-riches.docx': 0.92,
-  '15-listes-numerotation.docx': 0.9,
   '16-sections.docx': 0.74,
   '17-objets-perdus.docx': 0.93,
 };
 
 /**
- * Document client dans le gabarit : 0,830 mesuré le 20/10/2026. Pertes : `paragraph.text`
- * ×39 (espaces finaux retirés, champs `MERGEFIELD` « «Nom» » réécrits en `{{Nom}}` par le
- * mode `placeholders`), `run.*` ×23 sur ces mêmes paragraphes (runs non alignables),
- * `table.cellWidth` ×41 et `table.columnWidths` ×8 (93,95 pt → 93,75 pt, pixels entiers),
- * `table.borders` ×7 et `table.cellBorders` ×10 (bordures intérieures distribuées),
- * `section.count` 3 → 1 et `section.pgMar` (distance du pied 22,85 pt → 0), `run.runStyle`
- * / `run.underline` ajoutés sur un lien (`Lienhypertexte`). Toutes hors périmètre du
+ * Document client dans le gabarit : 0,889 mesuré le 20/10/2026 (L28c ; 0,830 en L28b).
+ * Pertes restantes, toutes réelles : `paragraph.text` ×21 (espaces finaux retirés à
+ * l'export), `run.*` ×2 (runs réduits à un espace, retirés avec lui), `table.cellBorders`
+ * ×8 (`w:tcBorders` à `nil` du document oubliés par le writer : la bordure du style
+ * `Grilledutableau` réapparaît ; traits gris `#BFBFBF` réécrits en noir), `section.count`
+ * 3 → 1 et `section.pgMar` (distance du pied 22,85 pt → 0), `run.runStyle` /
+ * `run.underline` ajoutés sur un lien (`Lienhypertexte`). Toutes hors périmètre du
  * comparateur (lecteur, writer).
  */
-const CLIENT_TEMPLATE_FLOOR = 0.8;
+const CLIENT_TEMPLATE_FLOOR = 0.869;
 
 function fixture(name: string): ArrayBuffer {
   const bytes = readFileSync(join(DIR, name));
@@ -159,11 +161,15 @@ describe('compareDocx sur les fixtures de mise en page', () => {
     },
   );
 
-  it.each(TEMPLATE_AT_TARGET)('%s aller-retour dans le gabarit : score >= 0,98', async (name) => {
-    const report = await templateReport(name);
-    expect(report.score).toBeGreaterThanOrEqual(TEMPLATE_TARGET_SCORE);
-    expect(report.properties.filter((p) => p.lost > 0)).toEqual([]);
-  });
+  it.each(Object.entries(TEMPLATE_AT_TARGET))(
+    '%s aller-retour dans le gabarit : score >= 0,98, seules les pertes documentées',
+    async (name, allowed) => {
+      const report = await templateReport(name);
+      expect(report.score).toBeGreaterThanOrEqual(TEMPLATE_TARGET_SCORE);
+      const lost = report.properties.filter((p) => p.lost > 0).map((p) => p.name);
+      expect(lost).toEqual(allowed);
+    },
+  );
 
   // Cible non atteinte, causes hors périmètre du comparateur : voir TEMPLATE_BELOW_TARGET.
   it.fails.each(Object.keys(TEMPLATE_BELOW_TARGET))(

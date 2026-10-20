@@ -36,16 +36,36 @@ export const DOCX_NUM_ID_ATTRIBUTE = 'data-docx-num-id';
 export const NUM_INDENT_ATTRIBUTE = 'data-docx-num-indent';
 
 /**
- * Bordure CSS → `IBorderOptions` : épaisseur en huitièmes de point, couleur `RRGGBB`,
- * espace texte-trait aux valeurs usuelles de Word (1 pt en haut et en bas, 4 pt sur les
- * côtés), que l'import ne lit pas. Le style `solid` du contrat est le `single` de Word.
+ * Espace texte-trait (`w:space`, en points) d'une bordure de paragraphe. Le contrat
+ * `BlockBorder` ne le porte pas et l'import ne le lit pas : on reprend la valeur que Word
+ * écrit lui-même. Par défaut **1 pt** sur chaque côté : c'est ce que Word donne à un
+ * encadré (bordure haute ou basse présente, fixture 12 : quatre côtés à `w:space="1"`),
+ * et un filet horizontal seul en a autant. Seul un filet vertical **seul** (barre de
+ * citation à gauche ou à droite, sans bordure haute ni basse) prend les **4 pt** du
+ * réglage par défaut de Word pour ce cas, faute d'original connu. `sides` est l'ensemble
+ * des côtés bordés du paragraphe.
  */
-export function borderOptions(border: CssBorder, horizontal: boolean): IBorderOptions {
+export function paragraphBorderSpace(side: string, sides: ReadonlySet<string>): number {
+  const vertical = side === 'left' || side === 'right';
+  return vertical && !sides.has('top') && !sides.has('bottom') ? 4 : 1;
+}
+
+/**
+ * Bordure CSS → `IBorderOptions` : épaisseur en huitièmes de point, couleur `RRGGBB`,
+ * espace texte-trait selon `paragraphBorderSpace` (`sides` = côtés bordés du bloc ; pour
+ * une cellule, un ensemble vide donne 1 pt partout). Le style `solid` du contrat est le
+ * `single` de Word.
+ */
+export function borderOptions(
+  border: CssBorder,
+  side: string,
+  sides: ReadonlySet<string> = new Set(),
+): IBorderOptions {
   return {
     style: border.style === 'solid' ? 'single' : border.style,
     size: Math.max(2, Math.round(border.widthPt * 8)),
     color: border.color,
-    space: horizontal ? 1 : 4,
+    space: paragraphBorderSpace(side, sides),
   };
 }
 
@@ -168,12 +188,16 @@ function headingLevelText(level: number, format: HeadingNumbering['format']): st
  * le format à chaque niveau (`%1.`, `%2.`…) pour rester lisibles dans Word. Le `start`
  * de la liste est posé sur le niveau qu'elle occupe ; `docx` le recopie en
  * `startOverride` de l'instance quand c'est le niveau 0. S'y ajoute la numérotation
- * des titres, dont chaque niveau est lié au style `Heading n` (`w:pStyle`).
+ * des titres, dont chaque niveau est lié au style `Heading n` (`w:pStyle`) en export
+ * neuf ; en export dans le gabarit (`linkHeadingStyles` faux), les styles du gabarit ne
+ * sont pas modifiés et ses identifiants peuvent différer : les niveaux ne sont liés à
+ * aucun style, chaque titre porte sa numérotation en `w:numPr` direct.
  */
 export function buildNumbering(
   docx: DocxModule,
   lists: readonly ListDefinition[],
   headings: HeadingNumbering | null = null,
+  linkHeadingStyles = true,
 ): INumberingOptions {
   const { AlignmentType, LevelFormat } = docx;
   const formats: Record<ListKind, (typeof LevelFormat)[keyof typeof LevelFormat]> = {
@@ -210,7 +234,7 @@ export function buildNumbering(
         text: headingLevelText(level, headings.format),
         alignment: AlignmentType.LEFT,
         ...(headings.format === 'legal' ? { isLegalNumberingStyle: true } : {}),
-        style: { style: `Heading${String(level + 1)}` },
+        ...(linkHeadingStyles ? { style: { style: `Heading${String(level + 1)}` } } : {}),
       })),
     });
   }

@@ -1,4 +1,5 @@
 import type { DocumentLayout, HeaderFooterSet } from '@aster-editor/core';
+import type { DocxExportWarning } from '../../export/types';
 import { allNamed, childNamed } from '../preprocess/xml-utils';
 import { PART_CONTENT_TYPES } from './content-types';
 import type { MediaCopier } from './media';
@@ -13,7 +14,10 @@ import { directoryOf, setWordAttr, wordAttr, type PartStore } from './xml-io';
  * `header-footer.ts`) est copiée dans le gabarit sous un nom libre, ses relations
  * (images, liens) et ses styles greffés comme ceux du corps, et le `w:sectPr` final
  * pointe dessus à la place de l'ancienne. Un type identique ou absent du `layout` laisse
- * la partie du gabarit intacte à l'octet ; l'ancienne partie n'est jamais supprimée.
+ * la partie du gabarit intacte à l'octet ; l'ancienne partie n'est jamais supprimée. Sans
+ * `w:sectPr` final dans le gabarit, rien ne peut être accroché : avertissement
+ * `template-section-missing`. Un type `even` greffé est signalé à l'appelant, qui doit
+ * activer `w:evenAndOddHeaders` dans `settings.xml` pour que Word l'affiche.
  */
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -45,6 +49,13 @@ export interface HeaderFooterGraftInput {
   readonly templateFooters: HeaderFooterSet | undefined;
   /** `Override` à ajouter à `[Content_Types].xml` pour les parties créées. */
   readonly overrides: Map<string, string>;
+  readonly warnings: DocxExportWarning[];
+}
+
+/** Issue de la greffe : parties créées, et si l'une d'elles est de type `even`. */
+export interface HeaderFooterGraftResult {
+  readonly created: readonly string[];
+  readonly even: boolean;
 }
 
 /** HTML comparable : blancs réduits, blancs collés aux balises retirés. */
@@ -71,10 +82,27 @@ function freePartPath(store: PartStore, mainPart: string, kind: Kind): string {
   }
 }
 
-/** Greffe les en-têtes et pieds régénérés. Rend les chemins des parties créées. */
-export async function graftHeadersFooters(input: HeaderFooterGraftInput): Promise<string[]> {
+/** Vrai si le `layout` demande au moins un en-tête ou un pied. */
+function wantsHeadersFooters(layout: DocumentLayout | undefined): boolean {
+  return Boolean(layout?.headers || layout?.footers);
+}
+
+/** Greffe les en-têtes et pieds régénérés. */
+export async function graftHeadersFooters(
+  input: HeaderFooterGraftInput,
+): Promise<HeaderFooterGraftResult> {
   const created: string[] = [];
-  if (!input.layout || !input.sectPr || !input.generatedSectPr) return created;
+  let even = false;
+  if (!wantsHeadersFooters(input.layout)) return { created, even };
+  if (!input.sectPr) {
+    input.warnings.push({
+      code: 'template-section-missing',
+      message:
+        'Gabarit sans w:sectPr final : les en-têtes et pieds de layout ne peuvent pas y être accrochés, ignorés',
+    });
+    return { created, even };
+  }
+  if (!input.layout || !input.generatedSectPr) return { created, even };
   for (const kind of KINDS) {
     const wanted = kind === 'header' ? input.layout.headers : input.layout.footers;
     const existing = kind === 'header' ? input.templateHeaders : input.templateFooters;
@@ -85,10 +113,12 @@ export async function graftHeadersFooters(input: HeaderFooterGraftInput): Promis
       const current = existing?.[type]?.html;
       if (current !== undefined && normalizeHtml(current) === normalizeHtml(html)) continue;
       const path = await graftOne(input, kind, type);
-      if (path) created.push(path);
+      if (!path) continue;
+      created.push(path);
+      if (type === 'even') even = true;
     }
   }
-  return created;
+  return { created, even };
 }
 
 /** Copie la partie générée d'un type dans le gabarit et y fait pointer le `w:sectPr`. */
@@ -126,12 +156,17 @@ async function graftOne(
       if (id !== null) attribute.value = id;
     }
   }
-  for (const reference of allNamed(doc, 'pStyle').concat(allNamed(doc, 'rStyle'))) {
-    const styleId = wordAttr(reference, 'val');
-    if (!styleId) continue;
-    const ensured = await input.styles.ensure(styleId);
-    if (ensured.status === 'missing') reference.remove();
-    else if (ensured.id !== styleId) setWordAttr(reference, 'val', ensured.id);
+  for (const [name, expected] of [
+    ['pStyle', 'paragraph'],
+    ['rStyle', 'character'],
+  ] as const) {
+    for (const reference of allNamed(doc, name)) {
+      const styleId = wordAttr(reference, 'val');
+      if (!styleId) continue;
+      const ensured = await input.styles.ensure(styleId, expected);
+      if (ensured.status === 'missing') reference.remove();
+      else if (ensured.id !== styleId) setWordAttr(reference, 'val', ensured.id);
+    }
   }
   for (const paragraph of allNamed(doc, 'p')) input.styles.stripParagraph(paragraph);
   input.template.create(path, doc, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');

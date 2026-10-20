@@ -25,7 +25,9 @@ const NOTES: readonly string[] = [
   'Une propriété est comptée quand au moins un des deux documents la pose ; une valeur ajoutée par le résultat compte comme perdue, une valeur absente des deux côtés ne compte pas. Les défauts de Word (alignement à gauche, espacement ou retrait nul, interligne simple, orientation portrait, une seule colonne) valent « absent ».',
   'Les propriétés de paragraphe et de run sont résolues (docDefaults, thème, styles) dans chacun des deux documents, sans le style de tableau : les styles conditionnels de tableau (première ligne, bandes) ne sont pas comparés.',
   'Images : nombre et dimensions (±1 px) seulement ; habillage, position des images ancrées et octets des médias (couverts par les parties du paquet) ne sont pas comparés.',
-  'Champs (fusion, page, date…) : seul le texte de résultat est comparé, pas l’instruction. Tabulations comparées comme caractère, taquets ignorés.',
+  'Tableaux : bordures effectives telles que Word les rend (style de tableau, puis `w:tblBorders` selon la position de la cellule dans la grille, puis `w:tcBorders`, `nil` efface) ; côté tableau seules les bordures extérieures sont comparées. Largeur de cellule effective (`w:tcW`, sinon les colonnes de grille couvertes) ; largeurs de colonnes et de cellules à ±0,5 pt.',
+  'Saut de page explicite (`w:br w:type="page"`) : frontière de bloc, pas un caractère ; le paragraphe qui le précède porte `paragraph.pageBreakAfter`, un paragraphe réduit au saut se replie sur le précédent.',
+  'Champs de fusion (`MERGEFIELD` simple ou complexe) : modélisés par leur nom et leur résultat ; le texte du paragraphe inclut le résultat affiché par Word, `field.mergeField` compare la liste ordonnée des noms, et un `{{nom}}` en clair vaut un champ de même nom. Autres champs (page, date…) : seul le texte de résultat est comparé. Tabulations comparées comme caractère, taquets ignorés.',
   'Révisions : le texte inséré est lu, le texte supprimé ignoré ; commentaires, signets, `w:proofErr` et `w:lastRenderedPageBreak` ne sont jamais comparés.',
 ];
 
@@ -103,12 +105,17 @@ function compareSections(a: DocumentModel, b: DocumentModel, ctx: CompareContext
         const partWhere = `${where} ${kind === 'header' ? 'en-tête' : 'pied'} ${type}`;
         const expected = part ? headerFooterSummary(part) : undefined;
         const actual = otherPart ? headerFooterSummary(otherPart) : undefined;
+        // Même tolérance que pour le corps : `{{nom}}` en clair vaut un champ de fusion.
+        const sameText =
+          expected !== undefined &&
+          actual !== undefined &&
+          expected.placeholderText === actual.placeholderText;
         tally.record(
           'header-footer',
           `${kind}.${type}.text`,
           partWhere,
           expected?.text ?? ABSENT,
-          actual?.text ?? ABSENT,
+          sameText ? expected.text : (actual?.text ?? ABSENT),
         );
         tally.record(
           'header-footer',

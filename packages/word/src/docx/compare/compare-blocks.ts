@@ -1,30 +1,21 @@
 import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
 import { alignSequences } from './align';
-import type {
-  BlockModel,
-  CellModel,
-  HeaderFooterModel,
-  ParagraphModel,
-  RunModel,
-  TableModel,
-} from './model';
-import type { Tally } from './tally';
-import type { FidelityPropertyGroup } from './types';
+import { MISSING, recordIfAny, type CompareContext } from './compare-context';
+import { compareTable } from './compare-tables';
+import type { BlockModel, HeaderFooterModel, ParagraphModel, RunModel } from './model';
 import { ABSENT, fmt } from './values';
 
 /**
- * Comparaison des blocs alignés : texte, style et format de paragraphe, runs (alignés par
- * texte après fusion des voisins identiques), listes, tableaux (dimensions, fusions,
- * largeurs, bordures, fonds, puis cellules récursivement), images et notes. Une propriété
- * n'est comptée que si l'un des deux côtés la pose : une valeur ajoutée par le résultat
- * compte comme perdue, une valeur absente des deux côtés ne gonfle pas le score. Un bloc
- * sans vis-à-vis perd toutes ses propriétés.
+ * Comparaison des blocs alignés : texte (avec l'équivalence `{{nom}}` / champ de fusion),
+ * champs de fusion, style et format de paragraphe (saut de page après compris), runs
+ * (alignés par texte après fusion des voisins identiques), listes, tableaux
+ * (`compare-tables.ts`, cellules récursivement), images et notes. Une propriété n'est
+ * comptée que si l'un des deux côtés la pose : une valeur ajoutée par le résultat compte
+ * comme perdue, une valeur absente des deux côtés ne gonfle pas le score. Un bloc sans
+ * vis-à-vis perd toutes ses propriétés.
  */
 
-export interface CompareContext {
-  readonly tally: Tally;
-  readonly ignoreRevisionIds: boolean;
-}
+export { MISSING, type CompareContext } from './compare-context';
 
 type ParagraphFormatKey = Exclude<
   keyof ResolvedParagraphProps,
@@ -70,24 +61,9 @@ function alignmentKey(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/** Valeur « actuelle » d'un bloc, d'une cellule ou d'un run sans vis-à-vis : tout est perdu. */
-export const MISSING = '(bloc absent)';
-
-/**
- * Compte `name` quand au moins un côté pose une valeur. `present` faux = le vis-à-vis
- * n'existe pas : l'occurrence est perdue même si la valeur attendue est vide.
- */
-function recordIfAny(
-  ctx: CompareContext,
-  group: FidelityPropertyGroup,
-  name: string,
-  where: string,
-  expected: unknown,
-  actual: unknown,
-  present = true,
-): void {
-  if (expected === undefined && actual === undefined) return;
-  ctx.tally.record(group, name, where, fmt(expected), present ? fmt(actual) : MISSING);
+/** Liste vide ramenée à `undefined` : un paragraphe sans champ ne crée pas d'occurrence. */
+function nonEmptyList(list: readonly string[] | undefined): readonly string[] | undefined {
+  return list && list.length > 0 ? list : undefined;
 }
 
 /**
@@ -189,7 +165,25 @@ export function compareParagraph(
   ctx: CompareContext,
 ): void {
   const present = b !== undefined;
-  ctx.tally.record('text', 'paragraph.text', where, a.text, b?.text ?? MISSING);
+  // Un `{{nom}}` en clair face au résultat d'un `MERGEFIELD` de même nom : texte conservé.
+  const sameText =
+    b !== undefined && (a.text === b.text || a.placeholderText === b.placeholderText);
+  ctx.tally.record(
+    'text',
+    'paragraph.text',
+    where,
+    a.text,
+    sameText ? a.text : (b?.text ?? MISSING),
+  );
+  recordIfAny(
+    ctx,
+    'text',
+    'field.mergeField',
+    where,
+    nonEmptyList(a.fields),
+    nonEmptyList(b?.fields),
+    present,
+  );
   ctx.tally.record(
     'paragraph-style',
     'paragraph.style',
@@ -217,6 +211,15 @@ export function compareParagraph(
       present,
     );
   }
+  recordIfAny(
+    ctx,
+    'paragraph-format',
+    'paragraph.pageBreakAfter',
+    where,
+    a.pageBreakAfter,
+    b?.pageBreakAfter,
+    present,
+  );
   if (!ctx.ignoreRevisionIds) {
     ctx.tally.record(
       'paragraph-format',
@@ -238,93 +241,9 @@ export function compareParagraph(
   compareNotes(a, b, where, ctx);
 }
 
-/** Fusions non triviales d'un tableau : `(ligne,colonne):gridSpan/vMerge`. */
-function merges(table: TableModel): string[] {
-  const out: string[] = [];
-  table.rows.forEach((row, r) => {
-    row.forEach((cell, c) => {
-      if (cell.colspan > 1 || cell.vMerge) {
-        out.push(
-          `(${String(r + 1)},${String(c + 1)}):${String(cell.colspan)}/${cell.vMerge ?? '-'}`,
-        );
-      }
-    });
-  });
-  return out;
-}
-
-function compareCell(
-  a: CellModel,
-  b: CellModel | undefined,
-  where: string,
-  ctx: CompareContext,
-): void {
-  const present = b !== undefined;
-  recordIfAny(ctx, 'table', 'table.cellBorders', where, a.borders, b?.borders, present);
-  recordIfAny(ctx, 'table', 'table.cellShading', where, a.shading, b?.shading, present);
-  recordIfAny(ctx, 'table', 'table.cellWidth', where, a.widthPt, b?.widthPt, present);
-  recordIfAny(
-    ctx,
-    'table',
-    'table.cellVerticalAlign',
-    where,
-    a.verticalAlign,
-    b?.verticalAlign,
-    present,
-  );
-  compareBlocks(a.blocks, b?.blocks ?? [], where, ctx);
-}
-
-/** Compare un tableau de l'original à son vis-à-vis (absent = tout perdu). */
-export function compareTable(
-  a: TableModel,
-  b: TableModel | undefined,
-  where: string,
-  ctx: CompareContext,
-): void {
-  const columns = (table: TableModel): number =>
-    Math.max(0, ...table.rows.map((row) => row.reduce((sum, cell) => sum + cell.colspan, 0)));
-  const present = b !== undefined;
-  ctx.tally.record(
-    'table',
-    'table.rows',
-    where,
-    String(a.rows.length),
-    b ? String(b.rows.length) : MISSING,
-  );
-  ctx.tally.record(
-    'table',
-    'table.columns',
-    where,
-    String(columns(a)),
-    b ? String(columns(b)) : MISSING,
-  );
-  recordIfAny(ctx, 'table', 'table.style', where, a.styleId, b?.styleId, present);
-  recordIfAny(ctx, 'table', 'table.width', where, a.width, b?.width, present);
-  recordIfAny(ctx, 'table', 'table.align', where, a.align, b?.align, present);
-  recordIfAny(ctx, 'table', 'table.borders', where, a.borders, b?.borders, present);
-  ctx.tally.record(
-    'table',
-    'table.columnWidths',
-    where,
-    fmt(a.columnWidthsPt),
-    b ? fmt(b.columnWidthsPt) : MISSING,
-  );
-  const mergesA = merges(a);
-  const mergesB = b ? merges(b) : [];
-  if (mergesA.length > 0 || mergesB.length > 0) {
-    ctx.tally.record('table', 'table.merges', where, fmt(mergesA), b ? fmt(mergesB) : MISSING);
-  }
-  a.rows.forEach((row, r) => {
-    row.forEach((cell, c) => {
-      const cellWhere = `${where} cellule (${String(r + 1)},${String(c + 1)})`;
-      compareCell(cell, b?.rows[r]?.[c], cellWhere, ctx);
-    });
-  });
-}
-
+/** Clé d'alignement d'un bloc : son texte canonique (`{{nom}}` pour les champs de fusion). */
 function blockKey(block: BlockModel): string {
-  return `${block.kind}:${alignmentKey(block.text)}`;
+  return `${block.kind}:${alignmentKey(block.placeholderText)}`;
 }
 
 /**
@@ -355,7 +274,7 @@ export function compareBlocks(
       if (a.kind === 'paragraph') {
         compareParagraph(a, b?.kind === 'paragraph' ? b : undefined, where, ctx);
       } else {
-        compareTable(a, b?.kind === 'table' ? b : undefined, where, ctx);
+        compareTable(a, b?.kind === 'table' ? b : undefined, where, ctx, compareBlocks);
       }
       // Paragraphe face à un tableau (ou l'inverse) : le bloc du résultat est un ajout.
       if (b && b.kind !== a.kind) inserted(b, whereB);
@@ -375,14 +294,27 @@ function labels(blocks: readonly BlockModel[], prefix: string, suffix: string): 
   });
 }
 
-/** Texte et format d'un en-tête ou d'un pied, en un seul bloc chacun. */
-export function headerFooterSummary(part: HeaderFooterModel): { text: string; format: string } {
+/** Texte affiché, texte canonique et format d'un en-tête ou d'un pied, en un seul bloc chacun. */
+export function headerFooterSummary(part: HeaderFooterModel): {
+  text: string;
+  placeholderText: string;
+  format: string;
+} {
   const format = part.blocks.map((block) => {
     if (block.kind === 'table') {
       return { kind: 'table', rows: block.rows.length, width: block.width, borders: block.borders };
     }
     const { runDefaults: _ignored, ...paragraph } = block.props;
-    return { kind: 'paragraph', ...paragraph, runs: block.runs.map((run) => run.props) };
+    return {
+      kind: 'paragraph',
+      ...paragraph,
+      ...(block.pageBreakAfter ? { pageBreakAfter: true } : {}),
+      runs: block.runs.map((run) => run.props),
+    };
   });
-  return { text: part.blocks.map((block) => block.text).join('\n'), format: fmt(format) };
+  return {
+    text: part.blocks.map((block) => block.text).join('\n'),
+    placeholderText: part.blocks.map((block) => block.placeholderText).join('\n'),
+    format: fmt(format),
+  };
 }

@@ -199,7 +199,7 @@ const NO_BORDER: IBorderOptions = { style: 'nil' };
 
 /** Bordure de cellule ou de tableau : CSS → `docx`, `nil` pour un côté déclaré sans trait. */
 function tableBorder(border: CssBorder | null, side: CssBorderSide): IBorderOptions {
-  return border ? borderOptions(border, side === 'top' || side === 'bottom') : NO_BORDER;
+  return border ? borderOptions(border, side) : NO_BORDER;
 }
 
 type MutableCellBorders = { -readonly [K in keyof ITableCellBorders]: ITableCellBorders[K] };

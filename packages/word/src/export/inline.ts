@@ -423,12 +423,15 @@ async function collectPieces(
 }
 
 /**
- * Applique les règles de blancs du HTML : suites d'espaces réduites à un, blancs de
- * début et de fin de bloc supprimés, espace doublé à la frontière de deux morceaux
- * supprimé. Seuls les blancs HTML (espace, tabulation, LF, CR, FF) sont concernés :
- * NBSP et espaces Unicode sont du contenu. Les morceaux devenus vides disparaissent,
- * ainsi que les sauts de ligne terminaux d'un paragraphe qui contient autre chose. Les
- * morceaux `preserved` (valeurs de variables) sont écrits tels quels.
+ * Applique les règles de blancs du HTML : suites d'espaces réduites à un, blanc de début
+ * de bloc supprimé, espace doublé à la frontière de deux morceaux supprimé. Seuls les
+ * blancs HTML (espace, tabulation, LF, CR, FF) sont concernés : NBSP et espaces Unicode
+ * sont du contenu. L'espace **final** d'un bloc est conservée (réduite à une) : dans
+ * l'éditeur `<p>Titre : </p>` est du contenu, et l'import la restitue depuis
+ * `<w:t xml:space="preserve">` ; la rogner cassait l'aller-retour. Les morceaux devenus
+ * vides disparaissent, ainsi que les sauts de ligne terminaux d'un paragraphe qui
+ * contient autre chose. Les morceaux `preserved` (valeurs de variables) sont écrits tels
+ * quels.
  */
 function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
   const result: Piece[] = [];
@@ -444,18 +447,6 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
     if (text === '') continue;
     result.push({ ...piece, text });
     atBoundary = text.endsWith(' ');
-  }
-  // Blanc de fin de bloc : on le retire du dernier morceau texte, qui peut alors disparaître.
-  for (let i = result.length - 1; i >= 0; i -= 1) {
-    const last = result[i];
-    if (!last || last.kind !== 'text' || last.preserved) break;
-    const trimmed = last.text.replace(/ $/, '');
-    if (trimmed === '') {
-      result.splice(i, 1);
-      continue;
-    }
-    result[i] = { ...last, text: trimmed };
-    break;
   }
   // `<br>` terminal : invisible en HTML quand le bloc a d'autre contenu, il ajouterait une
   // ligne vide dans Word. `<p><br></p>` garde le sien : c'est tout ce qui donne corps au paragraphe.

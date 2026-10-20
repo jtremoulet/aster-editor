@@ -103,6 +103,24 @@ describe('greffe avec modification locale', () => {
     expect(changed[0]).toBe(before[before.length - 1]?.replace('Normal', 'Final'));
   });
 
+  it('un mot changé : seul ce bloc diffère dans document.xml (fixture 11, styles inline)', async () => {
+    const template = await fixture('11-styles-inline.docx');
+    const imported = await importStyled(template);
+    const edited = imported.html.replace('Tout cumulé', 'Tout accumulé');
+    expect(edited).not.toBe(imported.html);
+    const result = await exportInTemplate(edited, template);
+    expect(result.warnings).toEqual([]);
+    expect(differingParts(await partsOf(template), result.parts)).toEqual(['word/document.xml']);
+    const before = blocksOf(textOf(await partsOf(template), 'word/document.xml'));
+    const after = blocksOf(textOf(result.parts, 'word/document.xml'));
+    expect(after.length).toBe(before.length);
+    const changed = after.filter((block, index) => block !== before[index]);
+    expect(changed).toHaveLength(1);
+    expect(changed[0]).toContain('Tout accumulé');
+    const index = after.indexOf(changed[0] ?? '');
+    expect(changed[0]).toBe(before[index]?.replace('Tout cumulé', 'Tout accumulé'));
+  });
+
   it('un mot changé dans un tableau : les autres parties restent intactes (fixture 14)', async () => {
     const template = await fixture('14-tableaux-riches.docx');
     const imported = await importStyled(template);

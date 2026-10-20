@@ -1,11 +1,5 @@
 import type { CellVerticalAlign } from '@aster-editor/core';
-import {
-  allNamed,
-  childNamed,
-  childrenNamed,
-  textOf,
-  wordAttribute,
-} from '../preprocess/xml-utils';
+import { childNamed, childrenNamed, textOf, wordAttribute } from '../preprocess/xml-utils';
 import { readDocumentLang } from '../reader/sections';
 import type {
   DocxPackage,
@@ -15,14 +9,21 @@ import type {
   StyleResolver,
   TableStyleProps,
 } from '../reader/types';
-import { emuToPx, twipsToPt } from '../reader/units';
+import { twipsToPt } from '../reader/units';
 import {
-  bordersBySide,
   numericAttribute,
   readBorders,
   shadingColor,
   type BorderMap,
 } from '../reader/units-blocks';
+import {
+  effectiveCellBorders,
+  effectiveTableBorders,
+  nonEmptyBorders,
+  type CellEdges,
+  type EffectiveBorders,
+} from './model-borders';
+import { isBlankParagraph, readParagraphs } from './model-paragraph';
 import { readSections } from './model-sections';
 
 /**
@@ -31,6 +32,8 @@ import { readSections } from './model-sections';
  * et pieds. Les `Document` du paquet ne sont jamais modifiés. Les `w:rsid*`,
  * `w:lastRenderedPageBreak`, `w:proofErr` et signets ne sont pas lus, sauf les
  * identifiants de révision du paragraphe, exposés pour l'option `ignoreRevisionIds: false`.
+ * Les bordures et largeurs de cellules sont celles que Word rend (`model-borders.ts`), les
+ * sauts de page et champs de fusion sont modélisés par `model-paragraph.ts`.
  */
 
 export interface RunModel {
@@ -51,10 +54,17 @@ export interface NoteModel {
 
 export interface ParagraphModel {
   readonly kind: 'paragraph';
+  /** Texte tel que Word l'affiche : résultat des champs, tabulations et sauts de ligne compris. */
   readonly text: string;
+  /** Texte canonique : chaque champ de fusion remplacé par `{{nom}}`, pour l'alignement et l'équivalence. */
+  readonly placeholderText: string;
+  /** Noms des champs de fusion dans l'ordre, `MERGEFIELD` et `{{nom}}` en clair confondus. */
+  readonly fields: readonly string[];
   readonly props: ResolvedParagraphProps;
   /** Format résolu du niveau de liste (`decimal|%1.|1`), `undefined` sans numérotation connue. */
   readonly listFormat?: string;
+  /** Saut de page explicite (`w:br w:type="page"`) à la fin de ce paragraphe. */
+  readonly pageBreakAfter?: true;
   readonly runs: readonly RunModel[];
   readonly images: readonly ImageModel[];
   readonly notes: readonly NoteModel[];
@@ -65,8 +75,10 @@ export interface ParagraphModel {
 export interface CellModel {
   readonly colspan: number;
   readonly vMerge?: 'restart' | 'continue';
+  /** Largeur effective : `w:tcW` en twips, sinon la somme des colonnes de grille couvertes. */
   readonly widthPt?: number;
-  readonly borders?: BorderMap;
+  /** Bordures effectives (style, tableau selon la position, cellule), côtés visibles seulement. */
+  readonly borders?: EffectiveBorders;
   readonly shading?: string;
   readonly verticalAlign?: CellVerticalAlign;
   readonly blocks: readonly BlockModel[];
@@ -75,10 +87,12 @@ export interface CellModel {
 export interface TableModel {
   readonly kind: 'table';
   readonly text: string;
+  readonly placeholderText: string;
   readonly styleId?: string;
   readonly width?: string;
   readonly align?: string;
-  readonly borders?: BorderMap;
+  /** Bordures extérieures effectives (style puis `w:tblBorders`), côtés visibles seulement. */
+  readonly borders?: EffectiveBorders;
   readonly columnWidthsPt: readonly number[];
   readonly rows: readonly (readonly CellModel[])[];
 }
@@ -137,149 +151,6 @@ async function readNotes(pkg: DocxPackage): Promise<Map<string, string>> {
   return notes;
 }
 
-function readImage(element: Element): ImageModel | null {
-  if (element.localName === 'pict') {
-    return allNamed(element, 'imagedata').length > 0 ? { kind: 'pict' } : null;
-  }
-  if (allNamed(element, 'blip').length === 0) return null;
-  const container = childNamed(element, 'anchor') ?? childNamed(element, 'inline') ?? element;
-  const extent = childNamed(container, 'extent');
-  const cx = Number(extent?.getAttribute('cx') ?? '');
-  const cy = Number(extent?.getAttribute('cy') ?? '');
-  return {
-    kind: 'drawing',
-    ...(cx > 0 ? { widthPx: emuToPx(cx) } : {}),
-    ...(cy > 0 ? { heightPx: emuToPx(cy) } : {}),
-  };
-}
-
-/** Clé de fusion de deux runs voisins : mêmes propriétés résolues. */
-function runKey(props: ResolvedRunProps): string {
-  return JSON.stringify(props, Object.keys(props).sort());
-}
-
-function readParagraph(p: Element, ctx: ModelContext): ParagraphModel {
-  const pPr = childNamed(p, 'pPr');
-  const props = ctx.styles.paragraph(pPr);
-  const runs: { text: string; props: ResolvedRunProps; key: string }[] = [];
-  const images: ImageModel[] = [];
-  const notes: NoteModel[] = [];
-  /** Champs complexes ouverts : `true` tant que le champ est en phase instruction. */
-  const fields: boolean[] = [];
-  const inInstruction = (): boolean => fields.includes(true);
-
-  const pushText = (props: ResolvedRunProps, text: string): void => {
-    if (text === '' || inInstruction()) return;
-    const key = runKey(props);
-    const last = runs[runs.length - 1];
-    if (last && last.key === key) last.text += text;
-    else runs.push({ text, props, key });
-  };
-
-  const readRun = (run: Element): void => {
-    const resolved = ctx.styles.run(childNamed(run, 'rPr'), props);
-    for (const child of Array.from(run.children)) {
-      switch (child.localName) {
-        case 't':
-          pushText(resolved, child.textContent ?? '');
-          break;
-        case 'tab':
-        case 'ptab':
-          pushText(resolved, '\t');
-          break;
-        case 'br':
-        case 'cr':
-          pushText(resolved, '\n');
-          break;
-        case 'noBreakHyphen':
-          pushText(resolved, String.fromCharCode(0x2011));
-          break;
-        case 'softHyphen':
-          pushText(resolved, String.fromCharCode(0xad));
-          break;
-        case 'sym': {
-          const code = Number.parseInt(wordAttribute(child, 'char'), 16);
-          if (Number.isFinite(code)) pushText(resolved, String.fromCodePoint(code));
-          break;
-        }
-        case 'fldChar': {
-          const type = wordAttribute(child, 'fldCharType');
-          if (type === 'begin') fields.push(true);
-          else if (type === 'separate' && fields.length > 0) fields[fields.length - 1] = false;
-          else if (type === 'end') fields.pop();
-          break;
-        }
-        case 'drawing':
-        case 'pict': {
-          const image = inInstruction() ? null : readImage(child);
-          if (image) images.push(image);
-          break;
-        }
-        case 'footnoteReference':
-        case 'endnoteReference': {
-          const kind = child.localName === 'footnoteReference' ? 'footnote' : 'endnote';
-          const id = wordAttribute(child, 'id');
-          if (id && !inInstruction()) {
-            notes.push({ kind, text: ctx.notes.get(`${kind}:${id}`) ?? '' });
-          }
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  };
-
-  const walk = (parent: Element): void => {
-    for (const child of Array.from(parent.children)) {
-      switch (child.localName) {
-        case 'r':
-          readRun(child);
-          break;
-        case 'del':
-        case 'moveFrom':
-        case 'pPr':
-        case 'bookmarkStart':
-        case 'bookmarkEnd':
-        case 'proofErr':
-        case 'commentRangeStart':
-        case 'commentRangeEnd':
-          break;
-        case 'sdt': {
-          const content = childNamed(child, 'sdtContent');
-          if (content) walk(content);
-          break;
-        }
-        default:
-          // `w:hyperlink`, `w:fldSimple`, `w:ins`, `w:smartTag`… : conteneurs traversés.
-          walk(child);
-      }
-    }
-  };
-  walk(p);
-
-  const numbering = props.numbering;
-  const level = numbering
-    ? ctx.numbering.definition(numbering.numId)?.levels.find((l) => l.level === numbering.level)
-    : undefined;
-  const revisionIds = Array.from(p.attributes)
-    .filter((attr) => attr.localName.startsWith('rsid'))
-    .map((attr) => `${attr.localName}=${attr.value}`)
-    .sort()
-    .join(' ');
-
-  return {
-    kind: 'paragraph',
-    text: runs.map((run) => run.text).join(''),
-    props,
-    ...(level ? { listFormat: `${level.format}|${level.text}|${String(level.start)}` } : {}),
-    runs: runs.map(({ text, props }) => ({ text, props })),
-    images,
-    notes,
-    revisionIds,
-  };
-}
-
 function tableWidth(tblW: Element | null): string | undefined {
   if (!tblW) return undefined;
   const type = wordAttribute(tblW, 'type');
@@ -293,27 +164,66 @@ function tableWidth(tblW: Element | null): string | undefined {
   return Number.isFinite(value) ? `${String(twipsToPt(value))}pt` : undefined;
 }
 
-function readCell(tc: Element, ctx: ModelContext, style: TableStyleProps | null): CellModel {
+/** Contexte de lecture d'une cellule : style et bordures du tableau, grille, position. */
+interface CellContext {
+  readonly style: TableStyleProps | null;
+  readonly tblBorders: BorderMap;
+  readonly gridTwips: readonly number[];
+  readonly gridStart: number;
+  readonly edges: CellEdges;
+}
+
+/**
+ * Largeur effective d'une cellule : `w:tcW` en twips quand il est posé, sinon les colonnes
+ * de grille qu'elle couvre (ce que Word rend). `pct` et `auto` sans grille : inconnue.
+ */
+function cellWidthPt(tcW: Element | null, colspan: number, cell: CellContext): number | undefined {
+  const type = tcW ? wordAttribute(tcW, 'type') : '';
+  const twips = numericAttribute(tcW, 'w');
+  if (twips !== undefined && twips > 0 && type !== 'pct' && type !== 'auto') {
+    return twipsToPt(twips);
+  }
+  if (type === 'pct') return undefined;
+  const columns = cell.gridTwips.slice(cell.gridStart, cell.gridStart + colspan);
+  if (columns.length === 0) return undefined;
+  return twipsToPt(columns.reduce((sum, width) => sum + width, 0));
+}
+
+function readCell(tc: Element, ctx: ModelContext, cell: CellContext): CellModel {
   const tcPr = childNamed(tc, 'tcPr');
   const vMergeElement = tcPr ? childNamed(tcPr, 'vMerge') : null;
   const vMergeValue = vMergeElement ? wordAttribute(vMergeElement, 'val') : null;
-  const tcW = tcPr ? childNamed(tcPr, 'tcW') : null;
-  const widthTwips = numericAttribute(tcW, 'w');
-  const tcBorders = tcPr ? childNamed(tcPr, 'tcBorders') : null;
+  const colspan = Math.max(
+    1,
+    numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1,
+  );
+  const widthPt = cellWidthPt(tcPr ? childNamed(tcPr, 'tcW') : null, colspan, cell);
+  const tcBorders = readBorders(tcPr ? childNamed(tcPr, 'tcBorders') : null);
+  const borders = nonEmptyBorders(
+    effectiveCellBorders(cell.style, cell.tblBorders, tcBorders, cell.edges),
+  );
   const vAlign = tcPr ? childNamed(tcPr, 'vAlign') : null;
   const verticalAlign = vAlign ? VERTICAL_ALIGNS.get(wordAttribute(vAlign, 'val')) : undefined;
-  const shading = shadingColor(tcPr ? childNamed(tcPr, 'shd') : null) ?? style?.cellShading;
+  const shading = shadingColor(tcPr ? childNamed(tcPr, 'shd') : null) ?? cell.style?.cellShading;
   return {
-    colspan: Math.max(1, numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1),
+    colspan,
     ...(vMergeElement ? { vMerge: vMergeValue === 'restart' ? 'restart' : 'continue' } : {}),
-    ...(tcW && widthTwips !== undefined && wordAttribute(tcW, 'type') !== 'pct'
-      ? { widthPt: twipsToPt(widthTwips) }
-      : {}),
-    ...(tcBorders ? { borders: readBorders(tcBorders) } : {}),
+    ...(widthPt !== undefined ? { widthPt } : {}),
+    ...(borders ? { borders } : {}),
     ...(shading ? { shading } : {}),
     ...(verticalAlign ? { verticalAlign } : {}),
     blocks: readBlocks(tc, ctx),
   };
+}
+
+/** Nombre de colonnes de grille d'une ligne : somme des `gridSpan`. */
+function rowSpan(tr: Element): number {
+  return childrenNamed(tr, 'tc').reduce((sum, tc) => {
+    const tcPr = childNamed(tc, 'tcPr');
+    return (
+      sum + Math.max(1, numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1)
+    );
+  }, 0);
 }
 
 function readTable(tbl: Element, ctx: ModelContext): TableModel {
@@ -322,30 +232,48 @@ function readTable(tbl: Element, ctx: ModelContext): TableModel {
   const styleId = tblStyle ? wordAttribute(tblStyle, 'val') : '';
   const jc = tblPr ? childNamed(tblPr, 'jc') : null;
   const align = jc ? wordAttribute(jc, 'val') : '';
-  const tblBorders = tblPr ? childNamed(tblPr, 'tblBorders') : null;
-  // Bordures effectives du tableau : celles du style, recouvertes par les directes.
+  const tblBorders = readBorders(tblPr ? childNamed(tblPr, 'tblBorders') : null);
   const style = ctx.styles.tableStyle(styleId || null);
-  const borders: BorderMap = { ...bordersBySide(style?.borders), ...readBorders(tblBorders) };
+  const borders = nonEmptyBorders(effectiveTableBorders(style, tblBorders));
   const grid = childNamed(tbl, 'tblGrid');
-  const columnWidthsPt = grid
+  const gridTwips = grid
     ? childrenNamed(grid, 'gridCol')
         .map((col) => numericAttribute(col, 'w'))
         .filter((w): w is number => w !== undefined)
-        .map(twipsToPt)
     : [];
-  const rows = childrenNamed(tbl, 'tr').map((tr) =>
-    childrenNamed(tr, 'tc').map((tc) => readCell(tc, ctx, style)),
-  );
-  const text = rows.map((row) => row.map((cell) => blocksText(cell.blocks)).join('\t')).join('\n');
+  const trs = childrenNamed(tbl, 'tr');
+  const columns = Math.max(gridTwips.length, ...trs.map(rowSpan));
+  const rows = trs.map((tr, r) => {
+    let gridStart = 0;
+    return childrenNamed(tr, 'tc').map((tc) => {
+      const tcPr = childNamed(tc, 'tcPr');
+      const colspan = Math.max(
+        1,
+        numericAttribute(tcPr ? childNamed(tcPr, 'gridSpan') : null, 'val') ?? 1,
+      );
+      const edges: CellEdges = {
+        top: r === 0,
+        bottom: r === trs.length - 1,
+        left: gridStart === 0,
+        right: gridStart + colspan >= columns,
+      };
+      const model = readCell(tc, ctx, { style, tblBorders, gridTwips, gridStart, edges });
+      gridStart += colspan;
+      return model;
+    });
+  });
+  const rowsText = (pick: (block: BlockModel) => string): string =>
+    rows.map((row) => row.map((cell) => cell.blocks.map(pick).join('\n')).join('\t')).join('\n');
   const width = tableWidth(tblPr ? childNamed(tblPr, 'tblW') : null);
   return {
     kind: 'table',
-    text,
+    text: rowsText((block) => block.text),
+    placeholderText: rowsText((block) => block.placeholderText),
     ...(styleId ? { styleId } : {}),
     ...(width ? { width } : {}),
     ...(align ? { align } : {}),
-    ...(Object.keys(borders).length > 0 ? { borders } : {}),
-    columnWidthsPt,
+    ...(borders ? { borders } : {}),
+    columnWidthsPt: gridTwips.map(twipsToPt),
     rows,
   };
 }
@@ -355,12 +283,31 @@ export function blocksText(blocks: readonly BlockModel[]): string {
   return blocks.map((block) => block.text).join('\n');
 }
 
+/**
+ * Ajoute un paragraphe ; un paragraphe vide qui ne porte qu'un saut de page (`<w:p><w:br
+ * w:type="page"/></w:p>`) se replie sur le paragraphe précédent, dont il marque la fin.
+ */
+function pushParagraph(blocks: BlockModel[], paragraph: ParagraphModel): void {
+  const previous = blocks[blocks.length - 1];
+  if (
+    paragraph.pageBreakAfter &&
+    isBlankParagraph(paragraph) &&
+    previous?.kind === 'paragraph' &&
+    !previous.pageBreakAfter
+  ) {
+    blocks[blocks.length - 1] = { ...previous, pageBreakAfter: true };
+    return;
+  }
+  blocks.push(paragraph);
+}
+
 /** Blocs d'un conteneur (`w:body`, `w:tc`, `w:hdr`…), `w:sdt` aplatis, le reste ignoré. */
 function readBlocks(container: Element, ctx: ModelContext): BlockModel[] {
   const blocks: BlockModel[] = [];
   for (const child of Array.from(container.children)) {
-    if (child.localName === 'p') blocks.push(readParagraph(child, ctx));
-    else if (child.localName === 'tbl') blocks.push(readTable(child, ctx));
+    if (child.localName === 'p') {
+      for (const paragraph of readParagraphs(child, ctx)) pushParagraph(blocks, paragraph);
+    } else if (child.localName === 'tbl') blocks.push(readTable(child, ctx));
     else if (child.localName === 'sdt') {
       const content = childNamed(child, 'sdtContent');
       if (content) blocks.push(...readBlocks(content, ctx));

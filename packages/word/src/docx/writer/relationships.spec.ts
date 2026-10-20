@@ -51,12 +51,16 @@ describe('RelationshipTable', () => {
     expect(xml).toContain('TargetMode="External"');
   });
 
-  it('crée un .rels vide pour une partie qui n’en a pas', async () => {
+  it('ne crée le .rels d’une partie qui n’en a pas qu’au premier ajout (R27-05)', async () => {
     const store = await storeWith({ 'word/header9.xml': '<w:hdr/>' });
     const table = await RelationshipTable.open(store, 'word/header9.xml');
     expect(table.path).toBe('word/_rels/header9.xml.rels');
+    const untouched = await JSZip.loadAsync(await store.generate());
+    expect(untouched.file('word/_rels/header9.xml.rels')).toBeNull();
     await table.add(REL_TYPE.hyperlink, 'https://example.com', true);
-    expect(await textOf(store, 'word/_rels/header9.xml.rels')).toContain('Id="rId1"');
+    const xml = await textOf(store, 'word/_rels/header9.xml.rels');
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')).toBe(true);
+    expect(xml).toContain('Id="rId1"');
   });
 
   it('écrit une cible absolue hors du dossier de la partie', () => {

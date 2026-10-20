@@ -2,15 +2,16 @@ import type { DocumentLayout } from '@aster-editor/core';
 import type { ListDefinition, VariableSettings } from '../../export/context';
 import type { DocxExportWarning } from '../../export/types';
 import { allNamed, childNamed, childrenNamed } from '../preprocess/xml-utils';
-import { createStyleResolver } from '../reader/styles';
 import { ensureContentTypes } from './content-types';
+import { writeCoreProperties } from './core-properties';
 import { createFootnoteMerger } from './footnotes-merge';
 import { graftHeadersFooters } from './header-footer-graft';
 import { resolveHeaderFooterVariables } from './header-footer-variables';
 import { MediaCopier } from './media';
 import { createNumberingMerger } from './numbering-merge';
 import { REL_TYPE, RelationshipTable } from './relationships';
-import { createStyleMerger, type StyleMerger } from './styles-merge';
+import { ensureSettings } from './settings-merge';
+import { createStyleMerger, type StyleMerger, type StyleType } from './styles-merge';
 import type { TemplateContext } from './template';
 import { PartStore, setWordAttr, wordAttr, type XmlCodec } from './xml-io';
 
@@ -19,12 +20,13 @@ import { PartStore, setWordAttr, wordAttr, type XmlCodec } from './xml-io';
  * par la chaîne d'export (lib `docx`) n'est qu'une source ; le gabarit est ouvert et
  * **aucune de ses parties n'est réécrite** sauf le corps, ses relations, les médias et
  * numérotations ajoutés, les styles ajoutés, les notes ajoutées, `[Content_Types].xml`
- * quand une partie ou une extension apparaît, et les en-têtes et pieds quand les
- * variables y sont résolues ou qu'un `layout` les régénère. Le `w:sectPr` final du
- * gabarit (en-têtes, pieds, marges, colonnes) est conservé ; un corps régénéré n'a plus
- * de sections intermédiaires : seules les propriétés de la **dernière** section
- * survivent, complétées des en-têtes et pieds que les sections précédentes lui
- * transmettaient par héritage.
+ * quand une partie ou une extension apparaît, les en-têtes et pieds quand les
+ * variables y sont résolues ou qu'un `layout` les régénère, `settings.xml` quand la
+ * table des matières ou un en-tête de pages paires l'exige, et `docProps/core.xml`
+ * quand `title` / `creator` sont fournis. Le `w:sectPr` final du gabarit (en-têtes,
+ * pieds, marges, colonnes) est conservé ; un corps régénéré n'a plus de sections
+ * intermédiaires : seules les propriétés de la **dernière** section survivent, complétées
+ * des en-têtes et pieds que les sections précédentes lui transmettaient par héritage.
  */
 
 export interface GraftInput {
@@ -36,6 +38,11 @@ export interface GraftInput {
   readonly concreteNumbering: ReadonlyMap<string, string>;
   readonly variables: VariableSettings;
   readonly layout: DocumentLayout | undefined;
+  /** Vrai avec `options.toc` : `w:updateFields` est posé dans `settings.xml`. */
+  readonly toc: boolean;
+  /** `options.title` / `options.creator`, réécrits dans `docProps/core.xml`. */
+  readonly title?: string;
+  readonly creator?: string;
   readonly codec: XmlCodec;
 }
 
@@ -61,6 +68,13 @@ const AFTER_TITLE_PAGE: ReadonlySet<string> = new Set([
   'sectPrChange',
 ]);
 
+/** Référence de style du corps → type de style qu'elle impose. */
+const STYLE_REFERENCES: ReadonlyArray<readonly [string, StyleType]> = [
+  ['pStyle', 'paragraph'],
+  ['rStyle', 'character'],
+  ['tblStyle', 'table'],
+];
+
 /**
  * Greffe le corps de `generated` dans le gabarit et rend l'archive résultante. Lève sur
  * un gabarit sans partie principale (déjà validé par `openTemplate`) ou un document
@@ -70,15 +84,17 @@ export async function graftIntoTemplate(
   input: GraftInput,
   warnings: DocxExportWarning[],
 ): Promise<ArrayBuffer> {
-  const { pkg } = input.template;
-  const template = await PartStore.open(input.template.buffer, input.codec);
-  const generated = await PartStore.open(input.generated, input.codec);
+  const { pkg, mainDoc, mainDeclaration } = input.template;
   const mainPart = pkg.mainPart;
-  const templateDoc = await template.dom(mainPart);
+  const template = await PartStore.open(input.template.buffer, input.codec);
+  // La partie principale a déjà été parsée à l'ouverture du gabarit : on la réutilise.
+  template.adopt(mainPart, mainDoc, mainDeclaration);
+  const generated = await PartStore.open(input.generated, input.codec);
+  const templateDoc = mainDoc;
   const generatedDoc = await generated.dom(GENERATED_MAIN_PART);
-  const templateBody = templateDoc ? childNamed(templateDoc.documentElement, 'body') : null;
+  const templateBody = childNamed(templateDoc.documentElement, 'body');
   const generatedBody = generatedDoc ? childNamed(generatedDoc.documentElement, 'body') : null;
-  if (!templateDoc || !templateBody) throw new Error(`gabarit : ${mainPart} sans w:body`);
+  if (!templateBody) throw new Error(`gabarit : ${mainPart} sans w:body`);
   if (!generatedDoc || !generatedBody) throw new Error('corps généré illisible');
 
   // Variables des en-têtes et pieds (mode `resolve`) : avant toute autre écriture.
@@ -93,12 +109,11 @@ export async function graftIntoTemplate(
 
   const relationships = await RelationshipTable.open(template, mainPart);
   const generatedRelationships = await RelationshipTable.open(generated, GENERATED_MAIN_PART);
-  const resolver = await createStyleResolver(pkg);
   const styles = await createStyleMerger({
     template,
     generated,
     templatePath: input.template.stylesPath,
-    resolver,
+    resolver: input.template.resolver,
     warnings,
   });
   const numbering = await createNumberingMerger({
@@ -152,7 +167,7 @@ export async function graftIntoTemplate(
 
   // 4. En-têtes et pieds régénérés depuis `layout` quand ils diffèrent du gabarit.
   const overrides = new Map<string, string>();
-  await graftHeadersFooters({
+  const grafted = await graftHeadersFooters({
     template,
     generated,
     mainPart,
@@ -166,9 +181,28 @@ export async function graftIntoTemplate(
     templateHeaders: input.template.headers,
     templateFooters: input.template.footers,
     overrides,
+    warnings,
   });
 
-  // 5. Types de contenu des médias et des parties créées.
+  // 5. Réglages et propriétés que le corps greffé exige.
+  await ensureSettings({
+    template,
+    pkg,
+    mainPart,
+    relationships,
+    overrides,
+    updateFields: input.toc,
+    evenAndOddHeaders: grafted.even,
+  });
+  await writeCoreProperties({
+    template,
+    pkg,
+    overrides,
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.creator !== undefined ? { creator: input.creator } : {}),
+  });
+
+  // 6. Types de contenu des médias et des parties créées.
   for (const created of [numbering.createdPart(), footnotes.createdPart()]) {
     if (created) overrides.set(created.path, created.contentType);
   }
@@ -204,23 +238,27 @@ async function remapRelationships(
   }
 }
 
-/** Styles référencés par les blocs et les notes : réutilisés, ajoutés ou retirés avec avertissement. */
+/**
+ * Styles référencés par les blocs et les notes : réutilisés, ajoutés, laissés en place
+ * (styles intégrés de Word) ou retirés avec avertissement. Chaque référence impose le
+ * type du style (`w:pStyle` → paragraphe…) : un style d'un autre type est retiré.
+ */
 async function remapStyles(
   blocks: readonly Element[],
   notes: readonly Element[],
   styles: StyleMerger,
 ): Promise<void> {
-  const references: Element[] = [];
+  const references: Array<readonly [Element, StyleType]> = [];
   for (const root of [...blocks, ...notes]) {
-    for (const name of ['pStyle', 'rStyle', 'tblStyle']) {
-      if (root.localName === name) references.push(root);
-      references.push(...allNamed(root, name));
+    for (const [name, expected] of STYLE_REFERENCES) {
+      if (root.localName === name) references.push([root, expected]);
+      for (const reference of allNamed(root, name)) references.push([reference, expected]);
     }
   }
-  for (const reference of references) {
+  for (const [reference, expected] of references) {
     const id = wordAttr(reference, 'val');
     if (!id) continue;
-    const ensured = await styles.ensure(id);
+    const ensured = await styles.ensure(id, expected);
     if (ensured.status === 'missing') reference.remove();
     else if (ensured.id !== id) setWordAttr(reference, 'val', ensured.id);
   }

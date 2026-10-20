@@ -38,6 +38,9 @@ export interface NumberingMerger {
 /** Chemin par défaut de `numbering.xml`, à côté de la partie principale. */
 const NUMBERING_FILE = 'numbering.xml';
 
+/** Plus grand `ST_DecimalNumber` (`xsd:int`) qu'un `w:numId` ou `w:abstractNumId` peut porter. */
+const MAX_DECIMAL_NUMBER = 2_147_483_647;
+
 /** Crée le fusionneur de numérotation du gabarit. */
 export async function createNumberingMerger(input: NumberingMergerInput): Promise<NumberingMerger> {
   const generatedDoc = await input.generated.dom('word/numbering.xml');
@@ -66,13 +69,25 @@ export async function createNumberingMerger(input: NumberingMergerInput): Promis
     return { nums, abstracts };
   };
 
+  /**
+   * Identifiant libre : le plus grand + 1 (ids ajoutés après ceux du gabarit, comme Word
+   * les attribue), borné à `xsd:int` (`ST_DecimalNumber`, 2^31 - 1) : au-delà, Word
+   * répare ou refuse. Quand le gabarit occupe déjà le plafond, premier entier libre
+   * à partir de 1.
+   */
   const nextId = (ids: Iterable<string>): string => {
+    const taken = new Set<number>();
     let max = 0;
     for (const id of ids) {
       const value = Number(id);
-      if (Number.isFinite(value) && value > max) max = value;
+      if (!Number.isFinite(value)) continue;
+      taken.add(value);
+      if (value > max) max = value;
     }
-    return String(max + 1);
+    if (max < MAX_DECIMAL_NUMBER) return String(max + 1);
+    let candidate = 1;
+    while (taken.has(candidate) && candidate < MAX_DECIMAL_NUMBER) candidate += 1;
+    return String(candidate);
   };
 
   const warnFallback = (templateNumId: string): void => {

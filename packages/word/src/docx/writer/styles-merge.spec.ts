@@ -96,6 +96,55 @@ describe('createStyleMerger', () => {
     );
   });
 
+  it('laisse en place les styles intégrés de Word sans avertissement (R27-03)', async () => {
+    const { merger, warnings } = await setup();
+    expect(await merger.ensure('TOC1', 'paragraph')).toEqual({ status: 'builtin', id: 'TOC1' });
+    expect(await merger.ensure('TableGrid', 'table')).toEqual({
+      status: 'builtin',
+      id: 'TableGrid',
+    });
+    expect(await merger.ensure('ListParagraph')).toEqual({
+      status: 'builtin',
+      id: 'ListParagraph',
+    });
+    expect(warnings).toEqual([]);
+    // Un style intégré référencé avec le mauvais type reste refusé.
+    expect(await merger.ensure('TOC1', 'character')).toEqual({ status: 'missing', id: 'TOC1' });
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('refuse un style dont le type n’est pas celui de la référence (R27-07)', async () => {
+    const { merger, warnings } = await setup();
+    expect(await merger.ensure('Citation', 'paragraph')).toEqual({
+      status: 'template',
+      id: 'Citation',
+    });
+    expect(await merger.ensure('Citation', 'character')).toEqual({
+      status: 'missing',
+      id: 'Citation',
+    });
+    expect(await merger.ensure('Citation', 'table')).toEqual({ status: 'missing', id: 'Citation' });
+    // Renommé par nom : le type du style du gabarit compte aussi.
+    expect(await merger.ensure('Hyperlink', 'paragraph')).toEqual({
+      status: 'missing',
+      id: 'Hyperlink',
+    });
+    expect(await merger.ensure('Hyperlink', 'character')).toEqual({
+      status: 'renamed',
+      id: 'Lienhypertexte',
+    });
+    // Ajouté depuis l'export : idem, et la copie n'a pas lieu sur un mauvais type.
+    expect(await merger.ensure('Code', 'paragraph')).toEqual({ status: 'missing', id: 'Code' });
+    expect(merger.ids.has('Code')).toBe(false);
+    expect(await merger.ensure('Code', 'character')).toEqual({ status: 'added', id: 'Code' });
+    expect(warnings.map((warning) => warning.message)).toEqual([
+      expect.stringContaining('« Citation » de paragraphe référencé comme style de caractère'),
+      expect.stringContaining('« Citation » de paragraphe référencé comme style de tableau'),
+      expect.stringContaining('« Hyperlink » de caractère référencé comme style de paragraphe'),
+      expect.stringContaining('« Code » de caractère référencé comme style de paragraphe'),
+    ]);
+  });
+
   it('retire les propriétés directes égales au style résolu, garde les surcharges', async () => {
     const { merger } = await setup();
     const p = paragraph(

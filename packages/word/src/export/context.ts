@@ -1,7 +1,7 @@
 import type { Paragraph } from 'docx';
 import type { NumberingResolver } from '../docx/reader/types';
 import type { DocxModule } from './docx-module';
-import type { ListKind } from './styles';
+import type { HeadingNumbering, ListKind } from './styles';
 import type {
   DocxExportWarning,
   DocxExportWarningCode,
@@ -86,6 +86,12 @@ export interface ExportContext {
    * niveau 1 sans parent). `null` en export neuf.
    */
   readonly templateNumbering: NumberingResolver | null;
+  /**
+   * Numérotation des titres à poser en `w:numPr` direct sur chaque titre (export dans le
+   * gabarit, dont les styles `Heading n` ne sont pas modifiés). `null` en export neuf,
+   * où elle vit dans les styles de titres.
+   */
+  readonly headingNumbering: HeadingNumbering | null;
 }
 
 /** Ajoute un avertissement typé au contexte. */
