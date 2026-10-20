@@ -14,6 +14,7 @@ import { ListLayout } from './list-layout';
 import { Outline } from './outline';
 import { ParagraphLayout } from './paragraph-layout';
 import { AsterTextStyle, AsterUnderline, RunLayout } from './run-layout';
+import { AsterHorizontalRule } from './page-break';
 import { Search } from './search';
 import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
 import { createTableExtensions } from './table-layout';
@@ -45,10 +46,12 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     StarterKit.configure({
       link: false,
       underline: false,
+      horizontalRule: false,
       heading: { levels: [1, 2, 3, 4, 5, 6] },
       dropcursor: { width: 2 },
     }),
     AsterUnderline,
+    AsterHorizontalRule,
     createLinkExtension(context.linkPolicy),
     TaskList,
     TaskItem.configure({ nested: true }),
