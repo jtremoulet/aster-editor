@@ -25,7 +25,7 @@ import {
   type CssBorderSide,
 } from './css';
 import { childElements, positiveIntAttribute, tagOf } from './dom';
-import { DOCX_STYLE_ATTRIBUTE, borderOptions } from './styles';
+import { DOCX_STYLE_ATTRIBUTE, NIL_BORDER, borderOptions } from './styles';
 
 /** Nombre maximal de colonnes d'une table Word : plafond de `colspan` et de `<col span>`. */
 export const MAX_TABLE_COLUMNS = 63;
@@ -195,11 +195,43 @@ function columnWidthsTwips(
 }
 
 /** Bordure Word explicitement absente (`w:val="nil"`). */
-const NO_BORDER: IBorderOptions = { style: 'nil' };
+const NO_BORDER: IBorderOptions = NIL_BORDER;
 
 /** Bordure de cellule ou de tableau : CSS → `docx`, `nil` pour un côté déclaré sans trait. */
 function tableBorder(border: CssBorder | null, side: CssBorderSide): IBorderOptions {
   return border ? borderOptions(border, side) : NO_BORDER;
+}
+
+/** Attribut d'alignement horizontal du tableau (`TableLayoutAttrs.align`, `w:jc`). */
+const TABLE_ALIGN_ATTRIBUTE = 'data-align';
+
+/**
+ * Alignement horizontal du tableau (`w:jc`) : `data-align="center|right"` du contrat, ou
+ * le centrage CSS usuel (`margin: 0 auto`, `margin-left/right: auto`). `undefined` pour
+ * `left` ou sans déclaration : Word aligne à gauche par défaut.
+ */
+function tableAlignment(
+  table: Element,
+  style: ReadonlyMap<string, string>,
+  ctx: ExportContext,
+): ITableOptions['alignment'] | undefined {
+  const { AlignmentType } = ctx.docx;
+  switch (table.getAttribute(TABLE_ALIGN_ATTRIBUTE)?.trim().toLowerCase()) {
+    case 'center':
+      return AlignmentType.CENTER;
+    case 'right':
+      return AlignmentType.RIGHT;
+    case 'left':
+      return undefined;
+    default:
+      break;
+  }
+  const margin = style.get('margin')?.trim().toLowerCase().split(/\s+/) ?? [];
+  const left = style.get('margin-left')?.trim().toLowerCase() ?? margin[3] ?? margin[1];
+  const right = style.get('margin-right')?.trim().toLowerCase() ?? margin[1];
+  if (left === 'auto' && right === 'auto') return AlignmentType.CENTER;
+  if (left === 'auto' && right !== undefined) return AlignmentType.RIGHT;
+  return undefined;
 }
 
 type MutableCellBorders = { -readonly [K in keyof ITableCellBorders]: ITableCellBorders[K] };
@@ -448,10 +480,12 @@ export async function convertTable(
         ...(declaredWidth || fallbackWidth ? {} : { layout: TableLayoutType.FIXED }),
       }
     : { rows, width: declaredWidth ?? fallbackWidth ?? { size: 100, type: WidthType.PERCENTAGE } };
+  const alignment = tableAlignment(table, style, ctx);
   const options: ITableOptions = {
     ...sized,
     ...(tableStyle ? { style: tableStyle } : {}),
     ...(borders ? { borders } : {}),
+    ...(alignment ? { alignment } : {}),
   };
   return new Table(options);
 }

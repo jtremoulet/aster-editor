@@ -4,8 +4,8 @@ import { ROOT_SCOPE, convertChildren } from './blocks';
 import type { ExportContext, ListDefinition } from './context';
 import type { DocxModule } from './docx-module';
 import { buildFootnotes, collectFootnotes } from './footnotes';
-import { buildFooters, buildHeaders } from './header-footer';
 import { sanitizeXmlText } from './sanitize';
+import { buildSection, resolveSection, splitSections } from './sections';
 import {
   GENERATED_STYLE_IDS,
   STYLE_IDS,
@@ -56,7 +56,9 @@ function knownStyles(options: DocxExportOptions, target: BuildTarget): ReadonlyS
  * et inspecter les avertissements sans empaqueter. Les notes de bas de page sont
  * collectées (et retirées du corps) avant la conversion, pour que leurs appels
  * trouvent leur identifiant Word. La mise en page vient de `options.layout` (contrat),
- * les options explicites primant champ par champ.
+ * les options explicites primant champ par champ ; le corps est découpé en sections aux
+ * `<hr data-section-break>` (`sections.ts`), la dernière portant la mise en page de
+ * premier niveau du `layout`.
  */
 export async function buildDocx(
   dom: Document,
@@ -65,7 +67,9 @@ export async function buildDocx(
   target: BuildTarget = { template: false },
 ): Promise<BuiltDocx> {
   const warnings: DocxExportWarning[] = [];
-  const layout = resolvePageLayout(options, warnings);
+  // Largeur utile de la dernière section (plafond des images) ; ses avertissements de
+  // marges sont émis par la résolution de la section elle-même, pas ici.
+  const layout = resolvePageLayout(options);
   const headingNumbering = resolveHeadingNumbering(options.numberedHeadings);
   const ctx: ExportContext = {
     docx,
@@ -83,39 +87,20 @@ export async function buildDocx(
     headingNumbering: target.template ? headingNumbering : null,
   };
   await collectFootnotes(dom.body, ctx);
-  let children = await convertChildren(dom.body, ROOT_SCOPE, ctx);
-  if (options.toc) children = [...buildToc(options.toc, ctx), ...children];
-  // Word exige au moins un paragraphe par section.
-  if (children.length === 0) children = [new docx.Paragraph({ children: [] })];
-  const headers = await buildHeaders(options, ctx);
-  const footers = await buildFooters(options, ctx);
+  // Une section par segment du corps (sauts `<hr data-section-break>`), dans l'ordre.
+  const segments = splitSections(dom.body);
+  const sections: ISectionOptions[] = [];
+  let even = false;
+  for (const [index, segment] of segments.entries()) {
+    const last = index === segments.length - 1;
+    let children = await convertChildren(segment.container, ROOT_SCOPE, ctx);
+    if (index === 0 && options.toc) children = [...buildToc(options.toc, ctx), ...children];
+    const resolved = resolveSection(options, segment, index, segments.length, warnings);
+    const built = await buildSection(resolved, children, last, options, ctx);
+    sections.push(built.section);
+    even = even || built.even;
+  }
   const footnotes = buildFootnotes(ctx);
-  const columns = options.layout?.columns;
-  const section: ISectionOptions = {
-    properties: {
-      page: {
-        size: {
-          width: layout.width,
-          height: layout.height,
-          ...(layout.orientation === 'landscape'
-            ? { orientation: docx.PageOrientation.LANDSCAPE }
-            : {}),
-        },
-        margin: {
-          ...layout.margins,
-          header: layout.headerDistance,
-          footer: layout.footerDistance,
-        },
-      },
-      ...(options.layout?.titlePage ? { titlePage: true } : {}),
-      ...(columns !== undefined && Number.isFinite(columns) && columns >= 2
-        ? { column: { count: Math.min(45, Math.floor(columns)), equalWidth: true } }
-        : {}),
-    },
-    ...(Object.keys(headers).length > 0 ? { headers } : {}),
-    ...(Object.keys(footers).length > 0 ? { footers } : {}),
-    children,
-  };
   const document = new docx.Document({
     // Les propriétés vont dans `docProps/core.xml` : même règle XML que le corps.
     title: options.title === undefined ? undefined : sanitizeXmlText(options.title),
@@ -130,9 +115,9 @@ export async function buildDocx(
     // La table des matières est un champ : Word propose de le mettre à jour à l'ouverture.
     ...(options.toc ? { features: { updateFields: true } } : {}),
     // Les en-têtes et pieds de pages paires ne s'affichent qu'avec ce réglage.
-    ...(headers.even || footers.even ? { evenAndOddHeaderAndFooters: true } : {}),
+    ...(even ? { evenAndOddHeaderAndFooters: true } : {}),
     ...(footnotes ? { footnotes } : {}),
-    sections: [section],
+    sections,
   });
   return { document, warnings: ctx.warnings, lists: ctx.lists };
 }

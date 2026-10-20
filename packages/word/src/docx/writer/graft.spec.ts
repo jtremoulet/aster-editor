@@ -36,6 +36,11 @@ function blocksOf(xml: string): string[] {
   return topLevelBlocks(normalizeXml(bodyOf(xml)));
 }
 
+/** Tous les `w:sectPr` d'un `document.xml`, dans l'ordre, tels qu'écrits. */
+function allSectPrsOf(xml: string): string[] {
+  return xml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>|<w:sectPr\b[^>]*\/>/g) ?? [];
+}
+
 const STYLED_FIXTURES = [
   '11-styles-inline.docx',
   '12-paragraphes.docx',
@@ -450,18 +455,34 @@ describe('variables dans le gabarit', () => {
 });
 
 describe('en-têtes et pieds du gabarit', () => {
-  it('fixture 16 : le sectPr final hérite des en-têtes de première page de la section 1', async () => {
+  it('fixture 16 : les deux sections ressortent avec leur w:sectPr du gabarit, en-têtes relus identiques', async () => {
     const template = await fixture('16-sections.docx');
     const imported = await importStyled(template);
     const result = await exportInTemplate(imported.html, template);
-    const sectPr = finalSectPr(textOf(result.parts, 'word/document.xml'));
-    expect(sectPr).toContain('<w:headerReference w:type="first" r:id="rId7"/>');
-    expect(sectPr).toContain('<w:footerReference w:type="first" r:id="rId9"/>');
+    const document = textOf(result.parts, 'word/document.xml');
+    expect(allSectPrsOf(document)).toEqual(
+      allSectPrsOf(textOf(await partsOf(template), 'word/document.xml')),
+    );
+    const sectPr = finalSectPr(document);
     expect(sectPr).toContain('<w:headerReference w:type="default" r:id="rId10"/>');
     expect(sectPr).toContain('<w:cols w:space="720" w:num="2" w:equalWidth="true"/>');
     const again = await importStyled(result.buffer);
     expect(again.layout.headers).toEqual(imported.layout.headers);
     expect(again.layout.footers).toEqual(imported.layout.footers);
+    expect(again.layout.sections).toEqual(imported.layout.sections);
+  });
+
+  it('corps sans saut de section dans un gabarit à deux sections : le sectPr final hérite des références de la section 1 abandonnée', async () => {
+    const template = await fixture('16-sections.docx');
+    const result = await exportInTemplate('<p>Une seule section</p>', template);
+    const document = textOf(result.parts, 'word/document.xml');
+    expect(allSectPrsOf(document)).toHaveLength(1);
+    const sectPr = finalSectPr(document);
+    expect(sectPr).toContain('<w:headerReference w:type="first" r:id="rId7"/>');
+    expect(sectPr).toContain('<w:footerReference w:type="first" r:id="rId9"/>');
+    expect(sectPr).toContain('<w:headerReference w:type="default" r:id="rId10"/>');
+    expect(sectPr).toContain('<w:titlePg/>');
+    expect(sectPr).toContain('<w:cols w:space="720" w:num="2" w:equalWidth="true"/>');
   });
 
   it('mode resolve : {{client}} de l’en-tête (fixture 16) résolu, autres parties intactes', async () => {
@@ -617,8 +638,12 @@ describe.skipIf(!existsSync(CLIENT))('document client Modele_Demo_DER', () => {
     const document = textOf(result.parts, 'word/document.xml');
     expect(document).toContain('<w:rStyle w:val="Lienhypertexte"/>');
     expect(document).not.toContain('"Hyperlink"');
-    const sectPr = finalSectPr(document);
-    expect(sectPr).toContain('<w:footerReference w:type="default" r:id="rId13"/>');
+    // Les trois sections du client ressortent avec leur `w:sectPr` identique à l'octet : le
+    // pied n'est référencé que par la première, Word le fait hériter aux suivantes.
+    const sectPrs = allSectPrsOf(document);
+    expect(sectPrs).toEqual(allSectPrsOf(textOf(original, 'word/document.xml')));
+    expect(sectPrs).toHaveLength(3);
+    expect(sectPrs[0]).toContain('<w:footerReference w:type="default" r:id="rId13"/>');
     const codes = new Set(result.warnings.map((warning) => warning.code));
     expect(codes).toEqual(new Set(['variable-unresolved']));
     const again = await importStyled(result.buffer);

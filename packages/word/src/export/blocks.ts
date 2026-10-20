@@ -14,6 +14,7 @@ import {
 import {
   BLOCK_TAGS,
   PAGE_BREAK_ATTRIBUTE,
+  SECTION_BREAK_ATTRIBUTE,
   XSD_INT_MAX,
   childElements,
   hasBlockChild,
@@ -22,13 +23,14 @@ import {
   positiveIntAttribute,
   tagOf,
 } from './dom';
-import { inlineChildren, type InlineState } from './inline';
+import { inlineChildren, type InlineCollector, type InlineState } from './inline';
 import { sanitizeXmlText } from './sanitize';
 import {
   DOCX_NUM_ID_ATTRIBUTE,
   DOCX_STYLE_ATTRIBUTE,
   HEADING_NUMBERING_REFERENCE,
   LIST_INDENT,
+  NIL_BORDER,
   NUM_INDENT_ATTRIBUTE,
   STYLE_IDS,
   borderOptions,
@@ -161,11 +163,13 @@ function applyParagraphLayout(
     if (Object.keys(indent).length > 0) options.indent = indent;
   }
 
+  // Un côté déclaré sans trait (`border-top: none`, `0pt solid transparent` du lecteur pour
+  // un `nil` explicite) est écrit `w:val="nil"` : il annule la bordure que le style apporte.
   const borders: MutableBorders = {};
-  const parsed = Array.from(parseBorders(style)).filter(([, border]) => border !== null);
-  const sides = new Set(parsed.map(([side]) => side));
+  const parsed = Array.from(parseBorders(style));
+  const sides = new Set(parsed.filter(([, border]) => border !== null).map(([side]) => side));
   for (const [side, border] of parsed) {
-    if (border) borders[side] = borderOptions(border, side, sides);
+    borders[side] = border ? borderOptions(border, side, sides) : NIL_BORDER;
   }
   const between = parseBorder(element.getAttribute(BORDER_BETWEEN_ATTRIBUTE) ?? undefined);
   if (between) borders.between = borderOptions(between, 'between', sides);
@@ -211,6 +215,31 @@ function paragraphOptions(
   return options;
 }
 
+/**
+ * Enfants inline d'un paragraphe, et ses taquets (`w:tabs`) : un taquet `left` par position
+ * déclarée par une tabulation (`data-stop`), dédoublonnés et triés.
+ */
+async function inlineContent(
+  nodes: readonly Node[],
+  options: MutableParagraphOptions,
+  scope: BlockScope,
+  ctx: ExportContext,
+): Promise<void> {
+  const collector: InlineCollector = { tabStopsTwips: new Set() };
+  options.children = await inlineChildren(
+    nodes,
+    ctx,
+    scope.inline,
+    scope.notesAllowed ?? true,
+    collector,
+  );
+  if (collector.tabStopsTwips.size > 0) {
+    options.tabStops = Array.from(collector.tabStopsTwips)
+      .sort((a, b) => a - b)
+      .map((position) => ({ type: ctx.docx.TabStopType.LEFT, position }));
+  }
+}
+
 /** Paragraphe de texte à partir d'une liste de nœuds inline. */
 async function inlineParagraph(
   nodes: readonly Node[],
@@ -220,7 +249,7 @@ async function inlineParagraph(
   numbered: boolean,
 ): Promise<Paragraph> {
   const options = paragraphOptions(element, scope, ctx, numbered);
-  options.children = await inlineChildren(nodes, ctx, scope.inline, scope.notesAllowed ?? true);
+  await inlineContent(nodes, options, scope, ctx);
   return new ctx.docx.Paragraph(options);
 }
 
@@ -249,12 +278,7 @@ async function heading(
   if (!options.numbering && ctx.headingNumbering && index < ctx.headingNumbering.levels) {
     options.numbering = { reference: HEADING_NUMBERING_REFERENCE, level: index };
   }
-  options.children = await inlineChildren(
-    Array.from(element.childNodes),
-    ctx,
-    scope.inline,
-    scope.notesAllowed ?? true,
-  );
+  await inlineContent(Array.from(element.childNodes), options, scope, ctx);
   return new ctx.docx.Paragraph(options);
 }
 
@@ -439,6 +463,8 @@ export async function convertBlock(
     const rest = tag === 'div' ? await convertChildren(element, scope, ctx) : [];
     return [pageBreak(ctx), ...rest];
   }
+  // Un saut de section hors du premier niveau (`sections.ts` découpe le corps) : rien à rendre.
+  if (tag === 'hr' && element.hasAttribute(SECTION_BREAK_ATTRIBUTE)) return [];
   switch (tag) {
     case 'h1':
     case 'h2':

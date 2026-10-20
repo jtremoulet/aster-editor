@@ -68,6 +68,8 @@ type Piece =
   | { readonly kind: 'image'; readonly run: ImageRun; readonly state: InlineState }
   /** Champ de fusion Word (mode `fields`). */
   | { readonly kind: 'field'; readonly name: string; readonly state: InlineState }
+  /** Tabulation (`<span data-tab>`, ou l'espace cadratin de la 0.5) : `w:tab`. */
+  | { readonly kind: 'tab'; readonly state: InlineState }
   /** Appel de note de bas de page, `id` Word déjà attribué. */
   | { readonly kind: 'footnote'; readonly id: number; readonly state: InlineState };
 
@@ -76,6 +78,21 @@ const LINK_PATTERN = /^(https?:|mailto:|tel:|ftp:)/i;
 
 /** Attribut d'un `<sup>` qui porte un appel de note explicite. */
 const FOOTNOTE_REF_ATTRIBUTE = 'data-footnote-ref';
+
+/** Nœud inline de tabulation du contrat (`TabAttrs`) et position de son taquet en points. */
+const TAB_ATTRIBUTE = 'data-tab';
+const TAB_STOP_ATTRIBUTE = 'data-stop';
+
+/** Espace cadratin par lequel le lecteur de la 0.5 représentait `w:tab` : toujours accepté. */
+const EM_SPACE = String.fromCharCode(0x2003);
+
+/**
+ * Ce que la conversion inline remonte au paragraphe : les positions (twips) des taquets
+ * déclarés par ses tabulations (`data-stop`), écrites en `w:tabs` sur le paragraphe.
+ */
+export interface InlineCollector {
+  readonly tabStopsTwips: Set<number>;
+}
 
 /** Texte d'un appel de note tel que l'import le produit : `[1]`. */
 const FOOTNOTE_CALL_TEXT = /^\[(\d+)\]$/;
@@ -293,10 +310,18 @@ function pushVariable(
 
 /**
  * Texte brut : découpé sur le motif des variables en modes `fields`/`resolve`, sauf
- * dans une marque de code, où `{{…}}` est du contenu.
+ * dans une marque de code, où `{{…}}` est du contenu. Un espace cadratin (tabulation de
+ * la 0.5) devient une tabulation.
  */
 function pushText(text: string, state: InlineState, ctx: ExportContext, pieces: Piece[]): void {
   if (text === '') return;
+  if (text.includes(EM_SPACE)) {
+    text.split(EM_SPACE).forEach((part, index) => {
+      if (index > 0) pieces.push({ kind: 'tab', state });
+      pushText(part, state, ctx, pieces);
+    });
+    return;
+  }
   if (state.code) {
     pieces.push({ kind: 'text', text, state });
     return;
@@ -305,6 +330,21 @@ function pushText(text: string, state: InlineState, ctx: ExportContext, pieces: 
     if (segment.kind === 'text') pieces.push({ kind: 'text', text: segment.text, state });
     else pushVariable(segment.name, segment.raw, state, ctx, pieces);
   }
+}
+
+/**
+ * `<span data-tab data-stop="36pt">` : une tabulation, dont le taquet (s'il est connu)
+ * est remonté au paragraphe. Le contenu du nœud (vide par contrat) est ignoré.
+ */
+function pushTab(
+  element: Element,
+  state: InlineState,
+  options: CollectOptions,
+  pieces: Piece[],
+): void {
+  const stop = parsePoints(element.getAttribute(TAB_STOP_ATTRIBUTE));
+  if (stop !== null && stop > 0) options.collector?.tabStopsTwips.add(pointsToTwips(stop));
+  pieces.push({ kind: 'tab', state });
 }
 
 /**
@@ -322,6 +362,8 @@ function footnoteKey(element: Element): { key: string; explicit: boolean } | nul
 interface CollectOptions {
   /** Faux dans un en-tête, un pied ou une note : Word y refuse les appels de note. */
   readonly notesAllowed: boolean;
+  /** Collecteur du paragraphe (taquets), absent quand l'appelant n'en veut pas. */
+  readonly collector?: InlineCollector;
 }
 
 /**
@@ -398,6 +440,10 @@ async function collectPieces(
     if (run) pieces.push({ kind: 'image', run, state });
     return;
   }
+  if (node.hasAttribute(TAB_ATTRIBUTE)) {
+    pushTab(node, state, options, pieces);
+    return;
+  }
   if (SILENT_TAGS.includes(tag)) return;
   if (DROPPED_TAGS.includes(tag)) {
     warn(ctx, 'unsupported-element', `Élément <${tag}> ignoré : pas d'équivalent Word`);
@@ -461,12 +507,14 @@ function collapseWhitespace(pieces: readonly Piece[]): Piece[] {
 
 /** Fabrique le run `docx` d'un morceau. */
 function pieceToRun(piece: Piece, ctx: ExportContext): ParagraphChild {
-  const { FootnoteReferenceRun, TextRun } = ctx.docx;
+  const { FootnoteReferenceRun, Tab, TextRun } = ctx.docx;
   switch (piece.kind) {
     case 'text':
       return new TextRun(runOptions(piece.state, piece.text));
     case 'break':
       return new TextRun({ ...runOptions(piece.state), break: 1 });
+    case 'tab':
+      return new TextRun({ ...runOptions(piece.state), children: [new Tab()] });
     case 'image':
       return piece.run;
     case 'field':
@@ -481,16 +529,18 @@ function pieceToRun(piece: Piece, ctx: ExportContext): ParagraphChild {
  * consécutifs d'un même lien sont regroupés dans un `ExternalHyperlink`. Prend une
  * liste de nœuds plutôt qu'un conteneur pour que le regroupement des inline nus d'un
  * bloc n'ait pas à déplacer de nœuds dans le DOM d'entrée. `notesAllowed` à `false`
- * (en-têtes, pieds, notes) dégrade les appels de note en exposant `[n]`.
+ * (en-têtes, pieds, notes) dégrade les appels de note en exposant `[n]`. `collector`
+ * reçoit les taquets des tabulations rencontrées, à écrire sur le paragraphe.
  */
 export async function inlineChildren(
   nodes: readonly Node[],
   ctx: ExportContext,
   initial: InlineState = {},
   notesAllowed = true,
+  collector?: InlineCollector,
 ): Promise<ParagraphChild[]> {
   const pieces: Piece[] = [];
-  const options: CollectOptions = { notesAllowed };
+  const options: CollectOptions = { notesAllowed, ...(collector ? { collector } : {}) };
   for (const node of nodes) await collectPieces(node, initial, ctx, options, pieces);
   const children: ParagraphChild[] = [];
   let linkRuns: ParagraphChild[] = [];

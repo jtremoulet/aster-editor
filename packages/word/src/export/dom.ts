@@ -88,6 +88,12 @@ export const SILENT_TAGS: readonly string[] = ['script', 'style', 'template', 'n
 /** Attribut qui marque un saut de page (`<div data-page-break>`, `<hr data-page-break>`, `<p data-page-break>`). */
 export const PAGE_BREAK_ATTRIBUTE = 'data-page-break';
 
+/**
+ * Attribut du saut de section du contrat (`<hr data-section-break="n">`, `SectionBreakAttrs`) :
+ * `n` est l'index (à partir de 1) de la section qui se termine là.
+ */
+export const SECTION_BREAK_ATTRIBUTE = 'data-section-break';
+
 /** Vrai si un conteneur a au moins un enfant élément de bloc. */
 export function hasBlockChild(element: Element): boolean {
   return childElements(element).some((child) => BLOCK_TAGS.includes(tagOf(child)));

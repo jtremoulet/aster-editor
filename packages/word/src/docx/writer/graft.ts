@@ -1,11 +1,11 @@
 import type { DocumentLayout } from '@aster-editor/core';
 import type { ListDefinition, VariableSettings } from '../../export/context';
 import type { DocxExportWarning } from '../../export/types';
-import { allNamed, childNamed, childrenNamed } from '../preprocess/xml-utils';
+import { allNamed, childNamed } from '../preprocess/xml-utils';
 import { ensureContentTypes } from './content-types';
 import { writeCoreProperties } from './core-properties';
 import { createFootnoteMerger } from './footnotes-merge';
-import { graftHeadersFooters } from './header-footer-graft';
+import { graftSections } from './graft-sections';
 import { resolveHeaderFooterVariables } from './header-footer-variables';
 import { MediaCopier } from './media';
 import { createNumberingMerger } from './numbering-merge';
@@ -24,9 +24,10 @@ import { PartStore, setWordAttr, wordAttr, type XmlCodec } from './xml-io';
  * variables y sont résolues ou qu'un `layout` les régénère, `settings.xml` quand la
  * table des matières ou un en-tête de pages paires l'exige, et `docProps/core.xml`
  * quand `title` / `creator` sont fournis. Le `w:sectPr` final du gabarit (en-têtes,
- * pieds, marges, colonnes) est conservé ; un corps régénéré n'a plus de sections
- * intermédiaires : seules les propriétés de la **dernière** section survivent, complétées
- * des en-têtes et pieds que les sections précédentes lui transmettaient par héritage.
+ * pieds, marges, colonnes) est conservé ; les sections intermédiaires du corps
+ * (`<hr data-section-break>`, session 4) reprennent chacune le `w:sectPr` du gabarit qui
+ * leur correspond, ou sont régénérées (`graft-sections.ts`) ; les sections du gabarit
+ * abandonnées transmettent leurs en-têtes et pieds à la suivante par héritage.
  */
 
 export interface GraftInput {
@@ -54,19 +55,6 @@ const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
 
 /** Attributs de relation que le corps généré peut porter (liens, images). */
 const RELATIONSHIP_ATTRIBUTES: ReadonlySet<string> = new Set(['id', 'embed', 'link']);
-
-/** Éléments du `w:sectPr` qui doivent précéder tout le reste (ordre du schéma). */
-const SECTION_REFERENCES = ['headerReference', 'footerReference'] as const;
-
-/** Enfants du `w:sectPr` placés après `w:titlePg` dans l'ordre du schéma. */
-const AFTER_TITLE_PAGE: ReadonlySet<string> = new Set([
-  'textDirection',
-  'bidi',
-  'rtlGutter',
-  'docGrid',
-  'printerSettings',
-  'sectPrChange',
-]);
 
 /** Référence de style du corps → type de style qu'elle impose. */
 const STYLE_REFERENCES: ReadonlyArray<readonly [string, StyleType]> = [
@@ -157,32 +145,33 @@ export async function graftIntoTemplate(
   await remapStyles(blocks, footnotes.imported(), styles);
   for (const paragraph of paragraphs) styles.stripParagraph(paragraph);
 
-  // 3. Greffe : les blocs remplacent ceux du gabarit, devant son `w:sectPr` final complété.
-  const sectPr = inheritedSectionProperties(templateBody);
-  for (const child of Array.from(templateBody.childNodes)) templateBody.removeChild(child);
-  for (const block of blocks) templateBody.appendChild(templateDoc.importNode(block, true));
-  if (sectPr) templateBody.appendChild(sectPr);
+  // 3. Greffe section par section : les blocs remplacent ceux du gabarit, chaque `w:sectPr`
+  //    est repris du gabarit ou régénéré, les en-têtes et pieds qui diffèrent sont recopiés.
+  const overrides = new Map<string, string>();
+  const grafted = await graftSections({
+    templateBody,
+    blocks,
+    generatedBody,
+    layout: input.layout,
+    templateHeadersFooters:
+      input.template.headers || input.template.footers
+        ? { headers: input.template.headers, footers: input.template.footers }
+        : undefined,
+    templateSections: input.template.sections,
+    headerFooter: {
+      template,
+      generated,
+      mainPart,
+      relationships,
+      generatedRelationships,
+      styles,
+      media,
+      overrides,
+      warnings,
+    },
+  });
   copyNamespaceDeclarations(generatedDoc.documentElement, templateDoc.documentElement);
   await template.markChanged(mainPart);
-
-  // 4. En-têtes et pieds régénérés depuis `layout` quand ils diffèrent du gabarit.
-  const overrides = new Map<string, string>();
-  const grafted = await graftHeadersFooters({
-    template,
-    generated,
-    mainPart,
-    sectPr,
-    generatedSectPr: childNamed(generatedBody, 'sectPr'),
-    relationships,
-    generatedRelationships,
-    styles,
-    media,
-    layout: input.layout,
-    templateHeaders: input.template.headers,
-    templateFooters: input.template.footers,
-    overrides,
-    warnings,
-  });
 
   // 5. Réglages et propriétés que le corps greffé exige.
   await ensureSettings({
@@ -262,49 +251,6 @@ async function remapStyles(
     if (ensured.status === 'missing') reference.remove();
     else if (ensured.id !== id) setWordAttr(reference, 'val', ensured.id);
   }
-}
-
-/**
- * `w:sectPr` final du gabarit, complété des références d'en-tête et de pied (et de
- * `w:titlePg`) que les sections précédentes lui transmettaient : Word fait hériter chaque
- * section de la précédente, et le corps régénéré ne garde que la dernière. `null` si le
- * gabarit n'a aucun `w:sectPr` final.
- */
-function inheritedSectionProperties(body: Element): Element | null {
-  const last = childNamed(body, 'sectPr');
-  if (!last) return null;
-  const inherited = new Map<string, Element>();
-  let titlePage: Element | null = null;
-  for (const paragraph of childrenNamed(body, 'p')) {
-    const pPr = childNamed(paragraph, 'pPr');
-    const sectPr = pPr ? childNamed(pPr, 'sectPr') : null;
-    if (!sectPr) continue;
-    for (const child of Array.from(sectPr.children)) {
-      if (child.localName === 'headerReference' || child.localName === 'footerReference') {
-        inherited.set(`${child.localName}:${wordAttr(child, 'type') || 'default'}`, child);
-      } else if (child.localName === 'titlePg') {
-        titlePage = child;
-      }
-    }
-  }
-  const own = new Set<string>();
-  for (const child of Array.from(last.children)) {
-    if (child.localName === 'headerReference' || child.localName === 'footerReference') {
-      own.add(`${child.localName}:${wordAttr(child, 'type') || 'default'}`);
-    }
-  }
-  // Les références manquantes sont insérées en tête, en-têtes avant pieds (ordre du schéma).
-  for (const name of [...SECTION_REFERENCES].reverse()) {
-    for (const [key, element] of Array.from(inherited).reverse()) {
-      if (!key.startsWith(`${name}:`) || own.has(key)) continue;
-      last.insertBefore(element.cloneNode(true), last.firstChild);
-    }
-  }
-  if (titlePage && !childNamed(last, 'titlePg')) {
-    const after = Array.from(last.children).find((child) => AFTER_TITLE_PAGE.has(child.localName));
-    last.insertBefore(titlePage.cloneNode(true), after ?? null);
-  }
-  return last;
 }
 
 /**

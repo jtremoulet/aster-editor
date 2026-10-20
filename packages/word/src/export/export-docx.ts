@@ -44,8 +44,13 @@ export async function exportDocx(
   let template: TemplateContext | null = null;
   const codec = options.template === undefined ? null : defaultXmlCodec();
   if (options.template !== undefined && codec) {
+    const layout = options.layout;
     template = await openTemplate(options.template, codec, warnings, {
-      readHeadersFooters: Boolean(options.layout?.headers || options.layout?.footers),
+      readHeadersFooters: Boolean(
+        layout?.headers ||
+        layout?.footers ||
+        layout?.sections?.some((section) => section.headers || section.footers),
+      ),
     });
   }
   const built = await buildDocx(

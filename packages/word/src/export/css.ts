@@ -222,11 +222,15 @@ export function pointsToTwips(points: number): number {
 /** Styles de trait du contrat de mise en page (`BlockBorder.style`). */
 export type CssBorderStyle = 'solid' | 'dashed' | 'dotted' | 'double';
 
-/** Bordure CSS lue : style, épaisseur en points, couleur `RRGGBB`. */
+/**
+ * Bordure CSS lue : style, épaisseur en points, couleur `RRGGBB` et, si le contrat l'a
+ * sérialisé (`padding-<côté>: Npt`, `BlockBorder.spacePt`), l'espace texte-trait en points.
+ */
 export interface CssBorder {
   readonly style: CssBorderStyle;
   readonly widthPt: number;
   readonly color: string;
+  readonly spacePt?: number;
 }
 
 /** Côtés d'une bordure de bloc ou de cellule. */
@@ -307,7 +311,9 @@ export function parseBorder(value: string | undefined): CssBorder | null | undef
  * Bordures d'un `style` inline, côté par côté : raccourci `border` (tous les côtés) puis
  * `border-<côté>`, puis les propriétés longues `border-<côté>-width|style|color` qui
  * complètent ou corrigent. Un côté absent de la map n'est pas déclaré ; `null` le déclare
- * explicitement sans bordure (`border-top: none`).
+ * explicitement sans bordure (`border-top: none`, ou le `0pt solid transparent` que le
+ * lecteur émet pour un `nil` explicite). `padding-<côté>` donne l'espace texte-trait
+ * (`w:space`) d'un côté bordé.
  */
 export function parseBorders(
   style: ReadonlyMap<string, string>,
@@ -316,8 +322,11 @@ export function parseBorders(
   const all = parseBorder(style.get('border'));
   for (const side of CSS_BORDER_SIDES) {
     let border: CssBorder | null | undefined = all;
+    const space = parsePoints(style.get(`padding-${side}`));
+    if (border && space !== null && space >= 0) border = { ...border, spacePt: space };
     const own = parseBorder(style.get(`border-${side}`));
-    if (own !== undefined) border = own;
+    if (own !== undefined)
+      border = own && space !== null && space >= 0 ? { ...own, spacePt: space } : own;
     const width = parsePoints(style.get(`border-${side}-width`));
     const styleWord = style.get(`border-${side}-style`)?.trim().toLowerCase();
     const colorValue = parseColor(style.get(`border-${side}-color`));
@@ -330,6 +339,7 @@ export function parseBorders(
           style: (styleWord ? borderStyleKeyword(styleWord) : null) ?? base.style,
           widthPt: width ?? base.widthPt,
           color: colorValue ?? base.color,
+          ...(space !== null && space >= 0 ? { spacePt: space } : {}),
         };
       }
     }

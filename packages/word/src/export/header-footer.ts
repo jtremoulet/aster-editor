@@ -118,15 +118,15 @@ function layoutOption(
 }
 
 /**
- * En-têtes de la section : `options.header` pour les pages courantes (il prime), sinon
- * `layout.headers.default` ; `first` et `even` viennent du `layout` seul (contrat
- * `HeaderFooterSet`, en général lu par l'import). Vide si rien n'est demandé.
+ * En-têtes de la dernière section : `options.header` pour les pages courantes (il prime),
+ * sinon `sets.default` (`layout.headers` par défaut) ; `first` et `even` viennent du jeu
+ * seul (contrat `HeaderFooterSet`, en général lu par l'import). Vide si rien n'est demandé.
  */
 export async function buildHeaders(
   options: DocxExportOptions,
   ctx: ExportContext,
+  sets: HeaderFooterSet | undefined = options.layout?.headers,
 ): Promise<HeaderFooterGroup<Header>> {
-  const sets = options.layout?.headers;
   const group: { -readonly [K in keyof HeaderFooterGroup<Header>]: Header | undefined } = {
     default: await buildHeader(options.header ?? layoutOption(sets, 'default'), ctx, options.parse),
     first: await buildHeader(layoutOption(sets, 'first'), ctx, options.parse),
@@ -135,16 +135,47 @@ export async function buildHeaders(
   return compact(group);
 }
 
-/** Pieds de la section, mêmes règles que `buildHeaders` (numérotation via `options.footer`). */
+/** Pieds de la dernière section, mêmes règles que `buildHeaders` (numérotation via `options.footer`). */
 export async function buildFooters(
   options: DocxExportOptions,
   ctx: ExportContext,
+  sets: HeaderFooterSet | undefined = options.layout?.footers,
 ): Promise<HeaderFooterGroup<Footer>> {
-  const sets = options.layout?.footers;
   const group: { -readonly [K in keyof HeaderFooterGroup<Footer>]: Footer | undefined } = {
     default: await buildFooter(options.footer ?? layoutOption(sets, 'default'), ctx, options.parse),
     first: await buildFooter(layoutOption(sets, 'first'), ctx, options.parse),
     even: await buildFooter(layoutOption(sets, 'even'), ctx, options.parse),
+  };
+  return compact(group);
+}
+
+/**
+ * En-têtes d'une section intermédiaire (`layout.sections[n].headers`) : le jeu du contrat
+ * seul, `options.header` ne s'appliquant qu'à la dernière section.
+ */
+export async function buildSectionHeaders(
+  sets: HeaderFooterSet | undefined,
+  ctx: ExportContext,
+  parse: HtmlParser | undefined,
+): Promise<HeaderFooterGroup<Header>> {
+  const group: { -readonly [K in keyof HeaderFooterGroup<Header>]: Header | undefined } = {
+    default: await buildHeader(layoutOption(sets, 'default'), ctx, parse),
+    first: await buildHeader(layoutOption(sets, 'first'), ctx, parse),
+    even: await buildHeader(layoutOption(sets, 'even'), ctx, parse),
+  };
+  return compact(group);
+}
+
+/** Pieds d'une section intermédiaire (`layout.sections[n].footers`). */
+export async function buildSectionFooters(
+  sets: HeaderFooterSet | undefined,
+  ctx: ExportContext,
+  parse: HtmlParser | undefined,
+): Promise<HeaderFooterGroup<Footer>> {
+  const group: { -readonly [K in keyof HeaderFooterGroup<Footer>]: Footer | undefined } = {
+    default: await buildFooter(layoutOption(sets, 'default'), ctx, parse),
+    first: await buildFooter(layoutOption(sets, 'first'), ctx, parse),
+    even: await buildFooter(layoutOption(sets, 'even'), ctx, parse),
   };
   return compact(group);
 }

@@ -52,8 +52,9 @@ export function paragraphBorderSpace(side: string, sides: ReadonlySet<string>): 
 
 /**
  * Bordure CSS → `IBorderOptions` : épaisseur en huitièmes de point, couleur `RRGGBB`,
- * espace texte-trait selon `paragraphBorderSpace` (`sides` = côtés bordés du bloc ; pour
- * une cellule, un ensemble vide donne 1 pt partout). Le style `solid` du contrat est le
+ * espace texte-trait lu dans `padding-<côté>` (`BlockBorder.spacePt`, session 4) ou, à
+ * défaut, déduit par `paragraphBorderSpace` (`sides` = côtés bordés du bloc ; pour une
+ * cellule, un ensemble vide donne 1 pt partout). Le style `solid` du contrat est le
  * `single` de Word.
  */
 export function borderOptions(
@@ -65,9 +66,12 @@ export function borderOptions(
     style: border.style === 'solid' ? 'single' : border.style,
     size: Math.max(2, Math.round(border.widthPt * 8)),
     color: border.color,
-    space: paragraphBorderSpace(side, sides),
+    space: border.spacePt ?? paragraphBorderSpace(side, sides),
   };
 }
+
+/** Bordure Word explicitement absente (`w:val="nil"`), sur un `w:pBdr` ou un `w:tcBorders`. */
+export const NIL_BORDER: IBorderOptions = { style: 'nil' };
 
 /**
  * Identifiants des styles que l'export neuf définit toujours (ceux de `docx` plus ceux

@@ -18,6 +18,7 @@ import type {
   ReaderOptions,
 } from '../reader/types';
 import type { DocxInput } from '../types';
+import { allSectPrs } from './graft-sections';
 import { headerFooterParts } from './header-footer-variables';
 import { wordAttr, xmlDeclarationOf, type XmlCodec } from './xml-io';
 
@@ -54,6 +55,12 @@ export interface TemplateContext {
   /** En-têtes et pieds du gabarit en HTML stylé, lus seulement si `readHeadersFooters` est demandé. */
   readonly headers?: HeaderFooterSet;
   readonly footers?: HeaderFooterSet;
+  /**
+   * En-têtes et pieds **effectifs** de chaque `w:sectPr` du gabarit (héritage compris),
+   * dans l'ordre du corps, lus avec `headers` / `footers` : la greffe section par section
+   * compare `layout.sections[n]` à l'entrée correspondante.
+   */
+  readonly sections?: readonly HeadersFootersResult[];
 }
 
 /** Détection d'`ArrayBuffer` robuste aux realms (jsdom vs Node), contrairement à `instanceof`. */
@@ -194,8 +201,9 @@ export async function openTemplate(
     const read = await readTemplateHeadersFooters(pkg, body, codec, resolver, numbering);
     return {
       ...context,
-      ...(read.headers ? { headers: read.headers } : {}),
-      ...(read.footers ? { footers: read.footers } : {}),
+      ...(read.last.headers ? { headers: read.last.headers } : {}),
+      ...(read.last.footers ? { footers: read.last.footers } : {}),
+      sections: read.sections,
     };
   } catch {
     return context;
@@ -270,24 +278,18 @@ async function convertHeaderBlocks(container: Element, ctx: ConverterContext): P
   return blocks;
 }
 
-/** Tous les `w:sectPr` du corps dans l'ordre : ceux des `w:pPr` (fins de section) puis le final. */
-function allSectPrs(body: Element): Element[] {
-  const result: Element[] = [];
-  for (const paragraph of childrenNamed(body, 'p')) {
-    const pPr = childNamed(paragraph, 'pPr');
-    const sectPr = pPr ? childNamed(pPr, 'sectPr') : null;
-    if (sectPr) result.push(sectPr);
-  }
-  const last = childNamed(body, 'sectPr');
-  if (last) result.push(last);
-  return result;
+/** En-têtes et pieds effectifs de chaque section du gabarit, et ceux de la dernière. */
+interface TemplateHeadersFooters {
+  readonly sections: readonly HeadersFootersResult[];
+  readonly last: HeadersFootersResult;
 }
 
 /**
  * En-têtes et pieds effectifs du gabarit, lus par le lecteur stylé (`reader/headers.ts`)
  * sur le paquet déjà ouvert : seules les parties d'en-tête et de pied sont converties,
  * pas le corps. Comme à l'import, chaque section hérite des références de la précédente,
- * les plus récentes recouvrant les plus anciennes type par type.
+ * les plus récentes recouvrant les plus anciennes type par type ; le résultat de chaque
+ * section est conservé pour la greffe section par section.
  */
 async function readTemplateHeadersFooters(
   pkg: DocxPackage,
@@ -295,7 +297,7 @@ async function readTemplateHeadersFooters(
   codec: XmlCodec,
   styles: DocxStyleResolver,
   numbering: NumberingResolver,
-): Promise<HeadersFootersResult> {
+): Promise<TemplateHeadersFooters> {
   const options: ReaderOptions = {
     footnotes: false,
     emptyParagraphs: 'keep',
@@ -322,10 +324,13 @@ async function readTemplateHeadersFooters(
     tableStyle: null,
   };
   const merged: { -readonly [K in keyof HeadersFootersResult]: HeadersFootersResult[K] } = {};
+  const sections: HeadersFootersResult[] = [];
   for (const sectPr of allSectPrs(body)) {
     const section = await readHeadersFooters(sectPr, ctx);
     if (section.headers) merged.headers = { ...merged.headers, ...section.headers };
     if (section.footers) merged.footers = { ...merged.footers, ...section.footers };
+    if (section.titlePage !== undefined) merged.titlePage = section.titlePage;
+    sections.push({ ...merged });
   }
-  return merged;
+  return { sections, last: merged };
 }

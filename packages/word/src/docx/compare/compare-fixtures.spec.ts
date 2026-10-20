@@ -17,6 +17,8 @@ const LAYOUT_FIXTURES = [
   '15-listes-numerotation.docx',
   '16-sections.docx',
   '17-objets-perdus.docx',
+  '18-sections-triple.docx',
+  '19-tabulations-bordures.docx',
 ];
 
 /** Cible de l'aller-retour dans le gabarit (critère d'acceptation de la session 3). */
@@ -31,37 +33,37 @@ const TEMPLATE_TARGET_SCORE = 0.98;
 const ROUNDTRIP_MIN_TEXT_RATIO = 0.7;
 
 /**
- * Fixtures qui atteignent la cible dans le gabarit (mesure du 20/10/2026, L28c : le
- * comparateur mesure le rendu de Word, pas la forme XML — bordures effectives, saut de page
- * comme frontière de bloc, champs de fusion par nom, largeurs à ±0,5 pt), avec les seules
- * propriétés encore perdues, réelles et hors périmètre du comparateur :
- * - `11-styles-inline` (1) et `13-styles-nommes` (1) et `15-listes-numerotation` (1) : rien.
- * - `12-paragraphes` (0,990) : `paragraph.text` ×1 — `w:tab` lu comme un espace par
- *   l'import (« paragraphe\ttexte » → « paragraphe texte »).
- * - `14-tableaux-riches` (0,998) : `table.align` ×1 — centrage du tableau 2 (`w:jc center`)
- *   perdu par le writer.
+ * Fixtures qui atteignent la cible dans le gabarit (mesure du 20/10/2026 après L42 et L43 :
+ * sections multiples greffées, `w:tab`, `w:space`, couleurs exactes, `w:jc`), avec les
+ * seules propriétés encore perdues, réelles et hors périmètre du comparateur :
+ * - `11`, `12`, `13`, `15`, `16-sections`, `18-sections-triple` (1) : rien.
+ * - `14-tableaux-riches` (0,988) : `table.borders` ×1, `table.cellBorders` ×4 — `w:space`
+ *   lu par `reader/properties.readBorder` (bordures de style) mais pas par
+ *   `units-blocks.readBorderElement` (`w:tcBorders` directs) : le comparateur voit un
+ *   `spacePt: 0` d'un côté et rien de l'autre (fusion des deux modules prévue, L45).
  */
 const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
   '11-styles-inline.docx': [],
-  '12-paragraphes.docx': ['paragraph.text'],
+  '12-paragraphes.docx': [],
   '13-styles-nommes.docx': [],
-  '14-tableaux-riches.docx': ['table.align'],
+  '14-tableaux-riches.docx': ['table.borders', 'table.cellBorders'],
   '15-listes-numerotation.docx': [],
+  '16-sections.docx': [],
+  '18-sections-triple.docx': [],
 };
 
 /**
- * Fixtures sous la cible dans le gabarit, avec le score mesuré le 20/10/2026 (L28c). Les
- * parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
+ * Fixtures sous la cible dans le gabarit, avec le score mesuré le 20/10/2026 (après L43).
+ * Les parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
  * viennent du lecteur (`reader/**`) ou du writer (`writer/**`, `export/**`), hors
  * périmètre du comparateur :
- * - `16-sections` (0,756) : `section.count` 2 → 1, `section.pgSz`, `section.pgMar`,
- *   `section.cols`, `section.type`, `section.titlePg`, `header.*`, `footer.*` — l'import ne
- *   restitue que la dernière section (`layout`), le `w:sectPr` de la section 1 disparaît et
- *   ses en-têtes/pieds avec lui (les parties `header*.xml`/`footer*.xml` restent, mais
- *   référencées par la seule section restante).
- * - `17-objets-perdus` (0,944) : `paragraph.text` ×6 — espace final des paragraphes retiré
- *   à l'export (« Forme (wps:wsp sans texte) : » → « … : »), texte de la zone de texte
- *   réinjecté dans le paragraphe porteur, texte de l'équation (`x2+1=0`) absent.
+ * - `17-objets-perdus` (0,972) : `paragraph.text` ×3 — texte de la zone de texte réinjecté
+ *   dans le paragraphe porteur, texte de l'équation (`x2+1=0`) absent.
+ * - `19-tabulations-bordures` (0,893) : tout sur le tableau à style conditionnel —
+ *   `run.bold` ×2, `table.cellShading` ×6 (le lecteur résout `tblStylePr` en propriétés
+ *   directes, le writer ne sait pas les retirer sans réécrire `w:tblLook`, hors contrat :
+ *   proposition `TableLayoutAttrs.look`), `table.cellBorders` ×10 et `table.borders` ×1
+ *   (`spacePt`, même cause que la fixture 14).
  *
  * La valeur est un **plancher de non-régression** (score mesuré moins une marge), pas un
  * seuil : la cible reste `TEMPLATE_TARGET_SCORE`, assertée en `it.fails` jusqu'à ce que
@@ -69,21 +71,19 @@ const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
  * `it.fails` échoue : la déplacer dans `TEMPLATE_AT_TARGET`.
  */
 const TEMPLATE_BELOW_TARGET: Readonly<Record<string, number>> = {
-  '16-sections.docx': 0.74,
-  '17-objets-perdus.docx': 0.93,
+  '17-objets-perdus.docx': 0.96,
+  '19-tabulations-bordures.docx': 0.88,
 };
 
 /**
- * Document client dans le gabarit : 0,889 mesuré le 20/10/2026 (L28c ; 0,830 en L28b).
- * Pertes restantes, toutes réelles : `paragraph.text` ×21 (espaces finaux retirés à
- * l'export), `run.*` ×2 (runs réduits à un espace, retirés avec lui), `table.cellBorders`
- * ×8 (`w:tcBorders` à `nil` du document oubliés par le writer : la bordure du style
- * `Grilledutableau` réapparaît ; traits gris `#BFBFBF` réécrits en noir), `section.count`
- * 3 → 1 et `section.pgMar` (distance du pied 22,85 pt → 0), `run.runStyle` /
- * `run.underline` ajoutés sur un lien (`Lienhypertexte`). Toutes hors périmètre du
- * comparateur (lecteur, writer).
+ * Document client dans le gabarit : **0,99** mesuré le 20/10/2026 après L43 (0,889 en L28c,
+ * 0,830 en L28b) : la cible de la session 3 est atteinte, les trois `w:sectPr` ressortent
+ * identiques à l'octet. Pertes restantes, toutes réelles et hors périmètre du comparateur :
+ * `paragraph.text` ×2, `run.runStyle` / `run.underline` ×1 sur un lien (`Lienhypertexte`),
+ * `table.borders` ×6 et `table.cellBorders` ×8 (`spacePt` des `w:tcBorders` directs, même
+ * cause que la fixture 14). Le plancher est la cible elle-même.
  */
-const CLIENT_TEMPLATE_FLOOR = 0.869;
+const CLIENT_TEMPLATE_FLOOR = 0.98;
 
 function fixture(name: string): ArrayBuffer {
   const bytes = readFileSync(join(DIR, name));
@@ -188,7 +188,9 @@ describe('compareDocx sur les fixtures de mise en page', () => {
       expect(report.score).toBeGreaterThan(0.15);
       expect(report.score).toBeLessThan(0.4);
       if (name === '13-styles-nommes.docx') expect(report.score).toBeGreaterThanOrEqual(0.3);
-      expect(textKeptRatio(report)).toBe(0);
+      // La fixture 18 garde un paragraphe vide porteur de w:sectPr : le <w:p/> du corps vidé
+      // s'aligne dessus (1/22), le reste du texte est perdu.
+      expect(textKeptRatio(report)).toBeLessThanOrEqual(0.05);
       expect(textKeptRatio(report)).toBeLessThan(ROUNDTRIP_MIN_TEXT_RATIO);
     },
   );
@@ -279,6 +281,14 @@ describe('compareDocx sur les fixtures de mise en page', () => {
     expect(report.lost.map((item) => item.kind)).toContain('textbox');
   });
 
+  it('18-sections-triple : trois sections conservées dans le gabarit, en-têtes compris', async () => {
+    const report = await templateReport('18-sections-triple.docx');
+    expect(report.score).toBe(1);
+    expect(report.properties.find((p) => p.name === 'section.count')?.lost).toBe(0);
+    expect(report.properties.find((p) => p.name === 'section.pgSz')?.total).toBe(3);
+    expect(report.properties.filter((p) => p.group === 'header-footer' && p.lost > 0)).toEqual([]);
+  });
+
   it('16-sections : deux sections, en-têtes et pieds comparés', async () => {
     const buffer = fixture('16-sections.docx');
     const report = await compareDocx(buffer, buffer.slice(0));
@@ -341,9 +351,18 @@ describe.skipIf(!existsSync(CLIENT))('compareDocx sur le document client', () =>
     expect(textKeptRatio(report)).toBeGreaterThanOrEqual(0.75);
   });
 
-  // Cible non atteinte, causes hors périmètre du comparateur : voir CLIENT_TEMPLATE_FLOOR.
-  it.fails('aller-retour dans le gabarit : score >= 0,98 (TODO lecteur/writer)', async () => {
+  it('aller-retour dans le gabarit : score >= 0,98, trois sections conservées', async () => {
     const report = await templateReportOfClient();
     expect(report.score).toBeGreaterThanOrEqual(TEMPLATE_TARGET_SCORE);
+    expect(report.properties.find((p) => p.name === 'section.count')?.lost).toBe(0);
+    expect(report.properties.find((p) => p.name === 'section.pgMar')?.lost).toBe(0);
+    const lost = report.properties.filter((p) => p.lost > 0).map((p) => p.name);
+    expect(lost).toEqual([
+      'paragraph.text',
+      'run.runStyle',
+      'run.underline',
+      'table.borders',
+      'table.cellBorders',
+    ]);
   });
 });
