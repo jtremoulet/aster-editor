@@ -40,7 +40,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Publication réelle seulement si la variable de dépôt ASTER_CI_PUBLISH vaut "true"
+      # (publication de confiance npm configurée sur les quatre paquets). Sinon, et par
+      # défaut, le run vérifie, construit et simule : Joris publie à la main avec sa 2FA.
       - name: Publish
         run: >
           node scripts/release.mjs --skip-build --provenance
-          ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+          ${{ (vars.ASTER_CI_PUBLISH == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)) && '' || '--dry-run' }}
