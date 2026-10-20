@@ -250,6 +250,26 @@ export function pageViewCssValues(metrics: PageMetrics): readonly string[] {
   ];
 }
 
+/**
+ * Événement DOM (sans bulle) émis sur `contentElement` quand la vue page est activée ou
+ * retirée. Le plugin de pagination (L30) l'écoute sur `view.dom` et relit
+ * `getActivePageView` : aucune dépendance de `page-view` vers le plugin.
+ */
+export const PAGE_VIEW_CHANGE_EVENT = 'aster:page-view-change';
+
+/** Options de la vue page active, par conteneur de contenu (`view.dom`). */
+const ACTIVE_PAGE_VIEWS = new WeakMap<HTMLElement, PageViewOptions>();
+
+/** Options de la vue page active sur ce conteneur de contenu, `null` si elle est inactive. */
+export function getActivePageView(contentElement: HTMLElement): PageViewOptions | null {
+  return ACTIVE_PAGE_VIEWS.get(contentElement) ?? null;
+}
+
+/** Signale un changement de vue page aux plugins qui écoutent `contentElement`. */
+function notifyPageViewChange(contentElement: HTMLElement): void {
+  contentElement.dispatchEvent(new CustomEvent(PAGE_VIEW_CHANGE_EVENT));
+}
+
 /** Vue page montée : conteneurs et retrait. */
 export interface PageViewHandle {
   readonly layout: DocumentLayout;
@@ -295,6 +315,10 @@ export function applyPageView(
     }
   }
 
+  // Pagination (L30) : les options sont lisibles par le plugin avant qu'il soit prévenu.
+  ACTIVE_PAGE_VIEWS.set(contentElement, options);
+  notifyPageViewChange(contentElement);
+
   let removed = false;
   return {
     layout,
@@ -305,6 +329,9 @@ export function applyPageView(
         return;
       }
       removed = true;
+      // Le plugin de pagination retire d'abord ses propres variables et décorations.
+      ACTIVE_PAGE_VIEWS.delete(contentElement);
+      notifyPageViewChange(contentElement);
       host.classList.remove(PAGE_VIEW_CLASS);
       for (const name of PAGE_VIEW_CSS_VARIABLES) {
         host.style.removeProperty(name);

@@ -200,6 +200,38 @@ export {
   type PageMetrics,
   type PageViewHandle,
 } from './extensions/page-view';
+// --- Pagination approximative de la vue page (session 3, L30) -------------
+export { PAGE_VIEW_CHANGE_EVENT, getActivePageView } from './extensions/page-view';
+export {
+  PAGE_COUNT_ATTRIBUTE,
+  PAGE_COUNT_CSS_VARIABLE,
+  PAGE_GAP_CLASS,
+  PAGE_GAP_FILL_CSS_VARIABLE,
+  PAGE_GAP_NUMBER_CLASS,
+  PAGE_NUMBER_ATTRIBUTE,
+  PAGINATION_DEBOUNCE_MS,
+  PAGINATION_EXTENSION_NAME,
+  Pagination,
+  getPaginationResult,
+  isPaginationEnabled,
+  measureBlocks,
+  measurePagination,
+  paginateNow,
+  paginationPluginKey,
+  usablePageHeightPx,
+  type MeasuredBlocks,
+  type PaginatedPageViewOptions,
+  type PaginationOptions,
+} from './extensions/pagination';
+export {
+  EMPTY_PAGINATION,
+  MM_TO_PX,
+  cssLengthToPx,
+  paginate,
+  samePagination,
+  type PageGap,
+  type PaginationResult,
+} from './extensions/pagination-layout';
 export {
   CSS_BORDER_SIDES,
   borderDeclarations,

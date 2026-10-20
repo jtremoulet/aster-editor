@@ -70,4 +70,7 @@ export const fr: AsterDictionary = {
   'editor.placeholder': 'Commence à écrire…',
   'editor.words': '{count} mots',
   'editor.characters': '{count} caractères',
+  // Vue page, pagination approximative (L30) : libellé « Page n sur N » des coupures.
+  'pageView.page': 'Page',
+  'pageView.of': 'sur',
 };

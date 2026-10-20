@@ -70,4 +70,7 @@ export const en: AsterDictionary = {
   'editor.placeholder': 'Start writing…',
   'editor.words': '{count} words',
   'editor.characters': '{count} characters',
+  // Page view, approximate pagination (L30): "Page n of N" label of each gap.
+  'pageView.page': 'Page',
+  'pageView.of': 'of',
 };

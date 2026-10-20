@@ -7,7 +7,9 @@ import type {
   PageSetup,
   PageSizeName,
   PageViewOptions,
+  PaginatedPageViewOptions,
 } from '@aster-editor/core';
+import { getActivePageView, isPaginationEnabled } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
 import { isRecord } from '../utils/guards';
@@ -234,6 +236,13 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
     isPageViewActive(editor),
     'aster-page-layout__enabled',
   );
+  // Pagination approximative (L30) : préremplie depuis les options de la vue page active
+  // (`getActivePageView`), vraie par défaut ; envoyée seulement quand elle est décochée.
+  const pagination = createCheckbox(
+    t('ui.pageLayout.pagination'),
+    isPaginationEnabled(getActivePageView(editor.contentElement)),
+    'aster-page-layout__pagination',
+  );
 
   const submit = (): void => {
     if (!api) return;
@@ -264,7 +273,10 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
           : 'portrait',
       margins: { ...current.margins, ...margins },
     };
-    api.setPageView({ layout: { ...(layout ?? {}), page } });
+    const options: PaginatedPageViewOptions = pagination.input.checked
+      ? { layout: { ...(layout ?? {}), page } }
+      : { layout: { ...(layout ?? {}), page }, pagination: false };
+    api.setPageView(options);
     dropdown.close(false);
     dropdown.update();
     editor.focus();
@@ -296,7 +308,7 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
     orientationGroup,
     marginsGroup,
     alert,
-    el('div', { className: 'aster-dialog__field' }, [enabled.wrapper]),
+    el('div', { className: 'aster-dialog__field' }, [enabled.wrapper, pagination.wrapper]),
     el('div', { className: 'aster-dialog__actions' }, [cancel, ok]),
   );
 }

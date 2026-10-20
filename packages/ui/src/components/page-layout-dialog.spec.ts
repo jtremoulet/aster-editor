@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { DocumentLayout } from '@aster-editor/core';
+import type { DocumentLayout, PaginatedPageViewOptions } from '@aster-editor/core';
+import { applyPageView } from '@aster-editor/core';
 import { createMockEditor, type MockEditor, type MockEditorOptions } from '../testing/mock-editor';
 import { registerUiTranslations } from '../toolbar/create-toolbar';
 import type { ToolbarWidget } from '../types';
@@ -272,5 +273,68 @@ describe('createPageLayoutDialog', () => {
     expect(panel().querySelector('label')?.textContent).toBe('Format');
     expect(button('Appliquer')).toBeDefined();
     expect(enabled().parentElement?.textContent).toBe('Vue page');
+  });
+
+  describe('case « Pagination » (L30)', () => {
+    const pagination = (): HTMLInputElement =>
+      panel().querySelector<HTMLInputElement>('.aster-page-layout__pagination')!;
+
+    it('cochée par défaut, n’ajoute rien aux options quand elle le reste', () => {
+      open();
+      expect(pagination().checked).toBe(true);
+      expect(pagination().parentElement?.textContent).toBe('Pagination (approximate)');
+      enabled().checked = true;
+      button('Apply').click();
+      expect(editor.pageViewCalls).toEqual([
+        {
+          layout: {
+            page: {
+              size: 'A4',
+              orientation: 'portrait',
+              margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+            },
+          },
+        },
+      ]);
+      expect(Object.keys(editor.pageViewCalls[0] ?? {})).not.toContain('pagination');
+    });
+
+    it('décochée, envoie pagination: false avec la mise en page', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: LAYOUT, pageView: true });
+      open();
+      pagination().checked = false;
+      button('Apply').click();
+      const expected: PaginatedPageViewOptions = {
+        layout: {
+          ...LAYOUT,
+          page: {
+            size: 'Letter',
+            orientation: 'landscape',
+            margins: { topMm: 20, rightMm: 15, bottomMm: 20, leftMm: 15, headerMm: 10 },
+          },
+        },
+        pagination: false,
+      };
+      expect(editor.pageViewCalls).toEqual([expected]);
+      expect(isOpen()).toBe(false);
+    });
+
+    it('préremplie depuis la vue page active du core (pagination: false) ; libellé fr', () => {
+      const off: PaginatedPageViewOptions = { pagination: false };
+      const handle = applyPageView(editor.element, editor.contentElement, off);
+      open();
+      expect(enabled().checked).toBe(true);
+      expect(pagination().checked).toBe(false);
+      button('Cancel').click();
+      handle.remove();
+      open();
+      expect(pagination().checked).toBe(true);
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(pagination().parentElement?.textContent).toBe('Pagination (approximative)');
+    });
   });
 });

@@ -29,6 +29,9 @@ const RUNTIME_VARIABLES: ReadonlySet<string> = new Set([
   '--aster-page-margin-left',
   '--aster-page-margin-header',
   '--aster-page-margin-footer',
+  // Pagination approximative (L30) : posées par le plugin `pagination` du core.
+  '--aster-page-count',
+  '--aster-page-gap-fill',
 ]);
 
 /** Variables de vue page que chaque thème doit déclarer (documentées dans `page.css`). */

@@ -15,6 +15,7 @@ import { Outline } from './outline';
 import { ParagraphLayout } from './paragraph-layout';
 import { AsterTextStyle, AsterUnderline, RunLayout } from './run-layout';
 import { AsterHorizontalRule } from './page-break';
+import { Pagination } from './pagination';
 import { Search } from './search';
 import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
 import { createTableExtensions } from './table-layout';
@@ -79,6 +80,8 @@ export function createAsterExtensions(context: AsterExtensionsContext): AnyExten
     Search,
     // Attribut `id` des titres (ancres, sommaire) ; aucun `id` posé sans `getOutline`.
     Outline,
+    // Pagination approximative de la vue page (L30) : inactive tant que la vue page l'est.
+    Pagination.configure({ aster: editor }),
     createShortcutsExtension(context.shortcuts),
     ...(options.extensions ?? []),
   ];
