@@ -50,9 +50,25 @@ git tag v0.4.1 && git push origin v0.4.1
 
 > Ce premier tag déclenchera `release.yml`, qui constatera que tout est déjà publié et sautera chaque paquet. C'est voulu.
 
-## 🤖 Publications suivantes (GitHub Actions, sans token)
+## 🔁 Publications suivantes (à la main, avec la 2FA)
 
-### Configurer la publication de confiance (une fois par paquet)
+Chemin retenu par Joris (20/10/2026) : chaque version est publiée depuis sa machine, npm demande la 2FA à chaque `npm publish`. Le script saute ce qui est déjà en ligne, donc une publication interrompue se relance telle quelle.
+
+```bash
+npm run release
+```
+
+Puis le tag, qui déclenche le workflow `Release npm` en **simulation** (check, build, `--dry-run`) : il sert de garde-fou (une version du `package.json` qui ne correspond pas au tag fait échouer le run), jamais de canal de publication tant que la variable de dépôt `ASTER_CI_PUBLISH` n'existe pas.
+
+```bash
+git tag v0.5.1 && git push origin v0.5.1
+```
+
+> npm retire progressivement les **jetons classiques** et la publication par jeton sans 2FA ; la publication manuelle avec 2FA et la publication de confiance (OIDC) sont les deux voies conservées. La publication de confiance reste donc disponible ci-dessous, en option.
+
+### Option : publication de confiance (GitHub Actions, sans token)
+
+Pour que le workflow publie réellement : configurer le Trusted Publisher sur les quatre paquets comme décrit ci-dessous, **puis** créer la variable de dépôt `ASTER_CI_PUBLISH` = `true` (_Settings_ → _Secrets and variables_ → _Actions_ → _Variables_). Sans cette variable, le run reste en simulation même si le publisher est configuré.
 
 À faire **juste avant la première release par la CI** : une configuration qui n'a pas servi à une publication réussie dans les **2 jours** expire et doit être recréée. Sur npmjs.com, pour chacun des quatre paquets : page du paquet → onglet _Settings_ → section _Trusted Publisher_ → _Select your publisher_ → **GitHub Actions**, puis :
 
@@ -70,17 +86,18 @@ Dans la foulée, onglet _Settings_ → _Publishing access_ → choisir l'option 
 
 À partir de là, le workflow s'authentifie par OIDC (`id-token: write`) : aucun `NPM_TOKEN` à stocker dans les secrets du dépôt, et chaque version publiée depuis le dépôt public porte une **attestation de provenance** générée automatiquement. Prérequis déjà remplis par `release.yml` : npm ≥ 11.5.1 et Node ≥ 22.14 (Node 24), runner hébergé par GitHub. En attendant que ce soit configuré, le job `Publish` échoue avec `ENEEDAUTH` : c'est le signal que l'étape ci-dessus manque.
 
-### Rituel de release
+### Rituel de release (les deux voies)
 
-1. Livrer sur `develop` avec `/ship` (check, revue, changelog, bump via `npm run version:set x.y.z`, commit, push).
-2. Poser le tag sur le commit de version et le pousser :
+1. Livrer sur `develop` avec `/ship` (check, revue, changelog, bump via `npm run version:set x.y.z`, commit, push), puis merge `develop → main` sur demande de Joris.
+2. Publier : `npm run release` à la main (2FA), **ou**, si `ASTER_CI_PUBLISH` vaut `true`, laisser le tag le faire.
+3. Poser le tag sur le commit de version et le pousser :
 
 ```bash
-git tag v0.5.0 && git push origin v0.5.0
+git tag v0.5.1 && git push origin v0.5.1
 ```
 
-3. Le workflow `Release npm` refait `npm run check`, `npm run build`, puis `node scripts/release.mjs --skip-build --provenance`. Il refuse un tag qui ne vaut pas `v<version du package.json>`.
-4. Vérifier sur npmjs.com que les quatre paquets affichent la version et le badge de provenance.
+4. Le workflow `Release npm` refait `npm run check`, `npm run build`, puis `node scripts/release.mjs --skip-build` en simulation (ou en réel avec `--provenance` si `ASTER_CI_PUBLISH` vaut `true`). Il refuse un tag qui ne vaut pas `v<version du package.json>`.
+5. Vérifier sur npmjs.com que les quatre paquets affichent la version (et le badge de provenance en publication de confiance). La propagation du registre peut prendre quelques minutes : `npm view @aster-editor/word version` fait foi.
 
 Pour une répétition sans rien publier : onglet _Actions_ → _Release npm_ → _Run workflow_ avec `dry_run` coché. Un lancement manuel depuis une branche ne peut que simuler : le script refuse toute publication réelle en CI hors d'un tag `v<version>`.
 
