@@ -371,3 +371,12 @@
 - 7 fixtures `11-styles-inline` … `17-objets-perdus` générées par `scripts/generate-fixtures-layout.ts` (lib `docx` + patches XML pour `TableGrid`, zone de texte, forme, objet OLE), reproductibles (hash identique hors `docProps/core.xml`), lisibles par mammoth sans rejet. README des fixtures mis à jour, `npm run fixtures` enchaîne les quatre scripts.
 - Décisions de l'agent validées : `Heading1`/`Heading2` déclarés via `styles.default.heading1/2` (la lib dupliquait le `styleId` sinon) ; pas de repli VML `mc:AlternateContent` autour des formes.
 - Dette : le script fait 844 lignes (un fichier pour sept fixtures), à découper si on y revient. Point à vérifier dans Word : l'objet OLE factice de la 17 peut déclencher une réparation.
+
+### 20/10 17:45 — L24 lecteur styles/runs/paragraphes rendu et intégré (agent 22 min, 267k tokens, 58 outils)
+
+- Résolution complète des styles (docDefaults, `basedOn` avec garde anti-cycle, `link`, thème, styles de tableau), runs avec champs coupés et imbriqués, paragraphes à la sérialisation exacte du contrat. 70 tests, `expected/` 11-13 figés, document client lu : 14 variables, aucun cas non couvert.
+- Décisions validées : saut de page = `<hr data-page-break>` dans le `html` du bloc (plusieurs frères) ; tabulation = U+2003 ; polices et tailles posées sur les runs quand elles diffèrent des `docDefaults`, jamais sur le bloc ; `tblStylePr` ignorés.
+- Extensions structurelles du contrat du lecteur acceptées : `DocxStyleResolver.docDefaults()`, `TableStyleProps.paragraphDefaults`. Proposition à trancher : `DocumentLayout.defaultParagraph` (interligne et espacement par défaut du document, utiles à la vue page).
+- Dette à solder à l'intégration de L25 : `units.ts` (L24) et `units-blocks.ts` (L25) en doublon ; `renderBlocks` doit retirer `margin-left` / `text-indent` des items (`data-docx-num-indent`).
+- Correctifs orchestrateur : regex du test du squelette, `tcPr` et autres propriétés de conteneur ignorées par `convertBlocks` (42 faux `object-lost` sur le document client). Typecheck `word` temporairement rouge à cause de `core/src/html/serialize-html.ts` en cours (L23).
+- Revue R24 lancée.
