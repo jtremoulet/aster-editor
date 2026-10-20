@@ -112,13 +112,24 @@ export interface SectionBreakAttrs {
   readonly section: number;
 }
 
+/** Alignement du texte sur un taquet (`w:tab w:val`) ; `left` est le défaut, non sérialisé. */
+export type TabAlign = 'left' | 'center' | 'right' | 'decimal';
+
+/** Points de suite entre la tabulation et le taquet (`w:leader`) ; absent = aucun. */
+export type TabLeader = 'dot' | 'hyphen' | 'underscore';
+
 /**
- * Tabulation : nœud inline atomique `<span data-tab=""></span>` (plus `data-stop="36pt"`
- * quand la position du taquet est connue). Rendu comme un espace élastique par la feuille
- * de style ; l'export écrit `w:tab`. Remplace l'espace cadratin de la 0.5.
+ * Tabulation : nœud inline atomique `<span data-tab=""></span>`, plus, dans cet ordre et
+ * seulement quand ils sont connus : `data-stop="36pt"` (position du taquet),
+ * `data-align="center"` (alignement autre que `left`), `data-leader="dot"` (points de
+ * suite). Rendu comme un espace élastique par la feuille de style ; l'export écrit `w:tab`
+ * et le taquet (`w:tabs`) avec son alignement et ses points de suite. Remplace l'espace
+ * cadratin de la 0.5. Session 4 : `align` et `leader` ajoutés (R43-05).
  */
 export interface TabAttrs {
   readonly stopPt?: number | null;
+  readonly align?: TabAlign | null;
+  readonly leader?: TabLeader | null;
 }
 
 /** Côtés d'une bordure de paragraphe ; `between` sépare deux paragraphes bordés consécutifs. */

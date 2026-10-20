@@ -43,7 +43,9 @@ export type {
   SectionBreakAttrs,
   SectionLayout,
   SectionStart,
+  TabAlign,
   TabAttrs,
+  TabLeader,
   TableLayoutAttrs,
 } from './layout';
 export { PARAGRAPH_LAYOUT_ATTR_NAMES } from './layout';
