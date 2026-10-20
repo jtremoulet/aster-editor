@@ -466,7 +466,7 @@
 - **L41** (20 min, 334k tokens, 130 outils) : nœud `sectionBreak` avec renumérotation par `appendTransaction` (seulement quand le nombre de sauts change, jamais sur `setContent` : idempotence stricte), commandes `section.*` hors contrat, nœud `tab` (`selectable: false`, Backspace en une frappe, Tab réservé aux listes et cellules), `spacePt` en `padding-<côté>`, `data-align`, vue page par section (hôte = section 1, variables de la section suivante sur chaque `hr` + `data-section-start`). 630 → 709 tests core. Propositions de contrat : commandes `section.*` et `text.insertTab` standard, `getSectionLayout` dans `api/editor.ts`, `spacePt` d'une bordure `between` non sérialisé.
 - Revue R41 lancée ; L42, L43, L44 en cours.
 
-### 20/10 23:40 — L42 lecteur intégré, R42 lancée
+### 20/10 23:33 — L42 lecteur intégré, R42 lancée
 
 - **L42** (21 min, 403k tokens, 131 outils) : `layout.sections[]` (en-têtes hérités type par type, `titlePage` propre à la section, décision ECMA-376 §17.10.6), `<hr data-section-break="n">` avec paragraphe porteur vide retiré, `w:tab` → `<span data-tab data-stop>` (n-ième taquet), `w:space` → `padding-*`, couleurs exactes (la perte venait du writer), `nil` explicite → `0pt solid transparent`, `data-align`, styles conditionnels (8 types, `tblLook` nommé ou masque hexadécimal, bandes). 184 → 225 tests lecteur, attendus 12-14, 16, 18, 19.
 - **Première mesure avec le writer en cours de L43** : fixture 16 → score 1, document client ≥ 0,98 dans le gabarit. Les tests du comparateur qui plafonnaient ces deux documents sous la cible échouent désormais « parce que la cible est atteinte » : à réaligner à l'intégration de L43.
