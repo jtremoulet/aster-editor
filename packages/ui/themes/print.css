@@ -148,7 +148,11 @@
     color: #000;
   }
 
-  /* Saut de page explicite : vraie coupure d'impression, sans espace de bureau. */
+  /*
+   * Saut de page explicite : vraie coupure d'impression, sans espace de bureau. En vue
+   * page, la règle écran de `page.css` (`.aster--page-view …`, (0,4,1)) est plus
+   * spécifique que celle-ci : `page.css` porte sa propre règle print, préfixée, à sa fin.
+   */
   .aster-content .ProseMirror hr[data-page-break] {
     height: 0;
     margin: 0;

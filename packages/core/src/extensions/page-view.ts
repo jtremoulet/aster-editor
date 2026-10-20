@@ -11,6 +11,16 @@ export const PAGE_FOOTER_CLASS = 'aster-page-footer';
 /** Marge par défaut d'un document Word : 1 pouce. */
 export const DEFAULT_PAGE_MARGIN_MM = 25.4;
 
+/** Distance par défaut du bord à l'en-tête / au pied dans Word : un demi-pouce. */
+export const DEFAULT_HEADER_FOOTER_MARGIN_MM = 12.7;
+
+/**
+ * Borne haute de toute dimension ou marge de page, en millimètres (R23-05). Au-delà (ou
+ * pour `1e308`, dont `value * 100` déborde en `Infinity` au formatage), la valeur tombe sur
+ * le défaut : aucune variable CSS ne vaut jamais `Infinitymm`.
+ */
+export const MAX_PAGE_MM = 10_000;
+
 /** Dimensions des formats nommés, en portrait, en millimètres. */
 export const PAGE_SIZES_MM: Readonly<Record<PageSizeName, PageDimensions>> = {
   A3: { widthMm: 297, heightMm: 420 },
@@ -28,6 +38,8 @@ export const PAGE_VIEW_CSS_VARIABLES = [
   '--aster-page-margin-right',
   '--aster-page-margin-bottom',
   '--aster-page-margin-left',
+  '--aster-page-margin-header',
+  '--aster-page-margin-footer',
 ] as const;
 
 /** Dimensions et marges résolues d'une page, en millimètres. */
@@ -38,6 +50,10 @@ export interface PageMetrics {
   readonly marginRightMm: number;
   readonly marginBottomMm: number;
   readonly marginLeftMm: number;
+  /** Distance du bord haut à l'en-tête (`PageMargins.headerMm`, 12,7 mm par défaut). */
+  readonly marginHeaderMm: number;
+  /** Distance du bord bas au pied (`PageMargins.footerMm`, 12,7 mm par défaut). */
+  readonly marginFooterMm: number;
 }
 
 /** Balises conservées par l'assainissement des en-têtes et pieds. */
@@ -114,29 +130,60 @@ const ALLOWED_ATTRIBUTES: ReadonlySet<string> = new Set([
   'rel',
 ]);
 
-/** Vrai si une URL d'attribut `href`/`src` est acceptable (jamais `javascript:` ni `data:` hors image). */
+/** Schémas d'URL acceptés dans `href` / `src` (plus `data:image/` pour `src` seulement). */
+const ALLOWED_URL_SCHEMES: ReadonlySet<string> = new Set(['http', 'https', 'mailto', 'tel']);
+
+/** Caractères de contrôle et blancs ASCII (U+0000 à U+0020), ignorés par les parseurs d'URL. */
+// eslint-disable-next-line no-control-regex -- c'est précisément la plage à retirer.
+const URL_NOISE_PATTERN = /[\u0000- ]/g;
+
+/**
+ * Vrai si une URL d'attribut `href`/`src` est acceptable : ancre, chemin relatif, ou schéma
+ * de l'allowlist. Les parseurs d'URL ignorent les caractères de contrôle et les blancs
+ * ASCII (`java\tscript:` est lu `javascript:`), pas une regex : ils sont retirés **avant**
+ * le test, comme le fait DOMPurify (R23-01). Un `\` vaut `/` pour les schémas spéciaux
+ * (`\\evil` → `//evil`) et les URL relatives au protocole (`//evil`) sont refusées.
+ */
 function isSafeUrl(name: string, value: string): boolean {
-  const trimmed = value.trim().toLowerCase();
-  if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('/')) {
+  const stripped = value.replace(URL_NOISE_PATTERN, '').replace(/\\/g, '/').toLowerCase();
+  if (stripped === '' || stripped.startsWith('#')) {
     return true;
   }
-  const scheme = /^([a-z][a-z0-9+.-]*):/.exec(trimmed)?.[1];
+  if (stripped.startsWith('//')) {
+    return false;
+  }
+  if (stripped.startsWith('/')) {
+    return true;
+  }
+  const scheme = /^([a-z][a-z0-9+.-]*):/.exec(stripped)?.[1];
   if (scheme === undefined) {
     return true;
   }
-  if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') {
+  if (ALLOWED_URL_SCHEMES.has(scheme)) {
     return true;
   }
-  return name === 'src' && trimmed.startsWith('data:image/');
+  return name === 'src' && stripped.startsWith('data:image/');
 }
 
-/** Vrai si une valeur de `style` ne contient rien d'exécutable (`url(`, `expression(`). */
+/**
+ * Vrai si une valeur de `style` ne charge ni n'exécute rien. Le CSS décode les échappements
+ * (`\75rl(` est lu `url(`, CSS Syntax L3 §4.3.7) et ignore les commentaires : tout `\` est
+ * refusé (Word n'en produit jamais) et les commentaires sont retirés avant de chercher les
+ * fonctions qui chargent une ressource (`url(`, `image-set(`, `image(`, `src(`, `element(`)
+ * ou exécutent du code (`expression(`, `-moz-binding`, `behavior`) (R23-08).
+ */
 function isSafeStyle(value: string): boolean {
-  return !/url\s*\(|expression\s*\(|javascript:/i.test(value);
+  if (value.includes('\\')) {
+    return false;
+  }
+  const stripped = value.replace(/\/\*[\s\S]*?\*\//g, '');
+  return !/(?:url|image-set|image|src|element|expression)\s*\(|javascript:|-moz-binding|behavior\s*:/i.test(
+    stripped,
+  );
 }
 
-/** Assainit un élément en place : attributs filtrés, puis descendants. */
-function sanitizeElement(element: Element): void {
+/** Filtre les attributs d'un élément en place : allowlist, jamais `on*`, URL et style sûrs. */
+function sanitizeAttributes(element: Element): void {
   for (const attribute of [...element.attributes]) {
     const name = attribute.name.toLowerCase();
     const allowed =
@@ -148,28 +195,88 @@ function sanitizeElement(element: Element): void {
       element.removeAttribute(attribute.name);
     }
   }
-  sanitizeChildren(element);
 }
 
-/** Parcourt les enfants : balise interdite supprimée, inconnue déballée, connue assainie. */
-function sanitizeChildren(parent: Node): void {
-  for (const child of [...parent.childNodes]) {
-    if (child.nodeType === Node.COMMENT_NODE) {
-      child.remove();
-      continue;
-    }
-    if (child.nodeType !== Node.ELEMENT_NODE) {
-      continue;
-    }
-    const element = child as Element;
-    const tag = element.tagName.toLowerCase();
-    if (DROPPED_TAGS.has(tag)) {
-      element.remove();
-    } else if (!ALLOWED_TAGS.has(tag)) {
-      sanitizeChildren(element);
-      element.replaceWith(...element.childNodes);
-    } else {
-      sanitizeElement(element);
+/**
+ * Profondeur d'imbrication conservée par l'assainissement. Au-delà, un élément est réduit
+ * à son texte : un fragment de 8 000 `<div>` imbriqués, possible depuis un `.docx`
+ * hostile, ne produit plus qu'un arbre borné.
+ */
+export const MAX_SANITIZE_DEPTH = 64;
+
+/** Sélecteur des balises supprimées avec leur contenu. */
+const DROPPED_SELECTOR = [...DROPPED_TAGS].join(',');
+
+/** Un parent à parcourir et la profondeur de ses enfants directs. */
+interface SanitizeFrame {
+  readonly parent: Node;
+  readonly depth: number;
+}
+
+/**
+ * Remplace un élément trop profond par son seul texte, balises interdites retirées
+ * d'abord (leur contenu ne doit pas réapparaître en texte). Une seule passe sur le
+ * sous-arbre, quelle que soit sa taille : le déballer niveau par niveau déplacerait le
+ * sous-arbre à chaque niveau, ce qui est quadratique dans le DOM.
+ */
+function flattenToText(element: Element): void {
+  for (const dropped of element.querySelectorAll(DROPPED_SELECTOR)) {
+    dropped.remove();
+  }
+  const text = element.textContent;
+  if (text === '') {
+    element.remove();
+  } else {
+    element.replaceWith(document.createTextNode(text));
+  }
+}
+
+/**
+ * Parcourt les enfants d'un parent : commentaire et balise interdite supprimés, élément
+ * trop profond réduit à son texte, balise inconnue déballée (ses enfants remontent et sont
+ * examinés à leur tour), balise connue assainie puis empilée. Pile explicite plutôt que
+ * récursion : la version récursive faisait déborder la pile d'appels sur un HTML
+ * profondément imbriqué (R23-03). Le déballage ne se produit qu'au-dessus du plafond, le
+ * coût total reste borné par `MAX_SANITIZE_DEPTH` fois la taille du fragment.
+ */
+function sanitizeTree(root: Node): void {
+  const stack: SanitizeFrame[] = [{ parent: root, depth: 0 }];
+  for (let frame = stack.pop(); frame !== undefined; frame = stack.pop()) {
+    const { parent, depth } = frame;
+    let child = parent.firstChild;
+    while (child !== null) {
+      const following = child.nextSibling;
+      if (child.nodeType === Node.COMMENT_NODE) {
+        child.remove();
+        child = following;
+        continue;
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) {
+        child = following;
+        continue;
+      }
+      const element = child as Element;
+      const tag = element.tagName.toLowerCase();
+      if (DROPPED_TAGS.has(tag)) {
+        element.remove();
+        child = following;
+        continue;
+      }
+      if (depth >= MAX_SANITIZE_DEPTH) {
+        flattenToText(element);
+        child = following;
+        continue;
+      }
+      if (!ALLOWED_TAGS.has(tag)) {
+        // Déballé en place : ses enfants prennent sa position et sont examinés ensuite.
+        const first = element.firstChild;
+        element.replaceWith(...element.childNodes);
+        child = first ?? following;
+        continue;
+      }
+      sanitizeAttributes(element);
+      stack.push({ parent: element, depth: depth + 1 });
+      child = following;
     }
   }
 }
@@ -179,29 +286,34 @@ function sanitizeChildren(parent: Node): void {
  * texte et balises inline/bloc simples uniquement (`p`, titres, `span`, marques, listes,
  * tables, `img`, `a`), attributs `style`, `class`, `data-*`, `href`/`src` sûrs. Jamais de
  * `<script>`, `<style>`, `<iframe>`, ni d'attribut `on*`. Les balises inconnues sont
- * déballées, leur texte conservé. Le core n'avait pas de sanitiseur : celui-ci est
- * volontairement minimal, allowlist stricte.
+ * déballées, leur texte conservé, et l'imbrication est plafonnée à `MAX_SANITIZE_DEPTH`.
+ * Le core n'avait pas de sanitiseur : celui-ci est volontairement minimal, allowlist stricte.
  */
 export function sanitizeHeaderFooterHtml(html: string): string {
   const template = document.createElement('template');
   template.innerHTML = html;
-  sanitizeChildren(template.content);
+  sanitizeTree(template.content);
   return template.innerHTML;
 }
 
-/** Formate des millimètres avec au plus deux décimales. */
+/** Formate des millimètres avec au plus deux décimales ; jamais `Infinitymm` ni `NaNmm`. */
 function formatMm(value: number): string {
-  return `${roundLayoutNumber(value)}mm`;
+  const rounded = roundLayoutNumber(value);
+  return `${Number.isFinite(rounded) ? rounded : 0}mm`;
 }
 
-/** Nombre positif fini, sinon le repli. */
+/** Nombre fini strictement positif et au plus `MAX_PAGE_MM`, sinon le repli. */
 function positiveOr(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= MAX_PAGE_MM
+    ? value
+    : fallback;
 }
 
-/** Nombre fini positif ou nul, sinon le repli. */
+/** Nombre fini positif ou nul et au plus `MAX_PAGE_MM`, sinon le repli. */
 function nonNegativeOr(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_PAGE_MM
+    ? value
+    : fallback;
 }
 
 /** Vrai si la taille est un format nommé connu. */
@@ -212,7 +324,8 @@ function isPageSizeName(value: unknown): value is PageSizeName {
 /**
  * Résout les dimensions et marges d'une page depuis `layout.page` : format nommé ou libre
  * (A4 par défaut), orientation paysage qui inverse largeur et hauteur, marges à 25,4 mm
- * par défaut. Les valeurs absurdes (négatives, `NaN`) tombent sur les défauts.
+ * par défaut, en-tête et pied à 12,7 mm du bord. Les valeurs absurdes (négatives, `NaN`,
+ * infinies, au-delà de `MAX_PAGE_MM`) tombent sur les défauts.
  */
 export function resolvePageMetrics(layout: DocumentLayout | undefined | null): PageMetrics {
   const page = layout?.page;
@@ -235,6 +348,8 @@ export function resolvePageMetrics(layout: DocumentLayout | undefined | null): P
     marginRightMm: nonNegativeOr(margins?.rightMm, DEFAULT_PAGE_MARGIN_MM),
     marginBottomMm: nonNegativeOr(margins?.bottomMm, DEFAULT_PAGE_MARGIN_MM),
     marginLeftMm: nonNegativeOr(margins?.leftMm, DEFAULT_PAGE_MARGIN_MM),
+    marginHeaderMm: nonNegativeOr(margins?.headerMm, DEFAULT_HEADER_FOOTER_MARGIN_MM),
+    marginFooterMm: nonNegativeOr(margins?.footerMm, DEFAULT_HEADER_FOOTER_MARGIN_MM),
   };
 }
 
@@ -247,6 +362,8 @@ export function pageViewCssValues(metrics: PageMetrics): readonly string[] {
     formatMm(metrics.marginRightMm),
     formatMm(metrics.marginBottomMm),
     formatMm(metrics.marginLeftMm),
+    formatMm(metrics.marginHeaderMm),
+    formatMm(metrics.marginFooterMm),
   ];
 }
 
@@ -291,24 +408,34 @@ export function applyPageView(
   options: PageViewOptions,
 ): PageViewHandle {
   const layout: DocumentLayout = options.layout ?? {};
-  host.classList.add(PAGE_VIEW_CLASS);
+  // Tout ce qui lit la mise en page (et peut lever sur une entrée hostile) est calculé
+  // avant la première mutation de l'hôte : en cas d'exception, rien n'est à moitié posé.
+  const showHeadersFooters = options.showHeadersFooters !== false;
   const values = pageViewCssValues(resolvePageMetrics(layout));
+  const headerHtml = showHeadersFooters
+    ? sanitizeHeaderFooterHtml(layout.headers?.default?.html ?? '')
+    : '';
+  const footerHtml = showHeadersFooters
+    ? sanitizeHeaderFooterHtml(layout.footers?.default?.html ?? '')
+    : '';
+
+  host.classList.add(PAGE_VIEW_CLASS);
   PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
     host.style.setProperty(name, values[index] ?? '');
   });
 
   let header: HTMLElement | null = null;
   let footer: HTMLElement | null = null;
-  if (options.showHeadersFooters !== false) {
+  if (showHeadersFooters) {
     const parent = contentElement.parentNode;
     header = document.createElement('div');
     header.className = PAGE_HEADER_CLASS;
     header.setAttribute('contenteditable', 'false');
-    header.innerHTML = sanitizeHeaderFooterHtml(layout.headers?.default?.html ?? '');
+    header.innerHTML = headerHtml;
     footer = document.createElement('div');
     footer.className = PAGE_FOOTER_CLASS;
     footer.setAttribute('contenteditable', 'false');
-    footer.innerHTML = sanitizeHeaderFooterHtml(layout.footers?.default?.html ?? '');
+    footer.innerHTML = footerHtml;
     if (parent) {
       parent.insertBefore(header, contentElement);
       parent.insertBefore(footer, contentElement.nextSibling);

@@ -16,12 +16,14 @@
  *   --aster-page-margin-header   distance du bord à l'en-tête (optionnelle, 12.7mm)
  *   --aster-page-margin-footer   distance du bord au pied (optionnelle, 12.7mm)
  *
- * Les thèmes (`light.css` / `night.css`) fournissent les couleurs :
+ * Les thèmes (`light.css` / `night.css`) fournissent les couleurs ; chaque usage a un repli
+ * (valeurs de `light.css`) pour qu'un thème custom antérieur à la vue page affiche quand
+ * même bureau, feuille et ombre :
  *
- *   --aster-page-bg              fond de la feuille (blanc / gris très sombre)
- *   --aster-page-desk            fond du bureau autour de la feuille
- *   --aster-page-shadow          ombre de la feuille
- *   --aster-page-desk-padding    espace entre le bord du bureau et la feuille
+ *   --aster-page-bg              fond de la feuille (blanc / gris très sombre), #fff
+ *   --aster-page-desk            fond du bureau autour de la feuille, #e3e5ea
+ *   --aster-page-shadow          ombre de la feuille, 0 2px 12px rgba(16, 20, 30, 0.18)
+ *   --aster-page-desk-padding    espace entre le bord du bureau et la feuille, 24px
  *
  * Aucune pagination : `hr[data-page-break]` est rendu comme une coupure de feuille, les
  * en-têtes et pieds `default` (conteneurs posés par le core) sont affichés une fois, en
@@ -32,8 +34,8 @@
 
 .aster--page-view .aster-content {
   position: relative;
-  padding: var(--aster-page-desk-padding) var(--aster-space-4);
-  background: var(--aster-page-desk);
+  padding: var(--aster-page-desk-padding, 24px) var(--aster-space-4);
+  background: var(--aster-page-desk, #e3e5ea);
   overflow-x: auto;
 }
 
@@ -44,14 +46,14 @@
   margin: 0 auto;
   padding: var(--aster-page-margin-top, 25.4mm) var(--aster-page-margin-right, 25.4mm)
     var(--aster-page-margin-bottom, 25.4mm) var(--aster-page-margin-left, 25.4mm);
-  background: var(--aster-page-bg);
-  box-shadow: var(--aster-page-shadow);
+  background: var(--aster-page-bg, #fff);
+  box-shadow: var(--aster-page-shadow, 0 2px 12px rgba(16, 20, 30, 0.18));
   border-radius: 0;
 }
 
 .aster--page-view .aster-content .ProseMirror:focus-visible {
   box-shadow:
-    var(--aster-page-shadow),
+    var(--aster-page-shadow, 0 2px 12px rgba(16, 20, 30, 0.18)),
     inset 0 0 0 2px var(--aster-accent-soft);
 }
 
@@ -70,19 +72,20 @@
   font-family: var(--aster-font-content);
   font-size: var(--aster-font-size-content);
   line-height: var(--aster-line-height);
-  opacity: 0.55;
+  /* 0,7 et non 0,55 : texte clair sur feuille blanche à 6,1 : 1 (AA), 3,75 : 1 à 0,55. */
+  opacity: 0.7;
   user-select: none;
   -webkit-user-select: none;
   pointer-events: none;
 }
 
 .aster--page-view .aster-page-header {
-  top: calc(var(--aster-page-desk-padding) + var(--aster-page-margin-header, 12.7mm));
+  top: calc(var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-header, 12.7mm));
   max-height: calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm));
 }
 
 .aster--page-view .aster-page-footer {
-  bottom: calc(var(--aster-page-desk-padding) + var(--aster-page-margin-footer, 12.7mm));
+  bottom: calc(var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-footer, 12.7mm));
   max-height: calc(
     var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)
   );
@@ -103,11 +106,11 @@
 /* ---------- Saut de page explicite --------------------------------------- */
 
 .aster--page-view .aster-content .ProseMirror hr[data-page-break] {
-  height: var(--aster-page-desk-padding);
+  height: var(--aster-page-desk-padding, 24px);
   margin: var(--aster-page-margin-bottom, 25.4mm) calc(-1 * var(--aster-page-margin-right, 25.4mm))
     var(--aster-page-margin-top, 25.4mm) calc(-1 * var(--aster-page-margin-left, 25.4mm));
   border: 0;
-  background: var(--aster-page-desk);
+  background: var(--aster-page-desk, #e3e5ea);
   box-shadow:
     inset 0 1px 0 var(--aster-border),
     inset 0 -1px 0 var(--aster-border);
@@ -264,7 +267,7 @@
 .aster--page-view .aster-content .ProseMirror {
   min-height: calc(
     var(--aster-page-count, 1) * var(--aster-page-height, 297mm) +
-      (var(--aster-page-count, 1) - 1) * var(--aster-page-desk-padding)
+      (var(--aster-page-count, 1) - 1) * var(--aster-page-desk-padding, 24px)
   );
 }
 
@@ -273,7 +276,7 @@
   box-sizing: border-box;
   height: calc(
     var(--aster-page-gap-fill, 0px) + var(--aster-page-margin-bottom, 25.4mm) +
-      var(--aster-page-desk-padding) + var(--aster-page-margin-top, 25.4mm)
+      var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-top, 25.4mm)
   );
   margin: 0 calc(-1 * var(--aster-page-margin-right, 25.4mm)) 0
     calc(-1 * var(--aster-page-margin-left, 25.4mm));
@@ -292,8 +295,8 @@
   top: calc(var(--aster-page-gap-fill, 0px) + var(--aster-page-margin-bottom, 25.4mm));
   right: 0;
   left: 0;
-  height: var(--aster-page-desk-padding);
-  background: var(--aster-page-desk);
+  height: var(--aster-page-desk-padding, 24px);
+  background: var(--aster-page-desk, #e3e5ea);
   box-shadow:
     inset 0 1px 0 var(--aster-border),
     inset 0 -1px 0 var(--aster-border);
@@ -332,5 +335,22 @@
   .aster--page-view .aster-content .ProseMirror .aster-page-gap::before,
   .aster--page-view .aster-content .ProseMirror .aster-page-gap__number {
     display: none;
+  }
+
+  /*
+   * Saut de page explicite en vue page imprimée : vraie coupure, sans bande de bureau.
+   * Vit ici, et non dans `print.css` (importée avant), pour l'emporter sur la règle écran
+   * ci-dessus à spécificité égale (0,4,1) : la règle générique de `print.css`, en (0,3,1),
+   * perdait et laissait hauteur, marges et fond de bureau.
+   */
+  .aster--page-view .aster-content .ProseMirror hr[data-page-break] {
+    height: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    visibility: hidden;
+    break-after: page;
+    page-break-after: always;
   }
 }

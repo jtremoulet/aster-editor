@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AsterEditor, DocumentLayout, PageViewOptions } from '../api';
 import { AsterEditorImpl } from '../editor/aster-editor';
 import {
+  MAX_PAGE_MM,
+  MAX_SANITIZE_DEPTH,
   PAGE_FOOTER_CLASS,
   PAGE_HEADER_CLASS,
   PAGE_VIEW_CLASS,
@@ -43,7 +45,7 @@ describe('vue page', () => {
   });
 
   describe('resolvePageMetrics', () => {
-    it('A4 portrait et marges 25,4 mm par défaut', () => {
+    it('A4 portrait, marges 25,4 mm et en-tête / pied à 12,7 mm par défaut', () => {
       expect(resolvePageMetrics(undefined)).toEqual({
         widthMm: 210,
         heightMm: 297,
@@ -51,6 +53,8 @@ describe('vue page', () => {
         marginRightMm: 25.4,
         marginBottomMm: 25.4,
         marginLeftMm: 25.4,
+        marginHeaderMm: 12.7,
+        marginFooterMm: 12.7,
       });
       expect(resolvePageMetrics({})).toEqual(resolvePageMetrics(null));
     });
@@ -84,6 +88,8 @@ describe('vue page', () => {
         marginRightMm: 25.4,
         marginBottomMm: 25.4,
         marginLeftMm: 25.4,
+        marginHeaderMm: 12.7,
+        marginFooterMm: 12.7,
       });
       expect(
         resolvePageMetrics({ page: { size: { widthMm: 0, heightMm: Number.NaN } } }),
@@ -98,7 +104,53 @@ describe('vue page', () => {
         '25.4mm',
         '25.4mm',
         '25.4mm',
+        '12.7mm',
+        '12.7mm',
       ]);
+    });
+
+    it('R26 (dette core) : headerMm / footerMm du layout, repli 12,7 mm', () => {
+      const metrics = resolvePageMetrics({
+        page: { margins: { headerMm: 10, footerMm: -3 } },
+      });
+      expect(metrics.marginHeaderMm).toBe(10);
+      expect(metrics.marginFooterMm).toBe(12.7);
+      expect(pageViewCssValues(metrics).slice(6)).toEqual(['10mm', '12.7mm']);
+      expect(PAGE_VIEW_CSS_VARIABLES.slice(6)).toEqual([
+        '--aster-page-margin-header',
+        '--aster-page-margin-footer',
+      ]);
+    });
+
+    it('R23-05 : bornes 0 à 10 000 mm, jamais Infinitymm', () => {
+      expect(MAX_PAGE_MM).toBe(10_000);
+      // Preuve du relecteur : `1e308 * 100` déborde en Infinity au formatage.
+      const huge = resolvePageMetrics({
+        page: {
+          size: { widthMm: 1e308, heightMm: 297 },
+          margins: { topMm: 1e308, headerMm: Number.POSITIVE_INFINITY },
+        },
+      });
+      expect(huge).toMatchObject({ widthMm: 210, marginTopMm: 25.4, marginHeaderMm: 12.7 });
+      const values = pageViewCssValues(huge);
+      expect(values.some((value) => /infinity|nan/i.test(value))).toBe(false);
+      // Borne incluse : 10 000 mm passe, 10 000,01 mm retombe sur le défaut.
+      expect(
+        resolvePageMetrics({
+          page: { size: { widthMm: MAX_PAGE_MM, heightMm: MAX_PAGE_MM + 0.01 } },
+        }),
+      ).toMatchObject({ widthMm: 10_000, heightMm: 297 });
+      expect(
+        resolvePageMetrics({ page: { margins: { leftMm: MAX_PAGE_MM + 1 } } }).marginLeftMm,
+      ).toBe(25.4);
+      // Même un `PageMetrics` forgé hors de `resolvePageMetrics` ne produit pas `Infinitymm`.
+      for (const value of pageViewCssValues({
+        ...huge,
+        widthMm: Number.POSITIVE_INFINITY,
+        heightMm: Number.NaN,
+      })) {
+        expect(value).toMatch(/^\d+(?:\.\d+)?mm$/);
+      }
     });
   });
 
@@ -139,6 +191,97 @@ describe('vue page', () => {
         '<table><tbody><tr><td colspan="2">a</td></tr></tbody></table><ul><li>x</li></ul><ol start="2"><li>y</li></ol><hr><br>';
       expect(sanitizeHeaderFooterHtml(html)).toBe(html);
     });
+
+    /** Protocole de l'attribut `href` du premier lien, relu par le parseur d'URL de jsdom. */
+    const linkProtocol = (html: string): string | null => {
+      const div = document.createElement('div');
+      div.innerHTML = sanitizeHeaderFooterHtml(html);
+      const link = div.querySelector('a');
+      return link?.hasAttribute('href') ? link.protocol : null;
+    };
+
+    it('R23-01 : retire href dont le schéma est masqué par un caractère de contrôle ou un blanc', () => {
+      // Preuve du relecteur : trois vecteurs lus `javascript:` par le navigateur.
+      for (const vector of [
+        'java\tscript:alert(1)',
+        'java\nscript:alert(1)',
+        '\u0001javascript:alert(1)',
+      ]) {
+        expect(sanitizeHeaderFooterHtml(`<a href="${vector}">x</a>`), JSON.stringify(vector)).toBe(
+          '<a>x</a>',
+        );
+        expect(linkProtocol(`<a href="${vector}">x</a>`)).toBeNull();
+      }
+      expect(sanitizeHeaderFooterHtml('<a href="&#9;javascript:x">x</a>')).toBe('<a>x</a>');
+      expect(sanitizeHeaderFooterHtml('<a href=" java script : x">x</a>')).toBe('<a>x</a>');
+      expect(sanitizeHeaderFooterHtml('<img src="\u0001data:text/html,x">')).toBe('<img>');
+      expect(sanitizeHeaderFooterHtml('<a href="vbscript:x">x</a>')).toBe('<a>x</a>');
+    });
+
+    it('R23-01 : allowlist http / https / mailto / tel et relatif, refus de // et \\\\', () => {
+      expect(
+        sanitizeHeaderFooterHtml(
+          '<a href="tel:+33600000000">t</a><a href="page.html?a=1">r</a>' +
+            '<a href="HTTPS://example.com/x">u</a><a href="ht\ttps://example.com">s</a>',
+        ),
+      ).toBe(
+        '<a href="tel:+33600000000">t</a><a href="page.html?a=1">r</a>' +
+          '<a href="HTTPS://example.com/x">u</a><a href="ht\ttps://example.com">s</a>',
+      );
+      // Un blanc au milieu d'un schéma sûr reste sûr : le navigateur lit `https:`.
+      expect(linkProtocol('<a href="ht\ttps://example.com">s</a>')).toBe('https:');
+      // … mais un schéma inconnu une fois les blancs retirés (`htps:`) est refusé.
+      expect(sanitizeHeaderFooterHtml('<a href="h\ttps://example.com">s</a>')).toBe('<a>s</a>');
+      // Dette R23 n° 1 : les URL relatives au protocole (et leur variante `\\`) sont refusées.
+      expect(sanitizeHeaderFooterHtml('<a href="//evil.example/x">x</a>')).toBe('<a>x</a>');
+      expect(sanitizeHeaderFooterHtml('<a href="\\\\evil.example/x">x</a>')).toBe('<a>x</a>');
+      expect(sanitizeHeaderFooterHtml('<a href="/\\evil.example/x">x</a>')).toBe('<a>x</a>');
+      expect(sanitizeHeaderFooterHtml('<a href="/rel">r</a>')).toBe('<a href="/rel">r</a>');
+    });
+
+    it('R23-08 : style refusé si échappement CSS, url() masqué ou fonction chargeant une ressource', () => {
+      // Preuve du relecteur : `\75rl(` et `ur\l(` sont lus `url(` par le CSS.
+      expect(
+        sanitizeHeaderFooterHtml('<p style="background:\\75rl(https://evil.example/x)">x</p>'),
+      ).toBe('<p>x</p>');
+      expect(
+        sanitizeHeaderFooterHtml('<p style="background:ur\\l(https://evil.example/x)">x</p>'),
+      ).toBe('<p>x</p>');
+      expect(sanitizeHeaderFooterHtml('<p style="background:ur/**/l(x)">x</p>')).toBe('<p>x</p>');
+      expect(sanitizeHeaderFooterHtml('<p style="background:url&#40;x)">x</p>')).toBe('<p>x</p>');
+      expect(sanitizeHeaderFooterHtml('<p style="background:URL (x)">x</p>')).toBe('<p>x</p>');
+      expect(
+        sanitizeHeaderFooterHtml('<p style="background:-webkit-image-set(&quot;x&quot; 1x)">x</p>'),
+      ).toBe('<p>x</p>');
+      expect(sanitizeHeaderFooterHtml('<p style="content:image(x)">x</p>')).toBe('<p>x</p>');
+      expect(sanitizeHeaderFooterHtml('<p style="behavior: x">x</p>')).toBe('<p>x</p>');
+      // Les styles Word usuels passent.
+      expect(
+        sanitizeHeaderFooterHtml(
+          '<p style="color: #ff0000; font-family: \'Times New Roman\'; text-align: center">x</p>',
+        ),
+      ).toBe(
+        '<p style="color: #ff0000; font-family: \'Times New Roman\'; text-align: center">x</p>',
+      );
+    });
+
+    it('R23-03 : assainissement itératif, imbrication plafonnée à MAX_SANITIZE_DEPTH', () => {
+      expect(MAX_SANITIZE_DEPTH).toBe(64);
+      // Preuve du relecteur : 8 000 `<div>` imbriqués faisaient déborder la pile d'appels.
+      const html = '<div>'.repeat(8000) + 'x' + '</div>'.repeat(8000);
+      let result = '';
+      expect(() => {
+        result = sanitizeHeaderFooterHtml(html);
+      }).not.toThrow();
+      expect(result).toBe('<div>'.repeat(64) + 'x' + '</div>'.repeat(64));
+      // Les attributs des éléments déballés disparaissent avec eux ; le texte reste.
+      const deep = '<span>'.repeat(70) + '<b onclick="x()" class="k">y</b>' + '</span>'.repeat(70);
+      expect(sanitizeHeaderFooterHtml(deep)).toBe('<span>'.repeat(64) + 'y' + '</span>'.repeat(64));
+      // Balise inconnue au-delà du plafond : déballée aussi, sans commentaire ni script.
+      const mixed =
+        '<custom>'.repeat(100) + '<!-- c --><script>bad()</script>z' + '</custom>'.repeat(100);
+      expect(sanitizeHeaderFooterHtml(mixed)).toBe('z');
+    });
   });
 
   describe('sur l’éditeur', () => {
@@ -160,6 +303,8 @@ describe('vue page', () => {
         '25.4mm',
         '25.4mm',
         '25.4mm',
+        '12.7mm',
+        '12.7mm',
       ]);
       const header = mounted.element.querySelector<HTMLElement>(`.${PAGE_HEADER_CLASS}`);
       const footer = mounted.element.querySelector<HTMLElement>(`.${PAGE_FOOTER_CLASS}`);
@@ -186,11 +331,59 @@ describe('vue page', () => {
         '15mm',
         '20mm',
         '15mm',
+        '12.7mm',
+        '12.7mm',
       ]);
       expect(mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>H</p>');
       expect(mounted.element.querySelector(`.${PAGE_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied</p>');
       expect(mounted.element.querySelector('script')).toBeNull();
       expect(impl(mounted.editor).getLayout()).toBe(options.layout);
+    });
+
+    it('R26 (dette core) : headerMm / footerMm posés en --aster-page-margin-header / -footer', () => {
+      mounted = mountEditor({
+        pageView: { layout: { page: { margins: { headerMm: 8, footerMm: 6.5 } } } },
+      });
+      expect(mounted.element.style.getPropertyValue('--aster-page-margin-header')).toBe('8mm');
+      expect(mounted.element.style.getPropertyValue('--aster-page-margin-footer')).toBe('6.5mm');
+      impl(mounted.editor).setPageView(false);
+      expect(mounted.element.getAttribute('style')).toBeNull();
+    });
+
+    it('R23-03 : une mise en page qui lève au montage est ignorée, l’éditeur reste entier', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        // Le seul chemin qui lit la mise en page hors du core : un accesseur hostile.
+        const layout: DocumentLayout = {
+          headers: {
+            default: {
+              get html(): string {
+                throw new Error('en-tête hostile');
+              },
+            },
+          },
+        };
+        let ready = false;
+        mounted = mountEditor({ content: '<p>x</p>', pageView: { layout } });
+        mounted.editor.on('ready', () => {
+          ready = true;
+        });
+        await Promise.resolve();
+        expect(ready).toBe(true);
+        expect(warn).toHaveBeenCalledTimes(1);
+        // Rien de posé à moitié : ni classe, ni variables, ni conteneur orphelin.
+        expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(false);
+        expect(mounted.element.getAttribute('style')).toBeNull();
+        expect(mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`)).toBeNull();
+        expect(mounted.element.querySelector(`.${PAGE_FOOTER_CLASS}`)).toBeNull();
+        expect(impl(mounted.editor).getLayout()).toBeNull();
+        expect(mounted.editor.getHTML()).toBe('<p>x</p>');
+        // L'éditeur est utilisable, y compris pour activer une vue page saine ensuite.
+        impl(mounted.editor).setPageView(true);
+        expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it('showHeadersFooters: false ne crée aucun conteneur', () => {

@@ -9,7 +9,7 @@ import type {
   PageViewOptions,
   PaginatedPageViewOptions,
 } from '@aster-editor/core';
-import { getActivePageView, isPaginationEnabled } from '@aster-editor/core';
+import { PAGE_SIZES_MM, getActivePageView, isPaginationEnabled } from '@aster-editor/core';
 import type { ToolbarWidget } from '../types';
 import { el } from '../utils/dom';
 import { isRecord } from '../utils/guards';
@@ -21,6 +21,7 @@ import {
   createNumberField,
   fieldSuffix,
   flagInvalid,
+  isOutOfRange,
   parseNumberInput,
   submitOnEnter,
 } from './paragraph-layout';
@@ -34,9 +35,19 @@ export const PAGE_SIZE_NAMES: readonly PageSizeName[] = ['A4', 'A3', 'A5', 'Lett
 /** Marge par défaut d'Aster (un pouce), en millimètres. */
 export const DEFAULT_PAGE_MARGIN_MM = 25.4;
 
+/**
+ * Plus grande dimension de page acceptée (22 pouces, la limite de Word). Un format libre
+ * hors de cette borne, non fini ou nul, est traité comme A4 : le dialogue et la feuille
+ * (le core replie aussi) disent alors la même chose (R26-13).
+ */
+export const MAX_PAGE_DIMENSION_MM = 558.8;
+
+/** Clés des quatre marges éditées, dans `PageMargins`. */
+type MarginKey = 'topMm' | 'rightMm' | 'bottomMm' | 'leftMm';
+
 /** Côtés des marges, dans l'ordre d'affichage : clé de `PageMargins` et suffixe i18n. */
 const MARGIN_FIELDS: readonly {
-  readonly key: 'topMm' | 'rightMm' | 'bottomMm' | 'leftMm';
+  readonly key: MarginKey;
   readonly labelKey: string;
 }[] = [
   { key: 'topMm', labelKey: 'ui.pageLayout.marginTop' },
@@ -86,10 +97,43 @@ function isPageSizeName(value: unknown): value is PageSizeName {
   return typeof value === 'string' && (PAGE_SIZE_NAMES as readonly string[]).includes(value);
 }
 
-function isPageDimensions(value: unknown): value is PageDimensions {
+/** Dimension de page exploitable : nombre fini, strictement positif, au plus 558,8 mm. */
+function isPageDimension(value: unknown): value is number {
   return (
-    isRecord(value) && typeof value['widthMm'] === 'number' && typeof value['heightMm'] === 'number'
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    value <= MAX_PAGE_DIMENSION_MM
   );
+}
+
+function isPageDimensions(value: unknown): value is PageDimensions {
+  return isRecord(value) && isPageDimension(value['widthMm']) && isPageDimension(value['heightMm']);
+}
+
+/**
+ * Dimensions de la feuille en millimètres pour un format (nommé ou libre) et une
+ * orientation : en paysage, largeur et hauteur sont inversées, comme le fait le core.
+ */
+export function pageDimensionsOf(
+  size: PageSizeName | PageDimensions,
+  orientation: PageOrientation,
+): PageDimensions {
+  const portrait = isPageSizeName(size) ? PAGE_SIZES_MM[size] : size;
+  return orientation === 'landscape'
+    ? { widthMm: portrait.heightMm, heightMm: portrait.widthMm }
+    : portrait;
+}
+
+/**
+ * Marge maximale d'un côté : la moitié de la dimension correspondante (haut / bas : la
+ * hauteur, gauche / droite : la largeur), arrondie à deux décimales vers le bas. Au-delà,
+ * les marges se chevauchent et la feuille n'a plus de corps (R26-04). L'epsilon absorbe
+ * l'erreur flottante (`279.4 * 50` vaut `13969.999…`, pas 13970).
+ */
+export function maxMarginMm(key: MarginKey, dimensions: PageDimensions): number {
+  const extent = key === 'topMm' || key === 'bottomMm' ? dimensions.heightMm : dimensions.widthMm;
+  return Math.floor(extent * 50 + 1e-6) / 100;
 }
 
 /** Mise en page de la page telle que le dialogue l'affiche : chaque champ résolu avec son défaut. */
@@ -207,7 +251,20 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   }
   orientationGroup.append(radios);
 
-  // Marges en millimètres.
+  /** Format choisi dans le sélecteur ; « Personnalisé » renvoie les dimensions libres du document. */
+  const selectedSize = (): PageSizeName | PageDimensions => {
+    const value = size.value;
+    return isPageSizeName(value) ? value : (customSize ?? 'A4');
+  };
+  const selectedOrientation = (): PageOrientation =>
+    orientationInputs.find((radio) => radio.checked)?.value === 'landscape'
+      ? 'landscape'
+      : 'portrait';
+  const selectedDimensions = (): PageDimensions =>
+    pageDimensionsOf(selectedSize(), selectedOrientation());
+
+  // Marges en millimètres, chacune bornée à la moitié de la dimension correspondante ;
+  // le `max` suit le format et l'orientation choisis, `submit` revérifie (R26-04).
   const marginFields = MARGIN_FIELDS.map((field) => ({
     ...field,
     ...createNumberField({
@@ -215,9 +272,20 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
       label: t(field.labelKey),
       value: current.margins[field.key],
       min: 0,
+      max: maxMarginMm(field.key, selectedDimensions()),
       step: 1,
     }),
   }));
+  const syncMarginMax = (): void => {
+    const dimensions = selectedDimensions();
+    for (const field of marginFields) {
+      field.input.max = String(maxMarginMm(field.key, dimensions));
+    }
+  };
+  size.addEventListener('change', syncMarginMax);
+  for (const radio of orientationInputs) {
+    radio.addEventListener('change', syncMarginMax);
+  }
   const marginsGroup = el('div', {
     className: 'aster-dialog__field aster-page-layout__margins',
     attrs: { role: 'group', 'aria-label': t('ui.pageLayout.margins') },
@@ -255,22 +323,23 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
       editor.focus();
       return;
     }
-    const margins: Partial<Record<(typeof MARGIN_FIELDS)[number]['key'], number>> = {};
+    const dimensions = selectedDimensions();
+    const margins: Partial<Record<MarginKey, number>> = {};
     for (const field of marginFields) {
       const parsed = parseNumberInput(field.input.value);
-      if (parsed === null || parsed === 'invalid' || parsed < 0) {
+      if (
+        parsed === null ||
+        parsed === 'invalid' ||
+        isOutOfRange(parsed, 0, maxMarginMm(field.key, dimensions))
+      ) {
         flagInvalid(field.input, alert, t('ui.pageLayout.invalid'));
         return;
       }
       margins[field.key] = parsed;
     }
-    const selectedSize = size.value;
     const page: PageSetup = {
-      size: isPageSizeName(selectedSize) ? selectedSize : (customSize ?? 'A4'),
-      orientation:
-        orientationInputs.find((radio) => radio.checked)?.value === 'landscape'
-          ? 'landscape'
-          : 'portrait',
+      size: selectedSize(),
+      orientation: selectedOrientation(),
       margins: { ...current.margins, ...margins },
     };
     const options: PaginatedPageViewOptions = pagination.input.checked

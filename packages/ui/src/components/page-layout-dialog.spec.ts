@@ -6,10 +6,13 @@ import { registerUiTranslations } from '../toolbar/create-toolbar';
 import type { ToolbarWidget } from '../types';
 import {
   DEFAULT_PAGE_MARGIN_MM,
+  MAX_PAGE_DIMENSION_MM,
   PAGE_SIZE_NAMES,
   PAGE_VIEW_CLASS,
   createPageLayoutDialog,
   isPageViewActive,
+  maxMarginMm,
+  pageDimensionsOf,
   pageViewApiOf,
   resolvePageSetup,
 } from './page-layout-dialog';
@@ -46,6 +49,45 @@ describe('page-layout helpers', () => {
       widthMm: 100,
       heightMm: 200,
     });
+  });
+
+  it('R26-13 : un format libre non fini, nul ou au-delà de 558,8 mm est traité comme A4', () => {
+    expect(MAX_PAGE_DIMENSION_MM).toBe(558.8);
+    // Preuve du relecteur : le core replie ces dimensions sur A4, le dialogue doit dire pareil.
+    expect(resolvePageSetup({ page: { size: { widthMm: Number.NaN, heightMm: 1e9 } } }).size).toBe(
+      'A4',
+    );
+    for (const size of [
+      { widthMm: Number.POSITIVE_INFINITY, heightMm: 100 },
+      { widthMm: 0, heightMm: 100 },
+      { widthMm: -10, heightMm: 100 },
+      { widthMm: 100, heightMm: 558.81 },
+    ]) {
+      expect(resolvePageSetup({ page: { size } }).size, JSON.stringify(size)).toBe('A4');
+    }
+    expect(resolvePageSetup({ page: { size: { widthMm: 558.8, heightMm: 0.1 } } }).size).toEqual({
+      widthMm: 558.8,
+      heightMm: 0.1,
+    });
+  });
+
+  it('R26-04 : pageDimensionsOf et maxMarginMm (moitié de la dimension correspondante)', () => {
+    expect(pageDimensionsOf('A4', 'portrait')).toEqual({ widthMm: 210, heightMm: 297 });
+    expect(pageDimensionsOf('A4', 'landscape')).toEqual({ widthMm: 297, heightMm: 210 });
+    expect(pageDimensionsOf({ widthMm: 100, heightMm: 150 }, 'landscape')).toEqual({
+      widthMm: 150,
+      heightMm: 100,
+    });
+    const a4 = pageDimensionsOf('A4', 'portrait');
+    expect(maxMarginMm('topMm', a4)).toBe(148.5);
+    expect(maxMarginMm('bottomMm', a4)).toBe(148.5);
+    expect(maxMarginMm('leftMm', a4)).toBe(105);
+    expect(maxMarginMm('rightMm', a4)).toBe(105);
+    // Letter : 215,9 / 2 = 107,95 ; 279,4 / 2 = 139,7 — deux décimales, vers le bas.
+    const letter = pageDimensionsOf('Letter', 'portrait');
+    expect(maxMarginMm('leftMm', letter)).toBe(107.95);
+    expect(maxMarginMm('topMm', letter)).toBe(139.7);
+    expect(maxMarginMm('topMm', { widthMm: 1, heightMm: 0.333 })).toBe(0.16);
   });
 
   it('pageViewApiOf détecte les méthodes hors contrat et isPageViewActive lit la classe', () => {
@@ -237,6 +279,76 @@ describe('createPageLayoutDialog', () => {
     button('Apply').click();
     expect(editor.pageViewCalls).toEqual([]);
     expect(document.activeElement).toBe(margin('leftMm'));
+  });
+
+  it('R26-13 : un format libre invalide n’ajoute pas d’option « Personnalisé » et applique A4', () => {
+    widget.destroy();
+    host.remove();
+    // Preuve du relecteur : « Custom (NaN × 1000000000 mm) » était sélectionné et renvoyé tel quel.
+    mount({ layout: { page: { size: { widthMm: Number.NaN, heightMm: 1e9 } } } });
+    open();
+    expect(size().value).toBe('A4');
+    expect(Array.from(size().options).map((option) => option.value)).toEqual([...PAGE_SIZE_NAMES]);
+    enabled().checked = true;
+    button('Apply').click();
+    expect(editor.pageViewCalls[0]).toMatchObject({ layout: { page: { size: 'A4' } } });
+  });
+
+  it('R26-04 : refuse une marge au-delà de la moitié de la page, max dynamique selon format et orientation', () => {
+    open();
+    enabled().checked = true;
+    // A4 portrait : haut / bas ≤ 148,5 mm, gauche / droite ≤ 105 mm.
+    expect(margin('topMm').getAttribute('max')).toBe('148.5');
+    expect(margin('bottomMm').getAttribute('max')).toBe('148.5');
+    expect(margin('leftMm').getAttribute('max')).toBe('105');
+    expect(margin('rightMm').getAttribute('max')).toBe('105');
+    // Preuve du relecteur : 5 000 mm × 4 + « Vue page » partait dans setPageView.
+    for (const key of ['topMm', 'rightMm', 'bottomMm', 'leftMm']) margin(key).value = '5000';
+    button('Apply').click();
+    expect(editor.pageViewCalls).toEqual([]);
+    expect(isOpen()).toBe(true);
+    expect(margin('topMm').getAttribute('aria-invalid')).toBe('true');
+    expect(panel().querySelector('[role="alert"]')?.textContent).toBe('Enter valid margins');
+    expect(document.activeElement).toBe(margin('topMm'));
+    // Une faute de frappe plausible (« 250 » pour « 25 ») est refusée aussi.
+    for (const key of ['topMm', 'rightMm', 'bottomMm']) margin(key).value = '25';
+    margin('leftMm').value = '250';
+    button('Apply').click();
+    expect(editor.pageViewCalls).toEqual([]);
+    expect(margin('leftMm').getAttribute('aria-invalid')).toBe('true');
+    // Paysage : les bornes s'échangent, le `max` suit l'orientation.
+    orientation('landscape').checked = true;
+    orientation('landscape').dispatchEvent(new Event('change'));
+    expect(margin('topMm').getAttribute('max')).toBe('105');
+    expect(margin('leftMm').getAttribute('max')).toBe('148.5');
+    // 120 mm en haut dépasse 105 en paysage ; 105 exactement passe (borne incluse).
+    margin('leftMm').value = '25';
+    margin('topMm').value = '120';
+    button('Apply').click();
+    expect(editor.pageViewCalls).toEqual([]);
+    expect(margin('topMm').getAttribute('aria-invalid')).toBe('true');
+    margin('topMm').value = '105';
+    button('Apply').click();
+    expect(editor.pageViewCalls).toEqual([
+      {
+        layout: {
+          page: {
+            size: 'A4',
+            orientation: 'landscape',
+            margins: { topMm: 105, rightMm: 25, bottomMm: 25, leftMm: 25 },
+          },
+        },
+      },
+    ]);
+    // Le format change les bornes aussi : réouvert en A4 paysage (mémorisé par le mock),
+    // passer en A3 donne 297 / 2 = 148,5 en haut et 420 / 2 = 210 à gauche.
+    open();
+    expect(orientation('landscape').checked).toBe(true);
+    expect(margin('topMm').getAttribute('max')).toBe('105');
+    size().value = 'A3';
+    size().dispatchEvent(new Event('change'));
+    expect(margin('topMm').getAttribute('max')).toBe('148.5');
+    expect(margin('leftMm').getAttribute('max')).toBe('210');
   });
 
   it('se désactive si le core n’expose pas setPageView / getLayout, ou en lecture seule', () => {

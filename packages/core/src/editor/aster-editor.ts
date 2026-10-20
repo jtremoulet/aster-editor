@@ -141,7 +141,13 @@ export class AsterEditorImpl implements AsterEditor {
     });
     this.contentElement = this.tiptap.view.dom;
     if (options.pageView) {
-      this.setPageView(options.pageView);
+      // Une mise en page hostile (en-tête importé d'un .docx) ne doit jamais laisser un
+      // éditeur à moitié construit : la vue page est ignorée, l'éditeur reste utilisable.
+      try {
+        this.setPageView(options.pageView);
+      } catch (error) {
+        console.warn('[aster] vue page ignorée : mise en page invalide', error);
+      }
     }
     // Microtâche : laisse l'appelant s'abonner à `ready` juste après `createEditor`.
     queueMicrotask(() => this.emit('ready', { editor: this }));
