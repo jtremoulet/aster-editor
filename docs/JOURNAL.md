@@ -390,7 +390,7 @@
 - Propositions de contrat en attente de L23 : `image.setAttributes.height`, `setPageView` / `getLayout` dans `api/editor.ts`, `text.setCaps` / `text.unsetCaps`, commande de style de souligné.
 - Revues R25 et R26 lancées. Typecheck global encore rouge sur `core/src/html/serialize-html.ts` (L23 en cours).
 
-### 20/10 17:55 — L23 core rendu et intégré (agent 30 min, 363k tokens, 158 outils)
+### 20/10 17:24 — L23 core rendu et intégré (agent 30 min, 363k tokens, 158 outils)
 
 - Attributs de paragraphe (12), marques de run, listes et tableaux stylés, vue page : 455 → 572 tests. Décision majeure validée : `getHTML()` passe par un **sérialiseur HTML verbatim** (`html/serialize-html.ts`) car le `DOMSerializer` réécrit les styles via le CSSOM (`rgb()`, raccourcis, ordre faux sous jsdom) ; effet de bord : les couleurs sortent en `#rrggbb`, deux specs existantes ajustées.
 - Alignement lecteur ↔ core fait par l'orchestrateur : ordre d'imbrication des marques (`<span><strong><em><s><u><sup>`) et ordre des déclarations du `span` (`background-color, color, font-family, font-size, letter-spacing, …`) calés sur le core dans `runs.ts` ; `AsterHorizontalRule` ajouté au core pour conserver `<hr data-page-break>` (la session 2 l'exportait mais le core le perdait à l'aller-retour). Attendus 11-17 régénérés (`regen-expected.spec.ts`, gardé sous `ASTER_REGEN`). Idempotence stricte import → `setHTML` → `getHTML` : verte sur 11 et 13, 12 dès le core intégré.
