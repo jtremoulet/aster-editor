@@ -624,11 +624,15 @@ describe('AsterEditorComponent', () => {
       expect(editor.getHTML()).toContain('data-docx-style');
 
       // La mise en page est appliquée à la vue page par un effet : au prochain rendu.
+      // Depuis la feuille par section (L44), l'hôte porte la section 1 (A4, en-tête
+      // « Rapport ») ; la section 2 (Letter paysage) est portée par le saut de section.
       TestBed.tick();
-      expect(pageWidth(editor)).toBe('279.4mm');
-      expect(editor.element.querySelector('.aster-page-header')?.textContent).toContain(
-        'Section 2',
-      );
+      expect(component.layout()?.sections?.length).toBe(2);
+      expect(pageWidth(editor)).toBe('210mm');
+      expect(editor.element.querySelector('.aster-page-header')?.textContent).toContain('Rapport');
+      expect(
+        editor.element.querySelector('hr[data-section-break]')?.getAttribute('style'),
+      ).toContain('279.4mm');
       expect(layoutChanged).toHaveBeenCalledTimes(1);
       expect(layoutChanged).toHaveBeenCalledWith(result.layout);
     }, 20_000);
@@ -769,17 +773,19 @@ describe('AsterEditorComponent', () => {
       component.layoutChanged.subscribe(layoutChanged);
       const result = await component.importDocx(await fixtureFile('16-sections.docx'));
       TestBed.tick();
-      expect(pageWidth(editor)).toBe('279.4mm');
+      expect(pageWidth(editor)).toBe('210mm');
 
+      // Sans `sections`, la mise en page imposée vaut pour tout le document.
       const imposed = {
         ...result.layout,
-        page: { size: 'A4', orientation: 'portrait' },
+        sections: undefined,
+        page: { size: 'Letter', orientation: 'landscape' },
         headers: { default: { html: '<p>En-tête imposé</p>' } },
       };
       fixture.componentRef.setInput('layout', imposed);
       fixture.detectChanges();
       expect(component.layout()).toBe(imposed);
-      expect(pageWidth(editor)).toBe('210mm');
+      expect(pageWidth(editor)).toBe('279.4mm');
       expect(editor.element.querySelector('.aster-page-header')?.textContent).toBe(
         'En-tête imposé',
       );
@@ -789,7 +795,7 @@ describe('AsterEditorComponent', () => {
       fixture.componentRef.setInput('layout', undefined);
       fixture.detectChanges();
       expect(component.layout()).toBe(result.layout);
-      expect(pageWidth(editor)).toBe('279.4mm');
+      expect(pageWidth(editor)).toBe('210mm');
     }, 20_000);
 
     it('le dialogue « Mise en page » (setPageView du core) est relu : layout() suit et layoutChanged est émis', async () => {
