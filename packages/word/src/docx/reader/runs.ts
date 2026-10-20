@@ -2,7 +2,7 @@ import type { DocxLostObject } from '../types';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import { escapeAttr, escapeHtml, pt } from './html';
 import { detectLostInline } from './lost';
-import { tabStopsOf } from './properties';
+import { tabStopsOf, type TabStop } from './properties';
 import { hyperlinkHref, hyperlinkTarget, safeHref } from './runs-links';
 import { InlineWriter, renderRunTags } from './runs-tags';
 import { docDefaultsOf } from './styles';
@@ -68,8 +68,9 @@ function reportLost(element: Element, ctx: ConverterContext): void {
  *   sur le bloc ;
  * - `w:tab` → nœud inline atomique `<span data-tab=""></span>` du contrat (session 4),
  *   `data-stop="Npt"` quand le paragraphe définit un taquet pour cette tabulation (la
- *   n-ième tabulation prend le n-ième taquet, approximation sans mesure du texte) ; émis
- *   dans les balises du run, comme l'éditeur sérialise un atome inline portant des marques ;
+ *   n-ième tabulation prend le n-ième taquet, approximation sans mesure du texte), puis
+ *   `data-align` et `data-leader` du taquet quand il en a ; émis dans les balises du run,
+ *   comme l'éditeur sérialise un atome inline portant des marques ;
  * - `w:br w:type="page"` → marqueur `PAGE_BREAK` dans le flux, que `paragraphs.ts` coupe
  *   en blocs frères ; dans un lien ou un champ, il dégénère en `<br>`.
  */
@@ -77,11 +78,15 @@ function reportLost(element: Element, ctx: ConverterContext): void {
 /** Marqueur de saut de page inséré dans le flux inline, extrait par `paragraphs.ts`. */
 export const PAGE_BREAK = '<hr data-page-break>';
 
-/** Tabulation du contrat (`TabAttrs`) : `data-stop` seulement quand le taquet est connu. */
-export function tabHtml(stopPt?: number): string {
-  return stopPt === undefined
-    ? '<span data-tab=""></span>'
-    : `<span data-tab="" data-stop="${pt(stopPt)}"></span>`;
+/**
+ * Tabulation du contrat (`TabAttrs`) : `data-stop`, puis `data-align` (jamais `left`) et
+ * `data-leader`, dans cet ordre et seulement quand le taquet est connu et les porte.
+ */
+export function tabHtml(stop?: TabStop): string {
+  if (stop === undefined) return '<span data-tab=""></span>';
+  const align = stop.align ? ` data-align="${stop.align}"` : '';
+  const leader = stop.leader ? ` data-leader="${stop.leader}"` : '';
+  return `<span data-tab="" data-stop="${pt(stop.positionPt)}"${align}${leader}></span>`;
 }
 
 const NO_BREAK_HYPHEN = String.fromCharCode(0x2011);
@@ -100,7 +105,7 @@ interface WalkState {
   /** Profondeur de `<a>` ouverts : un saut de page y devient `<br>`. */
   linkDepth: number;
   /** Taquets du paragraphe et rang de la prochaine tabulation rendue. */
-  readonly tabStops: readonly number[];
+  readonly tabStops: readonly TabStop[];
   tabIndex: number;
 }
 

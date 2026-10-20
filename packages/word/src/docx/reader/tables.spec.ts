@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { importDocx } from '../import-docx';
+import { buildDocx, run as runXml, W_NS } from '../preprocess/minimal-docx';
 import { MAX_COLUMNS, convertTable } from './tables';
 import {
   buildPackage,
@@ -399,7 +401,9 @@ describe('convertTable', () => {
                   firstRow: { cellShading: '#d9e2f3', run: { bold: true } },
                   band1Horz: { cellShading: '#f2f2f2' },
                   lastRow: {
-                    cellBorders: [{ side: 'top', style: 'double', widthPt: 1.5, color: '#2f5496' }],
+                    cellBorders: {
+                      top: { side: 'top', style: 'double', widthPt: 1.5, color: '#2f5496' },
+                    },
                   },
                   firstCol: { run: { italic: true } },
                 },
@@ -444,9 +448,52 @@ describe('convertTable', () => {
       );
       expect(html).toContain('<td style="border-top: 1.5pt double #2f5496"><p>C</p></td>');
       expect(html).not.toContain('#f2f2f2');
-      // Sans tblLook ou sans aucun drapeau : aucun format conditionnel.
-      expect(await conditional('', THREE_ROWS)).not.toContain('#d9e2f3');
-      expect(await conditional('<w:tblLook w:val="0000"/>', THREE_ROWS)).not.toContain('#d9e2f3');
+      // Masque nul explicite : aucune première ligne, les bandes seules (band1Horz sur la ligne 0).
+      const none = await conditional('<w:tblLook w:val="0000"/>', THREE_ROWS);
+      expect(none).not.toContain('#d9e2f3');
+      expect(none).toContain('background-color: #f2f2f2"><p>H1</p></td>');
+    });
+
+    it('R42-02 : un nil conditionnel (bottom, insideV) de firstRow retire les traits du style sur la première ligne', async () => {
+      const styles =
+        `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="${W_NS}">` +
+        '<w:style w:type="table" w:styleId="G"><w:name w:val="G"/><w:tblPr><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="BFBFBF"/><w:insideV w:val="single" w:sz="4" w:color="BFBFBF"/></w:tblBorders></w:tblPr>' +
+        '<w:tblStylePr w:type="firstRow"><w:tcPr><w:tcBorders><w:bottom w:val="nil"/><w:insideV w:val="nil"/></w:tcBorders></w:tcPr></w:tblStylePr></w:style></w:styles>';
+      const p = (text: string): string => `<w:p>${runXml(text)}</w:p>`;
+      const body =
+        '<w:tbl><w:tblPr><w:tblStyle w:val="G"/><w:tblLook w:firstRow="1"/></w:tblPr>' +
+        `<w:tr><w:tc>${p('h1')}</w:tc><w:tc>${p('h2')}</w:tc></w:tr><w:tr><w:tc>${p('a')}</w:tc><w:tc>${p('b')}</w:tc></w:tr></w:tbl><w:p/>`;
+      const { html } = await importDocx(await buildDocx(body, { 'word/styles.xml': styles }), {
+        fidelity: 'styled',
+      });
+      // En-tête : seul le trait du haut du style reste ; corps : les quatre traits intérieurs.
+      expect(html).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>h1</p></td>');
+      expect(html).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>h2</p></td>');
+      expect(html).toContain(
+        '<td style="border-top: 0.5pt solid #bfbfbf; border-right: 0.5pt solid #bfbfbf; border-bottom: 0.5pt solid #bfbfbf; border-left: 0.5pt solid #bfbfbf"><p>a</p></td>',
+      );
+      // Un `nil` direct de cellule reste la bordure transparente du contrat (X8).
+      const direct = body.replace(
+        `<w:tc>${p('a')}</w:tc>`,
+        `<w:tc><w:tcPr><w:tcBorders><w:left w:val="nil"/></w:tcBorders></w:tcPr>${p('a')}</w:tc>`,
+      );
+      const withDirect = await importDocx(await buildDocx(direct, { 'word/styles.xml': styles }), {
+        fidelity: 'styled',
+      });
+      expect(withDirect.html).toContain('border-left: 0pt solid transparent"><p>a</p></td>');
+    });
+
+    it('R42-06 : tblLook absent ou vide → défaut de Word (première ligne, bandes horizontales), comme <w:tblLook/>', async () => {
+      const absent = await conditional('', THREE_ROWS);
+      const empty = await conditional('<w:tblLook/>', THREE_ROWS);
+      expect(absent).toBe(empty);
+      expect(absent).toContain(
+        '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #d9e2f3"><p>H1</p></td>',
+      );
+      expect(absent).toContain(
+        '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #f2f2f2"><p>A</p></td>',
+      );
+      expect(absent).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>C</p></td>');
     });
 
     it('le style conditionnel ne remplace pas un fond direct et transmet ses runs au contexte des cellules', async () => {

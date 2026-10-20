@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readBorder } from './properties';
 import { fragment } from './testing-blocks';
 import {
   booleanAttribute,
@@ -120,6 +121,16 @@ describe('units : conversions', () => {
     // `w:sz` absent : filet fin par défaut.
     expect(borders.left).toEqual({ side: 'left', style: 'double', widthPt: 0.5, color: '#000000' });
     expect(readBorders(null)).toEqual({});
+  });
+
+  it('R42-05 : un seul lecteur de bordure, `properties.readBorder` est `readBorderElement`', () => {
+    expect(readBorder).toBe(readBorderElement);
+    expect(readBorder(fragment('<w:bottom w:val="single" w:sz="0"/>'), 'bottom')).toEqual({
+      side: 'bottom',
+      style: 'solid',
+      widthPt: 0.5,
+      color: '#000000',
+    });
   });
 
   it('L45 : `w:space` des bordures directes lu en `spacePt`, comme `readBorder` ; hors bornes ignoré', () => {

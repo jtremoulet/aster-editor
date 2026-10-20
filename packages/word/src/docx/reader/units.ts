@@ -263,10 +263,13 @@ const BORDER_ELEMENTS: ReadonlyMap<string, BorderName> = new Map([
 ]);
 
 /**
- * Bordure d'un élément `w:top`, `w:left`… de `w:tblBorders` / `w:tcBorders` directs :
- * `null` si `nil`/`none` ; un `w:sz` absent, nul ou hors bornes (> 12 pt) avec un style
- * visible donne un filet fin ; `w:space` en points → `spacePt` s'il est présent et dans
- * les bornes, comme `properties.readBorder` pour les bordures de style (L45).
+ * Bordure d'un élément `w:top`, `w:left`… de `w:pBdr`, `w:tcBorders`, `w:tblBorders`,
+ * de style comme direct : le **seul** lecteur de bordure du paquet (`properties.readBorder`
+ * en est l'alias, R42-05). `null` si `nil`/`none` ; `w:val` → style ; un `w:sz` absent,
+ * nul ou hors bornes (> 12 pt) avec un style visible donne le filet fin de Word (½ pt) ;
+ * `w:color` `auto` ou absent → noir, toute couleur hexadécimale conservée telle quelle
+ * (`BFBFBF` reste `#bfbfbf`) ; `w:space` en points → `spacePt` s'il est présent et dans
+ * les bornes.
  */
 export function readBorderElement(element: Element, side: BorderSide): BlockBorder | null {
   const style = borderStyleOf(wordAttribute(element, 'val'));

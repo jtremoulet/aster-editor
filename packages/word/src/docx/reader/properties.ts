@@ -1,15 +1,13 @@
-import type { BlockBorder, BorderSide } from '@aster-editor/core';
+import type { BlockBorder, BorderSide, TabAlign, TabLeader } from '@aster-editor/core';
 import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
 import { distanceAttr, readShadingFill } from './properties-run';
 import type { ParagraphAlign, ResolvedParagraphProps, ResolvedRunProps } from './types';
 import {
-  borderColor,
-  borderStyleOf,
   bounded,
-  eighthPointsToPt,
   lineToMultiple,
   numberAttr,
   onOff,
+  readBorderElement,
   twipsToPt,
   WORD_LIMITS,
 } from './units';
@@ -34,6 +32,27 @@ export {
   type ThemeFonts,
 } from './properties-run';
 
+/**
+ * Un seul lecteur de bordure pour tout le paquet (R42-05, après la fusion L45a) :
+ * `readBorder` est `units.readBorderElement`. Un `w:sz` nul, absent ou hors bornes avec un
+ * style visible donne le filet fin de Word (½ pt), sur un paragraphe comme sur une cellule.
+ */
+export { readBorderElement as readBorder } from './units';
+
+/**
+ * Taquet de tabulation résolu (`w:tab` de `w:tabs`), en points : position, alignement
+ * (`w:val`, `left` et `bar` → absent, non sérialisé) et points de suite (`w:leader`,
+ * `none` → absent). Session 4 : `align` et `leader` suivent `TabAttrs` du contrat.
+ */
+export interface TabStop {
+  readonly positionPt: number;
+  readonly align?: Exclude<TabAlign, 'left'>;
+  readonly leader?: TabLeader;
+}
+
+/** Alignement et points de suite d'un taquet, sans sa position (valeur de la carte). */
+type TabStopFormat = Omit<TabStop, 'positionPt'>;
+
 /** Accumulateur de paragraphe. `outlineLevel` est en base 0 comme dans le XML. */
 export interface MutableParagraph {
   align?: ParagraphAlign;
@@ -50,23 +69,23 @@ export interface MutableParagraph {
   pageBreakBefore?: boolean;
   numbering?: { readonly numId: string; readonly level: number };
   outlineLevel?: number;
-  /** Taquets de tabulation en points, clé = position (`w:tabs`, `w:clear` retire). */
-  tabStops?: Map<number, true>;
+  /** Taquets de tabulation, clé = position en points (`w:tabs`, `w:clear` retire). */
+  tabStops?: Map<number, TabStopFormat>;
 }
 
 /**
  * Propriétés de paragraphe d'Aster : le contrat plus les taquets de tabulation résolus
- * (style puis direct), positions croissantes en points. `runs.ts` attribue le n-ième
- * taquet à la n-ième tabulation du paragraphe. L'alignement du taquet (`left`, `center`,
- * `right`, `decimal`) est hors contrat et n'est pas conservé.
+ * (style puis direct), positions croissantes en points, avec leur alignement et leurs
+ * points de suite. `runs.ts` attribue le n-ième taquet à la n-ième tabulation du
+ * paragraphe (approximation sans mesure du texte).
  */
 export interface DocxParagraphProps extends ResolvedParagraphProps {
-  readonly tabStopsPt?: readonly number[];
+  readonly tabStops?: readonly TabStop[];
 }
 
 /** Taquets d'un paragraphe résolu quelconque, vide pour un résolveur tiers ou stub. */
-export function tabStopsOf(props: ResolvedParagraphProps): readonly number[] {
-  return 'tabStopsPt' in props ? ((props as DocxParagraphProps).tabStopsPt ?? []) : [];
+export function tabStopsOf(props: ResolvedParagraphProps): readonly TabStop[] {
+  return 'tabStops' in props ? ((props as DocxParagraphProps).tabStops ?? []) : [];
 }
 
 export function emptyParagraph(): MutableParagraph {
@@ -83,49 +102,48 @@ export function cloneParagraph(source: MutableParagraph): MutableParagraph {
 
 const BORDER_SIDES: readonly BorderSide[] = ['top', 'right', 'bottom', 'left', 'between'];
 
-/** Largeur de bordure par défaut de Word quand `w:sz` est absent ou irrecevable : ½ pt. */
-const DEFAULT_BORDER_WIDTH_PT = 0.5;
+/** `w:val` d'un taquet → alignement du contrat ; `left`, `start`, `num`, `bar` → aucun. */
+const TAB_ALIGNS: ReadonlyMap<string, Exclude<TabAlign, 'left'>> = new Map([
+  ['center', 'center'],
+  ['right', 'right'],
+  ['end', 'right'],
+  ['decimal', 'decimal'],
+]);
 
 /**
- * Une bordure OOXML (`w:top`, `w:left`… de `w:pBdr`, `w:tcBorders`, `w:tblBorders`) :
- * `w:val` → style, `w:sz` en huitièmes de point → `widthPt` (au plus 12 pt, sinon la
- * largeur par défaut), `w:color` (`auto` ou absent → noir, toute couleur hexadécimale
- * conservée telle quelle : `BFBFBF` reste `#bfbfbf`), `w:space` en points → `spacePt`
- * (seulement s'il est présent et dans les bornes). `null` pour `nil`/`none` : la bordure
- * est explicitement absente.
+ * `w:leader` d'un taquet → points de suite du contrat. `heavy` (trait épais) est ramené à
+ * `underscore`, `middleDot` à `dot` : approximations vers les trois valeurs du contrat ;
+ * `none` et une valeur inconnue → aucun.
  */
-export function readBorder(element: Element, side: BorderSide): BlockBorder | null {
-  const style = borderStyleOf(wordAttribute(element, 'val'));
-  if (style === null) return null;
-  const size = numberAttr(wordAttribute(element, 'sz'));
-  const widthPt =
-    size === undefined ? undefined : bounded(eighthPointsToPt(size), 0, WORD_LIMITS.borderMaxPt);
-  const spacePt = bounded(
-    numberAttr(wordAttribute(element, 'space')),
-    0,
-    WORD_LIMITS.distanceMaxPt,
-  );
-  return {
-    side,
-    style,
-    widthPt: widthPt ?? DEFAULT_BORDER_WIDTH_PT,
-    color: borderColor(wordAttribute(element, 'color')),
-    ...(spacePt !== undefined ? { spacePt } : {}),
-  };
-}
+const TAB_LEADERS: ReadonlyMap<string, TabLeader> = new Map([
+  ['dot', 'dot'],
+  ['middleDot', 'dot'],
+  ['hyphen', 'hyphen'],
+  ['underscore', 'underscore'],
+  ['heavy', 'underscore'],
+]);
 
 /**
  * Applique un `w:tabs` sur les taquets hérités : `w:clear` retire le taquet à cette
  * position (c'est ainsi qu'un paragraphe annule un taquet de son style), tout autre
- * `w:val` en pose un. La position `w:pos` est en twips, bornée à ±1584 pt.
+ * `w:val` en pose un (ou remplace celui de la position), avec son alignement et ses
+ * points de suite. La position `w:pos` est en twips, bornée à 1584 pt ; une position
+ * négative (`ST_SignedTwipsMeasure`, Word l'accepte) est ignorée : le `core` ne relit que
+ * des positions ≥ 0 (`sanitizeTabStop`), un `data-stop="-36pt"` serait perdu (R42-03).
  */
 function applyTabStops(tabs: Element, acc: MutableParagraph): void {
   for (const tab of childrenNamed(tabs, 'tab')) {
     const position = distanceAttr(wordAttribute(tab, 'pos'));
-    if (position === undefined) continue;
-    const stops = acc.tabStops ?? new Map<number, true>();
-    if (wordAttribute(tab, 'val') === 'clear') stops.delete(position);
-    else stops.set(position, true);
+    if (position === undefined || position < 0) continue;
+    const stops = acc.tabStops ?? new Map<number, TabStopFormat>();
+    const val = wordAttribute(tab, 'val');
+    if (val === 'clear') {
+      stops.delete(position);
+    } else {
+      const align = TAB_ALIGNS.get(val);
+      const leader = TAB_LEADERS.get(wordAttribute(tab, 'leader'));
+      stops.set(position, { ...(align ? { align } : {}), ...(leader ? { leader } : {}) });
+    }
     acc.tabStops = stops;
   }
 }
@@ -135,7 +153,7 @@ export function applyBorders(container: Element, borders: Map<BorderSide, BlockB
   for (const side of BORDER_SIDES) {
     const element = childNamed(container, side);
     if (!element) continue;
-    const border = readBorder(element, side);
+    const border = readBorderElement(element, side);
     if (border) borders.set(side, border);
     else borders.delete(side);
   }
@@ -285,7 +303,9 @@ export function finalizeParagraph(
   if (acc.pageBreakBefore) out.pageBreakBefore = true;
   if (acc.numbering) out.numbering = acc.numbering;
   if (acc.tabStops && acc.tabStops.size > 0) {
-    out.tabStopsPt = Array.from(acc.tabStops.keys()).sort((a, b) => a - b);
+    out.tabStops = Array.from(acc.tabStops.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([positionPt, format]): TabStop => ({ positionPt, ...format }));
   }
   return { ...out, runDefaults };
 }

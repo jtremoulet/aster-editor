@@ -15,7 +15,8 @@ import {
 } from './properties';
 import type { StyleDefinition } from './styles-part';
 import { readConditionalFormats, type ConditionalFormats } from './table-conditional';
-import type { ResolvedParagraphProps, TableStyleProps } from './types';
+import type { DocxParagraphProps } from './properties';
+import type { TableStyleProps } from './types';
 import { numberAttr, twipsToPt } from './units';
 
 /**
@@ -25,11 +26,12 @@ import { numberAttr, twipsToPt } from './units';
  */
 
 /**
- * Style de tableau d'Aster : le contrat plus les défauts de paragraphe du style (`pPr`) et
- * ses formats conditionnels (`w:tblStylePr`, session 4), appliqués par `tables.ts`.
+ * Style de tableau d'Aster : le contrat plus les défauts de paragraphe du style (`pPr`,
+ * taquets de tabulation compris, R42-07) et ses formats conditionnels (`w:tblStylePr`,
+ * session 4), appliqués par `tables.ts` et `paragraphs.ts`.
  */
 export interface DocxTableStyleProps extends TableStyleProps {
-  readonly paragraphDefaults?: Omit<ResolvedParagraphProps, 'runDefaults' | 'styleId'>;
+  readonly paragraphDefaults?: Omit<DocxParagraphProps, 'runDefaults' | 'styleId'>;
   readonly conditional?: ConditionalFormats;
 }
 

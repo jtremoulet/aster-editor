@@ -191,6 +191,38 @@ async function readSections(
   };
 }
 
+/** Saut de section rendu, tel que `sectionBreakHtml` l'écrit. */
+const SECTION_BREAK = /<hr data-section-break="\d+">/;
+
+/**
+ * Garde commune « chaque section se termine par un bloc éditable » (R42-01), miroir de
+ * ce que le `core` impose au chargement : `TrailingNode` (`StarterKit`, `notAfter: []`)
+ * ajoute un `<p></p>` après tout dernier bloc qui n'est pas un paragraphe (saut de
+ * section, tableau, liste, titre, saut de page, notes), et `ensureSectionBlocks`
+ * (R41-03) un paragraphe avant un saut en tête de document ou entre deux sauts
+ * adjacents. Pour que `setHTML(getHTML())` rende le HTML de l'import à l'identique, le
+ * lecteur émet ces `<p></p>` lui-même, en `keep` comme en `drop` (où le paragraphe vide
+ * porteur ou suivant un saut final a été retiré ; `stripEmptyParagraphs` les conserve).
+ * Un corps vide reste vide.
+ */
+export function ensureEditableBlocks(html: string): string {
+  if (html === '') return html;
+  const out: string[] = [];
+  let sectionOpen = true;
+  for (const piece of html.split(new RegExp(`(${SECTION_BREAK.source})`, 'g'))) {
+    if (piece === '') continue;
+    if (SECTION_BREAK.test(piece)) {
+      if (sectionOpen) out.push('<p></p>');
+      sectionOpen = true;
+    } else {
+      sectionOpen = false;
+    }
+    out.push(piece);
+  }
+  const joined = out.join('');
+  return joined.endsWith('</p>') ? joined : `${joined}<p></p>`;
+}
+
 /**
  * Lit un `.docx` (octets déjà prétraités pour les variables) et rend le HTML stylé, la mise
  * en page, les objets perdus et les avertissements. Ne lève que si la partie principale
@@ -249,5 +281,5 @@ export async function readDocx(buffer: ArrayBuffer, options: ReaderOptions): Pro
     ...(sections.length > 0 ? { sections } : {}),
   };
 
-  return { html: bodyHtml + notesHtml, layout, lost, warnings };
+  return { html: ensureEditableBlocks(bodyHtml + notesHtml), layout, lost, warnings };
 }

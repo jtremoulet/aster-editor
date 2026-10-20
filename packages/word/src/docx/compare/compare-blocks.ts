@@ -1,3 +1,4 @@
+import { tabStopsOf } from '../reader/properties';
 import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
 import { alignSequences } from './align';
 import { MISSING, recordIfAny, type CompareContext } from './compare-context';
@@ -95,6 +96,22 @@ function effectiveParagraphValue(key: ParagraphFormatKey, value: unknown): unkno
   if (key === 'lineHeight' && value === 1) return undefined;
   if (value === 0 && key !== 'lineHeight' && key !== 'lineHeightPt') return undefined;
   return value;
+}
+
+/**
+ * Taquets de tabulation **rendus** d'un paragraphe (`paragraph.tabs`, session 4) :
+ * position et alignement de chaque taquet résolu (style puis direct), seulement quand le
+ * paragraphe contient une tabulation, car un taquet sans tabulation ne change rien à ce
+ * que Word affiche. Les points de suite ne sont pas comparés (hors de ce que le contrat
+ * garantit à l'aller-retour pour l'instant).
+ */
+function renderedTabs(
+  paragraph: ParagraphModel,
+): readonly { readonly positionPt: number; readonly align: string }[] | undefined {
+  if (!paragraph.text.includes('\t')) return undefined;
+  const stops = tabStopsOf(paragraph.props);
+  if (stops.length === 0) return undefined;
+  return stops.map((stop) => ({ positionPt: stop.positionPt, align: stop.align ?? 'left' }));
 }
 
 function compareRuns(
@@ -241,6 +258,15 @@ export function compareParagraph(
     where,
     a.pageBreakAfter,
     b?.pageBreakAfter,
+    present,
+  );
+  recordIfAny(
+    ctx,
+    'paragraph-format',
+    'paragraph.tabs',
+    where,
+    renderedTabs(a),
+    b ? renderedTabs(b) : undefined,
     present,
   );
   if (!ctx.ignoreRevisionIds) {

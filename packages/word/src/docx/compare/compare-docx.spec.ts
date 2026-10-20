@@ -241,6 +241,43 @@ describe('compareDocx — groupes de propriétés', () => {
     expect(identical.score).toBe(1);
   });
 
+  it('paragraph.tabs (session 4) : position et alignement des taquets d’un paragraphe tabulé, points de suite et taquets sans tabulation ignorés', async () => {
+    const tabbed = (tabs: string, text = 'a'): string =>
+      `<w:p><w:pPr><w:tabs>${tabs}</w:tabs></w:pPr><w:r><w:t>${text}</w:t><w:tab/><w:t>b</w:t></w:r></w:p>`;
+    const center = '<w:tab w:val="center" w:pos="4536" w:leader="dot"/>';
+    const a = await buildDocx(tabbed(center));
+    // Même position, alignement perdu (`left`) : une occurrence perdue, exemple lisible.
+    const left = await compareDocx(
+      a,
+      await buildDocx(tabbed('<w:tab w:val="left" w:pos="4536"/>')),
+    );
+    expect(property(left, 'paragraph.tabs')).toMatchObject({
+      group: 'paragraph-format',
+      total: 1,
+      kept: 0,
+    });
+    expect(property(left, 'paragraph.tabs').examples[0]).toEqual({
+      where: 'paragraphe 1',
+      expected: '[{"align":"center","positionPt":226.8}]',
+      actual: '[{"align":"left","positionPt":226.8}]',
+    });
+    // Points de suite différents, même position et alignement : conservé.
+    const noLeader = await compareDocx(
+      a,
+      await buildDocx(tabbed('<w:tab w:val="center" w:pos="4536"/>')),
+    );
+    expect(property(noLeader, 'paragraph.tabs')).toMatchObject({ total: 1, kept: 1 });
+    expect(noLeader.score).toBe(1);
+    // Taquets absents du résultat : perdus ; paragraphe sans tabulation : aucune occurrence.
+    const none = await compareDocx(a, await buildDocx(p('a\tb')));
+    expect(property(none, 'paragraph.tabs')).toMatchObject({ total: 1, kept: 0 });
+    const unused = await compareDocx(
+      await buildDocx(`<w:p><w:pPr><w:tabs>${center}</w:tabs></w:pPr>${r('a')}</w:p>`),
+      await buildDocx(p('a')),
+    );
+    expect(names(unused)).not.toContain('paragraph.tabs');
+  });
+
   it('run-format : runs fusionnés puis alignés par texte, chaque champ compté', async () => {
     const a = await buildDocx(
       `<w:p>${r('Bon', '<w:b/>')}${r('jour', '<w:b/>')}${r(' le ')}${r('monde', '<w:color w:val="C00000"/><w:sz w:val="28"/><w:u w:val="double"/>')}</w:p>`,

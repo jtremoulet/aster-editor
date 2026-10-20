@@ -503,7 +503,9 @@ describe('createStyleResolver', () => {
       });
       expect(conditionalFormatsOf(styles.tableStyle('CondChild'))).toEqual({
         firstRow: {
-          cellBorders: [{ side: 'bottom', style: 'solid', widthPt: 1.5, color: '#2f5496' }],
+          cellBorders: {
+            bottom: { side: 'bottom', style: 'solid', widthPt: 1.5, color: '#2f5496' },
+          },
           cellShading: '#d9e2f3',
           run: { bold: true },
         },

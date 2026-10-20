@@ -126,4 +126,32 @@ describe('readHeadersFooters', () => {
     expect(await readEffectiveHeadersFooters([], ctx)).toEqual([]);
     expect(ctx.warnings).toEqual([]);
   });
+
+  it('R42-04 : une partie référencée par plusieurs sections est convertie une fois et partagée', async () => {
+    const pkg = await sectionPackage();
+    const base = await createTestContext(pkg);
+    let conversions = 0;
+    const ctx = {
+      ...base,
+      convert: {
+        ...base.convert,
+        blocks: async (container: Element, inner: typeof base) => {
+          conversions += 1;
+          return base.convert.blocks(container, inner);
+        },
+      },
+    };
+    const reference =
+      '<w:sectPr><w:headerReference w:type="default" r:id="rId6"/><w:footerReference w:type="default" r:id="rId9"/></w:sectPr>';
+    const sectPrs = Array.from({ length: 50 }, () => fragment(reference));
+    const sections = await readEffectiveHeadersFooters(sectPrs, ctx);
+    expect(sections).toHaveLength(50);
+    expect(conversions).toBe(2);
+    expect(sections[0]?.headers?.default).toEqual({ html: '<p>En-tête par défaut</p>' });
+    expect(sections[49]?.headers?.default).toBe(sections[0]?.headers?.default);
+    expect(sections[49]?.footers?.default).toBe(sections[0]?.footers?.default);
+    // Sans cache partagé (appel direct), chaque appel convertit à nouveau.
+    await readHeadersFooters(fragment(reference), ctx);
+    expect(conversions).toBe(4);
+  });
 });

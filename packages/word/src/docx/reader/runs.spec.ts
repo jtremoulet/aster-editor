@@ -142,11 +142,21 @@ describe('convertRuns', () => {
         ),
       ).toBe(`a${TAB}b<br>c<br>d`);
       expect(TAB).toBe('<span data-tab=""></span>');
-      expect(tabHtml(36)).toBe('<span data-tab="" data-stop="36pt"></span>');
+      expect(tabHtml({ positionPt: 36 })).toBe('<span data-tab="" data-stop="36pt"></span>');
+      // Session 4 (R43-05) : `data-align` puis `data-leader`, après `data-stop`, seulement s'ils sont connus.
+      expect(tabHtml({ positionPt: 36, align: 'right', leader: 'dot' })).toBe(
+        '<span data-tab="" data-stop="36pt" data-align="right" data-leader="dot"></span>',
+      );
+      expect(tabHtml({ positionPt: 0, leader: 'underscore' })).toBe(
+        '<span data-tab="" data-stop="0pt" data-leader="underscore"></span>',
+      );
     });
 
     it('la n-ième tabulation prend le n-ième taquet du paragraphe, dans les balises du run', async () => {
-      const stops: DocxParagraphProps = { runDefaults: {}, tabStopsPt: [56.7, 113.4] };
+      const stops: DocxParagraphProps = {
+        runDefaults: {},
+        tabStops: [{ positionPt: 56.7 }, { positionPt: 113.4 }],
+      };
       const html = await convertRuns(
         paragraphOf(
           '<w:r><w:rPr><w:b/></w:rPr><w:t>a</w:t><w:tab/><w:t>b</w:t></w:r><w:r><w:tab/><w:t>c</w:t><w:tab/><w:t>d</w:t></w:r>',

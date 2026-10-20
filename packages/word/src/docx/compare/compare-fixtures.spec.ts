@@ -52,8 +52,9 @@ const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
- * Fixtures sous la cible dans le gabarit, avec le score mesuré le 21/10/2026 (après L45a).
- * Les parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
+ * Fixtures sous la cible dans le gabarit, avec le score mesuré le 21/10/2026 à 00:36
+ * (F42 sur `69ff52e` + writer F43 de l'arbre de travail ; inchangé depuis L45a). Les
+ * parties annexes du paquet sont toutes identiques à l'octet ; les pertes restantes
  * viennent du lecteur (`reader/**`) ou du writer (`writer/**`, `export/**`), hors
  * périmètre du comparateur :
  * - `17-objets-perdus` (0,972, inchangé) : `paragraph.text` ×3 — texte de la zone de texte
@@ -62,7 +63,9 @@ const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
  *   conditionnel — `run.bold` ×2, `table.cellShading` ×6 (le lecteur résout `tblStylePr`
  *   en propriétés directes, le writer ne sait pas les retirer sans réécrire `w:tblLook`,
  *   hors contrat : proposition `TableLayoutAttrs.look`). Les `table.cellBorders` ×10 et
- *   `table.borders` ×1 (`spacePt`) ont disparu avec L45a.
+ *   `table.borders` ×1 (`spacePt`) ont disparu avec L45a ; `paragraph.tabs` (position et
+ *   alignement des taquets, comparé depuis F42) est conservé 4/4 : le lecteur émet
+ *   `data-align`, le writer réécrit `w:val` (F43).
  *
  * La valeur est un **plancher de non-régression** (score mesuré moins une marge), pas un
  * seuil : la cible reste `TEMPLATE_TARGET_SCORE`, assertée en `it.fails` jusqu'à ce que
@@ -75,8 +78,8 @@ const TEMPLATE_BELOW_TARGET: Readonly<Record<string, number>> = {
 };
 
 /**
- * Document client dans le gabarit : **0,995** mesuré le 21/10/2026 après L45a (0,99 après
- * L43, 0,889 en L28c, 0,830 en L28b) : la cible de la session 3 est atteinte, les trois
+ * Document client dans le gabarit : **0,995** mesuré le 21/10/2026 après L45a, confirmé
+ * après F42 à 00:36 (0,99 après L43, 0,889 en L28c, 0,830 en L28b) : la cible de la session 3 est atteinte, les trois
  * `w:sectPr` ressortent identiques à l'octet. Pertes restantes, toutes réelles et hors
  * périmètre du comparateur : `paragraph.text` ×2, `run.runStyle` / `run.underline` ×1 sur
  * un lien (`Lienhypertexte`), `table.cellBorders` ×6 (traits gris `#bfbfbf` de côtés de

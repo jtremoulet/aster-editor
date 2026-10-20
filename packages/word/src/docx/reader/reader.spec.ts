@@ -52,8 +52,9 @@ describe('lecteur OOXML (squelette de phase 0)', () => {
       '<w:customXml w:element="section"><w:p><w:r><w:t>Para 1</w:t></w:r></w:p><w:p><w:r><w:t>Para 2</w:t></w:r></w:p>' +
       '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>cellule</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:customXml>';
     const result = await importDocx(await buildDocx(body), { fidelity: 'styled' });
+    // Le `<p></p>` final est la garde R42-01 : le corps se termine par un tableau.
     expect(result.html).toMatch(
-      /^<p[^>]*>Para 1<\/p><p[^>]*>Para 2<\/p><table[^>]*><tbody><tr><td[^>]*><p[^>]*>cellule<\/p><\/td><\/tr><\/tbody><\/table>$/,
+      /^<p[^>]*>Para 1<\/p><p[^>]*>Para 2<\/p><table[^>]*><tbody><tr><td[^>]*><p[^>]*>cellule<\/p><\/td><\/tr><\/tbody><\/table><p><\/p>$/,
     );
     expect(result.lost).toEqual([]);
     expect(result.warnings).toEqual([]);

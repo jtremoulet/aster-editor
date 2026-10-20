@@ -1,6 +1,7 @@
 import type { BlockBorder } from '@aster-editor/core';
 import { childNamed } from '../preprocess/xml-utils';
 import { escapeAttr, pt, styleAttr } from './html';
+import { tabStopsOf, type DocxParagraphProps } from './properties';
 import { convertRuns, PAGE_BREAK } from './runs';
 import { docDefaultsOf, tableParagraphDefaultsOf } from './styles';
 import type {
@@ -35,7 +36,8 @@ const INHERITABLE_RUN_KEYS = ['fontFamily', 'fontSizePt', 'bold', 'italic', 'col
  * Approximation du style de tableau : ses défauts de paragraphe et de run s'intercalent
  * entre `docDefaults` et le style de paragraphe. Faute de savoir ce que le style de
  * paragraphe a posé lui-même, on ne prend la valeur du tableau que là où le paragraphe
- * est encore égal aux `docDefaults`.
+ * est encore égal aux `docDefaults` (même règle pour les taquets, R42-07 : ceux du style
+ * de tableau quand le paragraphe n'en a pas d'autres que ceux des `docDefaults`).
  */
 function applyTableStyle(
   props: ResolvedParagraphProps,
@@ -43,7 +45,7 @@ function applyTableStyle(
   defaults: { paragraph: ResolvedParagraphProps; run: ResolvedRunProps },
 ): ResolvedParagraphProps {
   if (!ctx.tableStyle) return props;
-  const paragraph: { -readonly [K in keyof ResolvedParagraphProps]?: ResolvedParagraphProps[K] } = {
+  const paragraph: { -readonly [K in keyof DocxParagraphProps]?: DocxParagraphProps[K] } = {
     ...props,
   };
   const tableParagraph = tableParagraphDefaultsOf(ctx.tableStyle);
@@ -53,6 +55,14 @@ function applyTableStyle(
       if (value !== undefined && props[key] === defaults.paragraph[key]) {
         (paragraph as Record<string, unknown>)[key] = value;
       }
+    }
+    const tableTabs = tableParagraph.tabStops;
+    if (
+      tableTabs &&
+      tableTabs.length > 0 &&
+      JSON.stringify(tabStopsOf(props)) === JSON.stringify(tabStopsOf(defaults.paragraph))
+    ) {
+      paragraph.tabStops = tableTabs;
     }
     const lineUnchanged =
       props.lineHeight === defaults.paragraph.lineHeight &&

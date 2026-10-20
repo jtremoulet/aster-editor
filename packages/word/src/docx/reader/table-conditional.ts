@@ -1,16 +1,16 @@
 import type { BlockBorder, BorderSide } from '@aster-editor/core';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import {
-  applyBorders,
   applyRunProperties,
   finalizeRun,
   orderedBorders,
+  readBorder,
   readShadingFill,
   type MutableRun,
   type ThemeFonts,
 } from './properties';
 import type { ResolvedRunProps, TableStyleProps } from './types';
-import { bordersBySide, numberAttr, onOff } from './units';
+import { bordersBySide, CSS_SIDES, numberAttr, onOff } from './units';
 
 /**
  * Styles conditionnels de tableau (`w:tblStylePr` : première ligne, bandes…), approximés
@@ -39,9 +39,17 @@ function isConditionalType(value: string): value is ConditionalType {
   return (CONDITIONAL_TYPES as readonly string[]).includes(value);
 }
 
+/**
+ * Bordures de cellule d'un format conditionnel, côté par côté : une bordure, ou `null`
+ * pour un `nil` explicite qui **retire** la bordure que le style de tableau pose (les
+ * styles intégrés de Word, « Grid Table 4 », « List Table 3 »…, annulent ainsi
+ * `insideH`/`insideV` sur `firstRow` ou `lastRow`, R42-02). Côté absent : rien à dire.
+ */
+export type ConditionalCellBorders = Partial<Record<BorderSide, BlockBorder | null>>;
+
 /** Ce qu'un `w:tblStylePr` apporte : bordures et fond de cellule (`w:tcPr`), propriétés de run (`w:rPr`). */
 export interface ConditionalFormat {
-  readonly cellBorders?: readonly BlockBorder[];
+  readonly cellBorders?: ConditionalCellBorders;
   readonly cellShading?: string;
   readonly run?: ResolvedRunProps;
 }
@@ -54,16 +62,42 @@ export interface ConditionalSource {
 }
 
 /**
+ * Bordures d'un `w:tcBorders` conditionnel, lues côté par côté (`nil` → `null`) : les
+ * traits intérieurs de la région d'abord (`insideH` → haut et bas, `insideV` → gauche et
+ * droite de chaque cellule, approximation : toutes les cellules de la région sont
+ * traitées comme intérieures), puis les côtés nommés, qui les recouvrent.
+ */
+function applyConditionalBorders(
+  tcBorders: Element,
+  map: Map<BorderSide, BlockBorder | null>,
+): void {
+  const inside: readonly (readonly [string, readonly BorderSide[]])[] = [
+    ['insideH', ['top', 'bottom']],
+    ['insideV', ['left', 'right']],
+  ];
+  for (const [name, sides] of inside) {
+    const element = childNamed(tcBorders, name);
+    if (!element) continue;
+    for (const side of sides) map.set(side, readBorder(element, side));
+  }
+  for (const side of CSS_SIDES) {
+    const element = childNamed(tcBorders, side);
+    if (element) map.set(side, readBorder(element, side));
+  }
+}
+
+/**
  * Lit les formats conditionnels d'une chaîne `basedOn` (racine → feuille) : chaque type
- * accumule ses `w:tcBorders` (`nil` retire), son `w:shd` et ses `w:rPr` le long de la
- * chaîne. Les `w:pPr` des `w:tblStylePr` (alignement, espacement) sont hors lot et ignorés.
- * `undefined` quand aucun type n'apporte rien.
+ * accumule ses `w:tcBorders` (`nil` conservé comme `null`, pour retirer un trait du
+ * style), son `w:shd` et ses `w:rPr` le long de la chaîne. Les `w:pPr` des
+ * `w:tblStylePr` (alignement, espacement) sont hors lot et ignorés. `undefined` quand
+ * aucun type n'apporte rien.
  */
 export function readConditionalFormats(
   chain: readonly ConditionalSource[],
   theme: ThemeFonts,
 ): ConditionalFormats | undefined {
-  const borders = new Map<ConditionalType, Map<BorderSide, BlockBorder>>();
+  const borders = new Map<ConditionalType, Map<BorderSide, BlockBorder | null>>();
   const shadings = new Map<ConditionalType, string | undefined>();
   const runs = new Map<ConditionalType, MutableRun>();
   for (const source of chain) {
@@ -73,8 +107,8 @@ export function readConditionalFormats(
       const tcPr = childNamed(tblStylePr, 'tcPr');
       const tcBorders = tcPr ? childNamed(tcPr, 'tcBorders') : null;
       if (tcBorders) {
-        const map = borders.get(type) ?? new Map<BorderSide, BlockBorder>();
-        applyBorders(tcBorders, map);
+        const map = borders.get(type) ?? new Map<BorderSide, BlockBorder | null>();
+        applyConditionalBorders(tcBorders, map);
         borders.set(type, map);
       }
       const shd = tcPr ? childNamed(tcPr, 'shd') : null;
@@ -94,7 +128,9 @@ export function readConditionalFormats(
     const run = runs.get(type);
     const resolvedRun = run ? finalizeRun(run) : undefined;
     const format: { -readonly [K in keyof ConditionalFormat]?: ConditionalFormat[K] } = {
-      ...(cellBorders && cellBorders.size > 0 ? { cellBorders: orderedBorders(cellBorders) } : {}),
+      ...(cellBorders && cellBorders.size > 0
+        ? { cellBorders: Object.fromEntries(cellBorders) as ConditionalCellBorders }
+        : {}),
       ...(cellShading ? { cellShading } : {}),
       ...(resolvedRun && Object.keys(resolvedRun).length > 0 ? { run: resolvedRun } : {}),
     };
@@ -126,22 +162,34 @@ const LOOK_BITS: Readonly<Record<keyof TableLook, number>> = {
 const LOOK_KEYS = Object.keys(LOOK_BITS) as readonly (keyof TableLook)[];
 
 /**
+ * Masque appliqué par Word quand `w:tblLook` manque : `0x04A0` = première ligne, première
+ * colonne, pas de bandes verticales (bandes horizontales actives). ECMA-376 §17.4.56 dit
+ * `0x0000` pour un élément omis, mais les notes d'implémentation de Microsoft
+ * ([MS-OI29500] §2.1.160) précisent que Word assume `0x04A0` ; c'est aussi la valeur
+ * que Word écrit sur chaque tableau neuf et le défaut de LibreOffice à l'import. On
+ * suit Word, pas la lettre du standard (décision R42-06).
+ */
+const WORD_DEFAULT_LOOK = 0x04a0;
+
+/**
  * Lit `w:tblLook` : les attributs nommés (`w:firstRow="1"` chez Word, `"true"` chez la
  * lib `docx` : les quatre formes `onOff` sont acceptées, un attribut absent vaut faux)
  * priment ; sans aucun attribut nommé, le masque `w:val` hexadécimal (Word 2007) est lu.
- * Sans `w:tblLook`, aucun format conditionnel n'est appliqué (`null`).
+ * Sans `w:tblLook`, avec un `<w:tblLook/>` vide ou un `w:val` illisible, le masque est
+ * celui que Word applique par défaut (`WORD_DEFAULT_LOOK`, R42-06) : l'absence et
+ * l'élément vide se lisent pareil. Jamais `null`.
  */
-export function readTableLook(tblPr: Element | null): TableLook | null {
+export function readTableLook(tblPr: Element | null): TableLook {
   const tblLook = tblPr ? childNamed(tblPr, 'tblLook') : null;
-  if (!tblLook) return null;
-  const named = LOOK_KEYS.some((key) => wordAttribute(tblLook, key) !== '');
-  const mask = named ? 0 : Number.parseInt(wordAttribute(tblLook, 'val'), 16);
+  const named = tblLook !== null && LOOK_KEYS.some((key) => wordAttribute(tblLook, key) !== '');
+  const parsed = tblLook && !named ? Number.parseInt(wordAttribute(tblLook, 'val'), 16) : NaN;
+  const mask = Number.isFinite(parsed) ? parsed : WORD_DEFAULT_LOOK;
   const flag = (key: keyof TableLook): boolean => {
-    if (named) {
+    if (named && tblLook) {
       const value = wordAttribute(tblLook, key);
       return value !== '' && onOff(value);
     }
-    return Number.isFinite(mask) && (mask & LOOK_BITS[key]) !== 0;
+    return (mask & LOOK_BITS[key]) !== 0;
   };
   return {
     firstRow: flag('firstRow'),
@@ -209,9 +257,10 @@ export function conditionalTypesOf(
 
 /**
  * Style de tableau vu par une cellule : le style de base complété par les formats de ses
- * types, appliqués du moins au plus prioritaire (bordures côté par côté, fond, défauts de
- * run). Retourne `style` tel quel quand aucun type n'apporte rien, pour que les cellules
- * ordinaires partagent le même objet.
+ * types, appliqués du moins au plus prioritaire (bordures côté par côté, un `nil`
+ * conditionnel retirant le côté que le style pose, fond, défauts de run). Retourne `style`
+ * tel quel quand aucun type n'apporte rien, pour que les cellules ordinaires partagent le
+ * même objet.
  */
 export function applyConditionalFormats(
   style: TableStyleProps,
@@ -224,7 +273,13 @@ export function applyConditionalFormats(
   let cellShading = style.cellShading;
   let runDefaults: ResolvedRunProps = style.runDefaults ?? {};
   for (const format of applied) {
-    for (const border of format.cellBorders ?? []) borders[border.side] = border;
+    for (const [side, border] of Object.entries(format.cellBorders ?? {}) as [
+      BorderSide,
+      BlockBorder | null,
+    ][]) {
+      if (border) borders[side] = border;
+      else delete borders[side];
+    }
     if (format.cellShading) cellShading = format.cellShading;
     if (format.run) runDefaults = { ...runDefaults, ...format.run };
   }

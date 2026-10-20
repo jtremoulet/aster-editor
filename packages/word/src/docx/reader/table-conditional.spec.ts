@@ -54,9 +54,19 @@ describe('readTableLook', () => {
       noHBand: true,
       noVBand: true,
     });
-    expect(readTableLook(fragment('<w:tblPr><w:tblLook w:val="zz"/></w:tblPr>'))).toEqual(ALL_OFF);
-    expect(readTableLook(fragment('<w:tblPr/>'))).toBeNull();
-    expect(readTableLook(null)).toBeNull();
+    // R42-06 : sans élément, élément vide ou `w:val` illisible → masque par défaut de Word
+    // (`04A0` : première ligne, première colonne, pas de bandes verticales), jamais `null`.
+    const wordDefault: TableLook = { ...ALL_OFF, firstRow: true, firstColumn: true, noVBand: true };
+    expect(readTableLook(fragment('<w:tblPr><w:tblLook w:val="zz"/></w:tblPr>'))).toEqual(
+      wordDefault,
+    );
+    expect(readTableLook(fragment('<w:tblPr><w:tblLook/></w:tblPr>'))).toEqual(wordDefault);
+    expect(readTableLook(fragment('<w:tblPr/>'))).toEqual(wordDefault);
+    expect(readTableLook(null)).toEqual(wordDefault);
+    // Un masque nul explicite reste nul : tout désactivé sauf les bandes.
+    expect(readTableLook(fragment('<w:tblPr><w:tblLook w:val="0000"/></w:tblPr>'))).toEqual(
+      ALL_OFF,
+    );
   });
 
   it('tailles de bandes : 1 par défaut, entiers ≥ 1 seulement', () => {
@@ -142,12 +152,51 @@ describe('readConditionalFormats et applyConditionalFormats', () => {
     expect(formats).toEqual({
       band1Horz: { cellShading: '#f2f2f2' },
       firstRow: {
-        cellBorders: [{ side: 'bottom', style: 'solid', widthPt: 1, color: '#2f5496' }],
+        cellBorders: { bottom: { side: 'bottom', style: 'solid', widthPt: 1, color: '#2f5496' } },
         cellShading: '#d9e2f3',
         run: { bold: true, color: '#ffffff' },
       },
     });
     expect(readConditionalFormats([{ tblStylePrs: [] }], {})).toBeUndefined();
+  });
+
+  it('R42-02 : nil conservé comme null, insideH → haut et bas, insideV → gauche et droite, côtés nommés prioritaires', () => {
+    const formats = readConditionalFormats(
+      [
+        {
+          tblStylePrs: [
+            tblStylePr(
+              'firstRow',
+              '<w:tcPr><w:tcBorders><w:bottom w:val="nil"/><w:insideV w:val="nil"/></w:tcBorders></w:tcPr>',
+            ),
+            tblStylePr(
+              'lastRow',
+              '<w:tcPr><w:tcBorders><w:insideH w:val="single" w:sz="4" w:color="BFBFBF"/><w:top w:val="double" w:sz="12" w:color="2F5496"/></w:tcBorders></w:tcPr>',
+            ),
+          ],
+        },
+      ],
+      {},
+    );
+    expect(formats?.firstRow).toEqual({ cellBorders: { bottom: null, left: null, right: null } });
+    expect(formats?.lastRow).toEqual({
+      cellBorders: {
+        top: { side: 'top', style: 'double', widthPt: 1.5, color: '#2f5496' },
+        bottom: { side: 'bottom', style: 'solid', widthPt: 0.5, color: '#bfbfbf' },
+      },
+    });
+    // Un `nil` sur une carte vide laisse une trace : la feuille d'une chaîne peut retirer un trait de la racine.
+    const base: TableStyleProps = {
+      cellBorders: [
+        { side: 'top', style: 'solid', widthPt: 0.5, color: '#bfbfbf' },
+        { side: 'right', style: 'solid', widthPt: 0.5, color: '#bfbfbf' },
+        { side: 'bottom', style: 'solid', widthPt: 0.5, color: '#bfbfbf' },
+        { side: 'left', style: 'solid', widthPt: 0.5, color: '#bfbfbf' },
+      ],
+    };
+    expect(applyConditionalFormats(base, formats ?? {}, ['firstRow'])).toEqual({
+      cellBorders: [{ side: 'top', style: 'solid', widthPt: 0.5, color: '#bfbfbf' }],
+    });
   });
 
   it('fond le style de base avec les formats, du moins au plus prioritaire, sans muter la base', () => {
@@ -161,7 +210,9 @@ describe('readConditionalFormats et applyConditionalFormats', () => {
       firstRow: {
         cellShading: '#d9e2f3',
         run: { bold: true },
-        cellBorders: [{ side: 'bottom', style: 'solid', widthPt: 1, color: '#2f5496' }] as const,
+        cellBorders: {
+          bottom: { side: 'bottom', style: 'solid', widthPt: 1, color: '#2f5496' } as const,
+        },
       },
     };
     expect(applyConditionalFormats(base, formats, ['band1Horz', 'firstRow'])).toEqual({

@@ -230,6 +230,66 @@ describe('layout.sections et sauts de section', () => {
       expect(sections.map((section) => section.page?.size)).toEqual(['A4', 'Letter']);
     });
 
+    it('R42-01 : corps terminé par un saut de section ou un tableau → <p></p> final, idempotent dans le core', async () => {
+      // Forme Word d'un saut inséré en fin de document : porteur vide puis dernier paragraphe vide.
+      const trailing = `<w:p>${runXml('a')}</w:p><w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr></w:p><w:p/><w:sectPr>${A4}</w:sectPr>`;
+      for (const emptyParagraphs of ['drop', 'keep'] as const) {
+        const result = await importDocx(await buildDocx(trailing), {
+          fidelity: 'styled',
+          emptyParagraphs,
+        });
+        expect(result.html, emptyParagraphs).toBe('<p>a</p><hr data-section-break="1"><p></p>');
+        expect(roundTrip(result.html), emptyParagraphs).toBe(result.html);
+      }
+      // Porteur plein en dernier paragraphe ; porteur unique et deux sauts adjacents (le core
+      // garantit aussi un bloc avant un saut en tête et entre deux sauts, R41-03) ; tableau
+      // final et saut de page final sous `drop`.
+      const cases: readonly (readonly [string, string])[] = [
+        [
+          `<w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr>${runXml('a')}</w:p><w:sectPr>${A4}</w:sectPr>`,
+          '<p>a</p><hr data-section-break="1"><p></p>',
+        ],
+        [
+          `<w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr></w:p><w:sectPr>${A4}</w:sectPr>`,
+          '<p></p><hr data-section-break="1"><p></p>',
+        ],
+        [
+          `<w:p>${runXml('a')}</w:p><w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr></w:p><w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr></w:p><w:p>${runXml('b')}</w:p><w:sectPr>${A4}</w:sectPr>`,
+          '<p>a</p><hr data-section-break="1"><p></p><hr data-section-break="2"><p>b</p>',
+        ],
+        [
+          `<w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr></w:p><w:p><w:pPr><w:sectPr>${A4}</w:sectPr></w:pPr></w:p><w:sectPr>${A4}</w:sectPr>`,
+          '<p></p><hr data-section-break="1"><p></p><hr data-section-break="2"><p></p>',
+        ],
+        [
+          `<w:tbl><w:tr><w:tc><w:p>${runXml('c')}</w:p></w:tc></w:tr></w:tbl><w:p/>`,
+          '<table><tbody><tr><td><p>c</p></td></tr></tbody></table><p></p>',
+        ],
+        [
+          `<w:p>${runXml('a')}</w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p>`,
+          '<p>a</p><hr data-page-break=""><p></p>',
+        ],
+      ];
+      for (const [body, expectedHtml] of cases) {
+        const { html } = await importDocx(await buildDocx(body), {
+          fidelity: 'styled',
+          emptyParagraphs: 'drop',
+        });
+        expect(html, body).toBe(expectedHtml);
+        expect(roundTrip(html), body).toBe(html);
+      }
+      // Un corps qui se termine par un paragraphe ne reçoit rien de plus ; un corps vide reste vide.
+      const plain = await importDocx(await buildDocx(`<w:p>${runXml('a')}</w:p>`), {
+        fidelity: 'styled',
+      });
+      expect(plain.html).toBe('<p>a</p>');
+      const empty = await importDocx(await buildDocx('<w:p/>'), {
+        fidelity: 'styled',
+        emptyParagraphs: 'drop',
+      });
+      expect(empty.html).toBe('');
+    });
+
     it('un sectPr dans un item de liste ferme la liste avant le saut', async () => {
       const { html } = await styled(
         `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:sectPr>${A4}</w:sectPr></w:pPr>${runXml('item')}</w:p>` +
@@ -251,15 +311,18 @@ describe('19-tabulations-bordures', () => {
     expect(html).toContain(
       'Taquet left à 2 cm<span data-tab="" data-stop="56.7pt"></span>gauche<span data-tab=""></span>suite gauche</p>',
     );
+    // Session 4 (R43-05) : l'alignement du taquet suit en `data-align`, `left` jamais écrit.
     expect(html).toContain(
-      'Taquet center à 8 cm<span data-tab="" data-stop="226.8pt"></span>centré',
+      'Taquet center à 8 cm<span data-tab="" data-stop="226.8pt" data-align="center"></span>centré',
     );
     expect(html).toContain(
-      'Taquet right à 14 cm<span data-tab="" data-stop="396.9pt"></span>droite',
+      'Taquet right à 14 cm<span data-tab="" data-stop="396.9pt" data-align="right"></span>droite',
     );
     expect(html).toContain(
-      'Taquet decimal à 10 cm<span data-tab="" data-stop="283.5pt"></span>12,50',
+      'Taquet decimal à 10 cm<span data-tab="" data-stop="283.5pt" data-align="decimal"></span>12,50',
     );
+    expect(count(html, /data-stop="[^"]*" data-align="(?:center|right|decimal)"/g)).toBe(3);
+    expect(html).not.toContain('data-leader');
     expect(html).toContain(
       'Tabulation sans taquet défini<span data-tab=""></span>texte après la tabulation par défaut',
     );

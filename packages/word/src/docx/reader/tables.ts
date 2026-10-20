@@ -193,12 +193,13 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
     return { kind: 'table', html: '' };
   }
   const tableCtx = deriveContext(ctx, { tableStyle: style });
-  // Formats conditionnels : ceux du style, activés par `w:tblLook` ; sinon rien à décider.
+  // Formats conditionnels : ceux du style, activés par `w:tblLook` (défaut de Word sans
+  // l'élément, R42-06) ; sans format dans le style, rien à décider.
   const conditional = conditionalFormatsOf(style);
-  const look = conditional ? readTableLook(tblPr) : null;
+  const look = readTableLook(tblPr);
   const bands = readBandSizes(tblPr);
   const cellStyle = (position: CellPosition): TableStyleProps | null => {
-    if (!style || !conditional || !look) return style;
+    if (!style || !conditional) return style;
     return applyConditionalFormats(style, conditional, conditionalTypesOf(position, look, bands));
   };
 
