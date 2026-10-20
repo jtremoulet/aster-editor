@@ -79,7 +79,7 @@ describe('exportDocx', () => {
 
   it('accepte un document JSON ProseMirror', async () => {
     const { html } = await roundTrip('');
-    expect(html).toBe('');
+    expect(html).toBe('<p></p>'); // un .docx a toujours au moins un paragraphe, conservé depuis 0.4.3
     const blob = await exportDocx({
       type: 'doc',
       content: [

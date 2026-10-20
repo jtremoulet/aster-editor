@@ -3,7 +3,7 @@ import type { DocxImportOptions, DocxImportWarning } from '../types';
 /** Contexte partagé par les passes de post-traitement. */
 export interface PostprocessContext {
   /** Options d'import résolues (valeurs par défaut appliquées). */
-  readonly options: Readonly<Required<Pick<DocxImportOptions, 'footnotes'>>>;
+  readonly options: Readonly<Required<Pick<DocxImportOptions, 'footnotes' | 'emptyParagraphs'>>>;
   /** Avertissements accumulés, chaque passe peut en ajouter. */
   readonly warnings: DocxImportWarning[];
 }

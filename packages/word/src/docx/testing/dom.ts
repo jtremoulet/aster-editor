@@ -17,7 +17,7 @@ export function runPass(
 ): { html: string; warnings: DocxImportWarning[] } {
   const doc = parseFragment(html);
   const warnings: DocxImportWarning[] = [];
-  pass(doc, { options: { footnotes: true, ...options }, warnings });
+  pass(doc, { options: { footnotes: true, emptyParagraphs: 'drop', ...options }, warnings });
   return { html: doc.body.innerHTML, warnings };
 }
 

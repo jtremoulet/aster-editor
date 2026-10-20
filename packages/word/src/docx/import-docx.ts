@@ -219,7 +219,7 @@ export async function importDocx(
     raw = await mammoth.convertToHtml(toMammothInput(mammothBuffer), {
       styleMap: buildStyleMap(options.styleMap),
       convertImage: createImageConverter(mammoth, options.upload, warnings),
-      ignoreEmptyParagraphs: true,
+      ignoreEmptyParagraphs: options.emptyParagraphs === 'drop',
     });
   } catch (error) {
     throw invalidDocx(`mammoth n'a pas pu lire le document : ${describeError(error)}`);
@@ -234,9 +234,17 @@ export async function importDocx(
     'text/html',
   );
   const patterns = variablePatterns(variableOptions, collected);
-  runPostprocess(doc, { options: { footnotes: options.footnotes !== false }, warnings }, [
-    createVariablesPass(patterns, collected),
-  ]);
+  runPostprocess(
+    doc,
+    {
+      options: {
+        footnotes: options.footnotes !== false,
+        emptyParagraphs: options.emptyParagraphs ?? 'keep',
+      },
+      warnings,
+    },
+    [createVariablesPass(patterns, collected)],
+  );
 
   return { html: doc.body.innerHTML, warnings, variables: collectResultVariables(doc, collected) };
 }
