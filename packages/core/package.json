@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/core",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Moteur d'édition riche Aster sur Tiptap 3 / ProseMirror : commandes, extensions, i18n, événements",
   "license": "MIT",
   "author": "Joris Tremoulet",

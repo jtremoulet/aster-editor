@@ -244,3 +244,47 @@ Total : ≈ 8 M tokens d'agents, 1 262 → 1 994 tests unitaires, 35 → 42 e2e,
 3. Les lots de correctifs reprennent chaque preuve du relecteur comme test, et le relecteur suivant vérifie que c'est fait.
 4. Nommer le propriétaire de chaque fichier partagé dans les briefs ; les helpers communs sont écrits en phase 0.
 5. Un rapport intermédiaire d'agent toutes les 20 minutes (une ligne dans son rapport final suffit), pour qu'une interruption de session ne coûte rien.
+
+## 🌙 Session 4 — sections, tabulations, bordures, défaut stylé (20-21 octobre 2026)
+
+### 📊 Métriques par lot
+
+| Lot                                 | Durée         | Tokens         | Outils | Résultat                                                                       |
+| ----------------------------------- | ------------- | -------------- | ------ | ------------------------------------------------------------------------------ |
+| Phase 0 (contrat, briefs, sécurité) | 5 min         | —              | —      | Contrat additif, 5 briefs, scan du dépôt public                                |
+| L40 fixtures 18-19                  | 5 min         | 151k           | 28     | Deux fixtures, hash reproductible                                              |
+| L41 core sections                   | 20 min        | 334k           | 130    | 630 → 709 tests                                                                |
+| L42 lecteur sections                | 21 min        | 403k           | 131    | 184 → 225 tests lecteur, 16 → 1 avec le writer en cours                        |
+| L43 writer sections                 | 24 min        | 458k           | 168    | 16 et 18 → 1, client 0,889 → 0,99                                              |
+| L44 vue page par section            | 25 min        | —              | —      | 712 core, 406 ui                                                               |
+| R41 / R42 / R43 / R44               | 12-17         | 214-296k       | 40-57  | 0 bloquant, 10 + 7 + 10 + 6 findings, tous prouvés                             |
+| F41 / F42 / F43 / F44               | 13-28         | 270-386k       | 78-139 | 31 findings corrigés, 2 reportés (R41-09, R43-09)                              |
+| L45a dette word                     | 31 min        | 416k           | 162    | 16 modules découpés, `units` fusionné, perf 100 pages ≈ 750 ms                 |
+| L45b contrat vue page               | 15 min        | 246k           | 105    | `setPageView` / `getLayout` / `getSectionLayout` / `pageViewChange` au contrat |
+| L46 défaut stylé                    | 26 min        | 355k           | 151    | 986 → 1 075 tests word, comparateur `table.conditional`, 19 → 0,998            |
+| L47 e2e sections, Firefox, WebKit   | 22 min        | 272k           | 101    | 6 scénarios, WebKit 11/11, Firefox indisponible sur la machine, 2 arbitrages   |
+| L48 docs                            | **L48_DUREE** | **L48_TOKENS** | —      | **L48_RESULTAT**                                                               |
+
+### ✅ Ce qui a marché
+
+- **Le contrat avant tout, puis cinq lots en parallèle sur des périmètres disjoints** (fixtures, core, lecteur, writer, vue page) : aucune collision de fichiers en vague 1, et la convention « les variables de la section suivante sur le `hr` » figée avant que L41 n'existe a permis à L44 de coder contre un DOM pas encore écrit.
+- **La fidélité comme fil rouge mesurable** : le score du document client est passé de 0,889 à 0,99 dès l'intégration de L42 + L43, puis 0,995 avec L45a. Chaque lot writer/lecteur rendait ses scores avant → après, chaque relecteur les contestait.
+- **Relecture puis lot de correctifs, à chaque fois** : 33 findings prouvés en quatre revues, 31 corrigés dans l'heure par quatre lots F, chaque correctif avec le test qui rejoue la preuve. Les deux reports (R41-09 `spacePt` sur `between`, R43-09 `rStyle` sur lien) sont des décisions, pas des oublis.
+- **Découpage d'un lot de dette en deux** (L45a word, L45b core/angular) pour qu'il tourne en parallèle des correctifs sans toucher les mêmes fichiers : le seul conflit potentiel (`index.ts`) s'est réglé en commitant par chemins.
+- **Vérification en vrai navigateur par l'orchestrateur** entre deux intégrations (fixture 18 sur le playground : variables, coupure, en-tête, pied, idempotence) : dix minutes, zéro surprise, mais la preuve que le DOM promis existe.
+
+### 🧱 Frictions nouvelles
+
+- **Un `git mv` d'agent s'est retrouvé dans un commit de doc de l'orchestrateur** : `git mv` stage, et `git add <fichier> && git commit` embarque tout l'index. Règle : les agents ne touchent pas l'index (`git mv` interdit, renommer par `Write` + suppression), l'orchestrateur commite toujours par chemins explicites.
+- **Mesure de scores sous charge** : une première mesure par spec jetable est restée muette (sortie vide après 300 s de timeout), le test de performance a dépassé sa cible de 10 % pendant que trois agents et les e2e tournaient. Réponses : mesurer avec le script `fidelity-report` fixture par fixture (sortie sur disque), et prendre le meilleur de deux imports dans le test de performance.
+- **Une décision de contrat prise tard (taquets alignés, R43-05)** a dû être répartie sur trois lots de correctifs (lecteur, writer, core) : c'est passé parce que les briefs F42/F43/F44 n'étaient pas encore lancés ; une relecture du brief L41 avec la fixture 19 sous les yeux l'aurait attrapée en phase 0.
+- **Les tests d'un paquet voisin cassent sans prévenir** : L44 a fait passer l'hôte à la section 1, deux tests Angular attendaient encore la dernière section ; personne ne lance les tests Angular quand il livre du core. L45b l'a vu en worktree isolé, l'orchestrateur a corrigé. À ajouter au rituel d'intégration : `npm run test` complet avant chaque push, pas seulement le paquet du lot.
+- **Shell et backticks** : encore deux commandes `node -e` mangées par bash ; la règle « patch `.cjs` écrit par l'outil Write » est désormais systématique.
+
+### 📐 Ce que la session 4 ajoute à la méthode
+
+1. **Décider la convention DOM transverse en phase 0**, même sans le code (ici : qui porte les variables de section). Ça débloque les lots d'affichage sans attendre les lots de modèle.
+2. **Un lot de correctifs par revue, lancé dès que les fichiers sont libres**, avec la preuve du relecteur comme test d'entrée. Quatre revues, quatre lots F, tous intégrés en moins d'une heure.
+3. **Commiter par chemins explicites** et ne jamais laisser un agent manipuler l'index.
+4. **Suite de tests complète avant chaque push** (pas seulement le paquet livré), ou un worktree isolé pour les lots qui touchent le contrat.
+5. **Relire les briefs avec les fixtures ouvertes** : le contrat des tabulations manquait l'alignement, visible dans la fixture 19 dès L40.
