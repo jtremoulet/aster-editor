@@ -46,6 +46,23 @@ Les fichiers `01` à `03` viennent de `scripts/generate-fixtures.ts`, `04` à `0
 | `16-sections.docx`            | Section 1 A4 portrait marges 20 mm, en-tête `default` « Rapport — {{client}} » gras, en-tête/pied `first` (`w:titlePg`), pied `PAGE` / `NUMPAGES` ; section 2 Letter paysage marges 12,7 mm, `w:cols` 2 colonnes, en-tête `even` (`w:evenAndOddHeaders`) ; `w:lang` fr-FR et Arial 10 dans docDefaults                                                                                                        |
 | `17-objets-perdus.docx`       | Zone de texte (`w:drawing` + `wps:txbx` + `w:txbxContent`), forme (`wps:wsp` sans texte), équation `m:oMath`, commentaire (`w:commentRangeStart` + `comments.xml`), révisions `w:ins` / `w:del`, champ `DATE` (`w:fldSimple`), objet incorporé `w:object` (+ `embeddings/oleObject1.bin`) ; chaque objet entouré de paragraphes « Avant … » / « Après … »                                                     |
 
+## 📏 Score de fidélité attendu
+
+> Mesuré par `node scripts/fidelity-report.ts <fixture>` (import `styled` → export → `compareDocx`), le 20/10/2026 pendant la vague 2. Colonne « sans gabarit » = export neuf avec `layout` : les parties annexes (styles, numérotation, en-têtes, sections) sont régénérées, ce qui plafonne le score. La colonne « gabarit » se remplit quand `exportDocx({ template })` (L27) est intégré ; cible ≥ 0,98 (`compare-fixtures.spec.ts`, test en `it.skip` jusque-là). Un document comparé à lui-même vaut toujours 1.
+
+| Fixture                       | Sans gabarit | Gabarit (L27) | Ce qui manque sans gabarit                                                                 |
+| ----------------------------- | -----------: | ------------: | ------------------------------------------------------------------------------------------ |
+| `11-styles-inline.docx`       |        0,986 |             — | `styles.xml` réécrit                                                                       |
+| `12-paragraphes.docx`         |        0,958 |             — | paragraphes coupés par le saut de page et la tabulation, `styles.xml`                      |
+| `13-styles-nommes.docx`       |        0,946 |             — | styles perso `Citation` / `Important` ramenés à `Normal`, `styles.xml`                     |
+| `14-tableaux-riches.docx`     |        0,881 |             — | style `TableGrid`, fonds et alignement vertical des cellules, largeurs en pt au lieu de %  |
+| `15-listes-numerotation.docx` |        0,877 |             — | `numId` renumérotés, format `%1)` → `%1.`, `numbering.xml` régénéré                        |
+| `16-sections.docx`            |        0,696 |             — | seconde section, en-têtes `first` / `even`, pieds, `w:cols`, parties d'en-tête             |
+| `17-objets-perdus.docx`       |        0,881 |             — | `comments.xml`, objet incorporé, texte de la zone de texte réinjecté                       |
+| `client/Modele_Demo_DER.docx` |        0,569 |             — | 3 sections → 1, pied de page, styles perso, bordures et fonds de cellules, `numbering.xml` |
+
+Le seuil bas du test d'aller-retour sans gabarit est 0,3 (`ROUNDTRIP_MIN_SCORE`) : il garantit l'absence de plantage et un texte conservé à ≥ 70 %, pas la fidélité.
+
 ## 🧪 Comment les tester à la main
 
 - Démo Angular : `npm run demo`, page **Import Word**, glisser un fichier.

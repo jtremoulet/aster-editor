@@ -33,7 +33,8 @@
     "version:set": "node scripts/set-version.mjs",
     "smoke:install": "node scripts/smoke-install.mjs",
     "release:dry": "node scripts/release.mjs --dry-run",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "fidelity": "node scripts/fidelity-report.ts"
   },
   "dependencies": {
     "@angular/common": "^22.2.0",
