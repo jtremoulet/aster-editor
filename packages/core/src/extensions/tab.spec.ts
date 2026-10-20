@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TAB_COMMAND_IDS } from '../commands/layout';
 import { en } from '../i18n/en';
 import { fr } from '../i18n/fr';
-import { TAB_CLASS, TAB_STOP_CSS_VARIABLE, isTabNode, sanitizeTabStop, tabAttrs } from './tab';
+import {
+  TAB_CLASS,
+  TAB_STOP_CSS_VARIABLE,
+  canInsertTab,
+  isTabNode,
+  normalizeTabsInCodeBlocks,
+  sanitizeTabStop,
+  tabAttrs,
+} from './tab';
 import {
   bodyHtml,
   findNodePos,
@@ -269,6 +277,56 @@ describe('Tab', () => {
       mounted.editor.setReadOnly(true);
       expect(mounted.editor.commands.canRun('text.insertTab')).toBe(false);
       expect(mounted.editor.commands.run('text.insertTab')).toBe(false);
+    });
+  });
+
+  describe('bloc de code (R41-04)', () => {
+    const CODE = '<pre><code>a</code></pre>';
+
+    it('la touche Tab et text.insertTab sont refusées dans un bloc de code, qui n’est pas scindé', () => {
+      mounted.editor.setHTML(CODE);
+      cursorAtEndOf(mounted, 'a');
+      expect(canInsertTab(mounted.editor.tiptap.state)).toBe(false);
+      expect(pressKey(mounted, 'Tab')).toBe(false);
+      expect(bodyHtml(mounted.editor)).toBe(CODE);
+      expect(mounted.editor.commands.canRun('text.insertTab')).toBe(false);
+      expect(mounted.editor.commands.run('text.insertTab')).toBe(false);
+      expect(bodyHtml(mounted.editor)).toBe(CODE);
+      // Dans un paragraphe, rien ne change.
+      mounted.editor.setHTML('<p>a</p>');
+      cursorAtEndOf(mounted, 'a');
+      expect(canInsertTab(mounted.editor.tiptap.state)).toBe(true);
+      expect(mounted.editor.commands.canRun('text.insertTab')).toBe(true);
+    });
+
+    it('au chargement, une tabulation dans un bloc de code devient le texte \\t, sans scission', () => {
+      mounted.editor.setHTML(`<pre><code>a${TAB}b</code></pre>`);
+      expect(bodyHtml(mounted.editor)).toBe('<pre><code>a\tb</code></pre>');
+      // Le `\n` final est le paragraphe vide que TrailingNode ajoute après un bloc de code.
+      expect(mounted.editor.getText()).toBe('a\tb\n');
+      mounted.editor.setHTML(mounted.editor.getHTML());
+      expect(bodyHtml(mounted.editor)).toBe('<pre><code>a\tb</code></pre>');
+      // Contenu initial et insertHTML passent par la même normalisation ; le contenu
+      // textuel d'un span hôte est ignoré comme pour l'atome.
+      const other = mountEditor({
+        content: `<pre><code>x<span data-tab="" data-stop="36pt">zzz</span>y</code></pre>`,
+      });
+      expect(bodyHtml(other.editor)).toBe('<pre><code>x\ty</code></pre>');
+      other.cleanup();
+      mounted.editor.setHTML('<p>a</p>');
+      cursorAtEndOf(mounted, 'a');
+      mounted.editor.insertHTML(`<pre><code>c${TAB}d</code></pre>`);
+      expect(mounted.editor.getHTML()).toContain('<pre><code>c\td</code></pre>');
+    });
+
+    it('normalizeTabsInCodeBlocks ne touche qu’aux tabulations des pre et rend la même chaîne sinon', () => {
+      const plain = `<p>a${TAB}b</p>`;
+      expect(normalizeTabsInCodeBlocks(plain)).toBe(plain);
+      expect(normalizeTabsInCodeBlocks(CODE)).toBe(CODE);
+      expect(normalizeTabsInCodeBlocks(`${plain}${CODE}`)).toBe(`${plain}${CODE}`);
+      expect(normalizeTabsInCodeBlocks(`${plain}<pre><code>c${STOPPED}d${TAB}</code></pre>`)).toBe(
+        `${plain}<pre><code>c\td\t</code></pre>`,
+      );
     });
   });
 });

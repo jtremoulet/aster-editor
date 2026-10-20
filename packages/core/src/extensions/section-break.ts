@@ -4,9 +4,8 @@ import {
   type NodeViewRenderer,
   type NodeViewRendererProps,
 } from '@tiptap/core';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import type { Node as ProseMirrorNode, NodeType } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
-import { ReplaceStep } from '@tiptap/pm/transform';
 import type { NodeView } from '@tiptap/pm/view';
 import type { AsterEditor, DocumentLayout, SectionBreakAttrs } from '../api';
 import {
@@ -31,6 +30,23 @@ export const SECTION_BREAK_CLASS = 'aster-section-break';
  */
 export const SECTION_START_ATTRIBUTE = 'data-section-start';
 
+/**
+ * Numéro de section maximal (R41-06), même ordre de grandeur que `MAX_PAGE_MM`. Au-delà,
+ * un nombre n'est plus garanti exactement représentable (`2 ** 53`) ni sérialisable sans
+ * exposant (`1e21` → `"1e+21"`, relu `1`) : `setHTML(getHTML())` changerait le document.
+ */
+export const MAX_SECTION_NUMBER = 10_000;
+
+/**
+ * Méta de transaction posée par `replaceContent` (`setHTML` / `setJSON`) sur le pas de
+ * remplacement complet. Le plugin la lit pour garder telle quelle la numérotation d'un
+ * document chargé (`setHTML(getHTML())` reste strictement idempotent même sur des numéros
+ * qui ne partent pas de 1). Toute autre transaction, y compris un collage qui remplace
+ * tout le document (Ctrl+A puis Ctrl+V, `insertHTML`), est une édition et renumérote
+ * (R41-02) : la forme des pas ne distingue pas un chargement d'un collage.
+ */
+export const SET_CONTENT_META = 'asterSetContent';
+
 /** Clé du plugin de renumérotation. */
 export const sectionBreakPluginKey = new PluginKey('asterSectionBreak');
 
@@ -42,10 +58,18 @@ export interface SectionRange {
   readonly section: number;
 }
 
-/** Entier ≥ 1 ou `1` : un numéro de section invalide (`0`, `NaN`, texte) ne sort jamais du schéma. */
+/**
+ * Entier de 1 à `MAX_SECTION_NUMBER`, sinon `1` : un numéro de section invalide (`0`,
+ * `NaN`, texte, hors borne) ne sort jamais du schéma.
+ */
 export function sanitizeSectionNumber(value: unknown): number {
   const number = typeof value === 'string' ? Number.parseInt(value, 10) : value;
-  return typeof number === 'number' && Number.isInteger(number) && number >= 1 ? number : 1;
+  return typeof number === 'number' &&
+    Number.isInteger(number) &&
+    number >= 1 &&
+    number <= MAX_SECTION_NUMBER
+    ? number
+    : 1;
 }
 
 /** Vrai si le nœud est un saut de section. */
@@ -69,7 +93,8 @@ export function findSectionBreaks(doc: ProseMirrorNode): { pos: number; node: Pr
  * saut est une seule section `{ from: 0, to: doc.content.size, section: 1 }`. Les numéros
  * sont **positionnels** (1..n dans l'ordre), indépendants de l'attribut `section` des
  * sauts, qui peut être désynchronisé par un HTML chargé tel quel. Un saut imbriqué dans
- * un autre bloc (citation, cellule) n'est pas une frontière de section.
+ * un autre bloc (citation, cellule) n'est pas une frontière de section ; le plugin le
+ * ramène d'ailleurs à un `horizontalRule` dès la transaction suivante.
  */
 export function getSections(editor: AsterEditor): SectionRange[] {
   const { doc } = editor.tiptap.state;
@@ -100,22 +125,67 @@ export function renumberSections(tr: Transaction): boolean {
   return changed;
 }
 
-/**
- * Vrai si la transaction remplace tout le document (`setContent`, donc `setHTML` /
- * `setJSON`) : un seul pas de remplacement de 0 à la fin. La numérotation d'un document
- * chargé est alors gardée telle quelle, pour que `setHTML(getHTML())` reste strictement
- * idempotent même sur un HTML dont les numéros ne partent pas de 1.
- */
-function isFullReplacement(tr: Transaction): boolean {
-  return tr.steps.every(
-    (step, index) =>
-      step instanceof ReplaceStep && step.from === 0 && step.to === tr.docs[index]?.content.size,
-  );
+/** Suite ordonnée des numéros des sauts de premier niveau, telle que le HTML les émet. */
+function sectionNumbers(doc: ProseMirrorNode): number[] {
+  return findSectionBreaks(doc).map(({ node }) => sanitizeSectionNumber(node.attrs['section']));
 }
 
-/** Nombre de sauts de premier niveau. */
-function countSectionBreaks(doc: ProseMirrorNode): number {
-  return findSectionBreaks(doc).length;
+/** Vrai si deux suites de numéros sont identiques, terme à terme. */
+function sameNumbers(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((number, index) => number === b[index]);
+}
+
+/**
+ * Ramène les sauts imbriqués (cellule, citation, item de liste) à un `horizontalRule`
+ * quand le parent l'accepte, sinon les retire (R41-08). Le contrat décrit un bloc de
+ * premier niveau : un saut imbriqué n'est ni une frontière de section ni renuméroté, et
+ * l'export Word ne saurait pas où le poser. Retourne vrai si le document a changé.
+ */
+function demoteNestedSectionBreaks(tr: Transaction): boolean {
+  const nested: { pos: number; node: ProseMirrorNode; parent: ProseMirrorNode; index: number }[] =
+    [];
+  tr.doc.descendants((node, pos, parent, index) => {
+    if (!isSectionBreak(node)) {
+      return true;
+    }
+    if (parent && parent !== tr.doc) {
+      nested.push({ pos, node, parent, index });
+    }
+    return false;
+  });
+  const rule: NodeType | undefined = tr.doc.type.schema.nodes['horizontalRule'];
+  // De la fin vers le début : un retrait ne décale pas les positions encore à traiter.
+  for (const { pos, node, parent, index } of nested.reverse()) {
+    if (rule && parent.canReplaceWith(index, index + 1, rule)) {
+      tr.replaceWith(pos, pos + node.nodeSize, rule.create());
+    } else {
+      tr.delete(pos, pos + node.nodeSize);
+    }
+  }
+  return nested.length > 0;
+}
+
+/**
+ * Garantit un bloc avant un saut en tête de document et entre deux sauts adjacents
+ * (R41-03) : jamais de section vide. Un `w:sectPr` vit dans le dernier paragraphe de sa
+ * section, une section sans bloc n'est donc pas exportable, et la vue page la rendrait
+ * comme une feuille vide. Même rôle que `TrailingNode` après un saut final ; s'applique
+ * aussi au chargement. Retourne vrai si un paragraphe a été inséré.
+ */
+function ensureSectionBlocks(tr: Transaction, paragraph: NodeType): boolean {
+  const positions: number[] = [];
+  let previous: ProseMirrorNode | null = null;
+  tr.doc.forEach((node, offset) => {
+    if (isSectionBreak(node) && (previous === null || isSectionBreak(previous))) {
+      positions.push(offset);
+    }
+    previous = node;
+  });
+  // De la fin vers le début : une insertion ne décale pas les positions encore à traiter.
+  for (const pos of positions.reverse()) {
+    tr.insert(pos, paragraph.create());
+  }
+  return positions.length > 0;
 }
 
 /**
@@ -166,7 +236,7 @@ export class SectionBreakNodeView implements NodeView {
     this.dom.setAttribute(SECTION_BREAK_ATTRIBUTE, String(section));
     const layout: DocumentLayout | undefined = getActivePageView(this.props.view.dom)?.layout;
     const sections = layout?.sections;
-    if (!layout || !sections || sections.length === 0) {
+    if (!layout || !Array.isArray(sections) || sections.length === 0) {
       this.dom.removeAttribute('style');
       this.dom.removeAttribute(SECTION_START_ATTRIBUTE);
       return;
@@ -187,12 +257,18 @@ export function renderSectionBreakNodeView(): NodeViewRenderer {
 
 /**
  * Nœud `sectionBreak` : bloc atomique, sélectionnable, non déplaçable, attribut `section`
- * (entier ≥ 1). HTML figé : `<hr data-section-break="n">`, lu avant le `hr` ordinaire
- * (`priority` de règle supérieure). Backspace et Delete le suppriment comme un
- * `horizontalRule` (`joinBackward` efface l'atome précédent, `deleteSelection` l'atome
- * sélectionné). Après toute insertion ou suppression d'un saut hors remplacement complet
- * du document, le plugin renumérote les sauts 1..n (`renumberSections`). Le `TrailingNode`
- * de `StarterKit` garantit qu'un paragraphe suit toujours un saut final.
+ * (entier de 1 à `MAX_SECTION_NUMBER`). HTML figé : `<hr data-section-break="n">`, lu avant
+ * le `hr` ordinaire (`priority` de règle supérieure). Backspace et Delete le suppriment
+ * comme un `horizontalRule` (`joinBackward` efface l'atome précédent, `deleteSelection`
+ * l'atome sélectionné).
+ *
+ * Le plugin maintient trois invariants du corps après chaque transaction qui change le
+ * document : un saut imbriqué redevient un `horizontalRule` (`demoteNestedSectionBreaks`) ;
+ * un paragraphe précède toujours un saut en tête et sépare deux sauts adjacents
+ * (`ensureSectionBlocks`, le `TrailingNode` de `StarterKit` couvrant le saut final) ; hors
+ * chargement complet (`SET_CONTENT_META`), dès que la suite ordonnée des numéros de premier
+ * niveau diffère de celle d'avant (insertion, suppression, collage, déplacement, changement
+ * d'attribut), les sauts sont renumérotés 1..n (`renumberSections`).
  */
 export const SectionBreak = Node.create({
   name: SECTION_BREAK_NODE_NAME,
@@ -231,15 +307,23 @@ export const SectionBreak = Node.create({
       new Plugin({
         key: sectionBreakPluginKey,
         appendTransaction: (transactions, oldState, newState) => {
-          const edits = transactions.filter((tr) => tr.docChanged && !isFullReplacement(tr));
-          if (edits.length === 0) {
-            return null;
-          }
-          if (countSectionBreaks(oldState.doc) === countSectionBreaks(newState.doc)) {
+          if (!transactions.some((transaction) => transaction.docChanged)) {
             return null;
           }
           const tr = newState.tr;
-          return renumberSections(tr) ? tr : null;
+          let changed = demoteNestedSectionBreaks(tr);
+          const paragraph: NodeType | undefined = newState.schema.nodes['paragraph'];
+          if (paragraph) {
+            changed = ensureSectionBlocks(tr, paragraph) || changed;
+          }
+          const edited = transactions.some(
+            (transaction) =>
+              transaction.docChanged && transaction.getMeta(SET_CONTENT_META) !== true,
+          );
+          if (edited && !sameNumbers(sectionNumbers(oldState.doc), sectionNumbers(newState.doc))) {
+            changed = renumberSections(tr) || changed;
+          }
+          return changed ? tr : null;
         },
       }),
     ];

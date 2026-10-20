@@ -26,8 +26,9 @@ import { createImageUploadProps } from '../extensions/image-upload';
 import { resolveLinkPolicy } from '../extensions/link-safety';
 import { applyPageView, resolveSectionLayout, type PageViewHandle } from '../extensions/page-view';
 import { createPastePipelineProps } from '../extensions/paste-pipeline';
+import { SET_CONTENT_META } from '../extensions/section-break';
 import { collectShortcutBindings } from '../extensions/shortcuts';
-import { TAB_NODE_NAME, TAB_TEXT } from '../extensions/tab';
+import { TAB_NODE_NAME, TAB_TEXT, normalizeTabsInCodeBlocks } from '../extensions/tab';
 import { normalizeOutputHtml } from '../html/normalize-output';
 import { resolveVariablesHtml } from '../html/resolve-variables';
 import { serializeDocumentHtml } from '../html/serialize-html';
@@ -53,6 +54,15 @@ const HISTORY_OPTIONS = { depth: 100, newGroupDelay: 500 } as const;
  */
 const CAN_MEASURE_SELECTION =
   typeof Range !== 'undefined' && typeof Range.prototype.getClientRects === 'function';
+
+/**
+ * Contenu prêt pour le parseur : un HTML passe par `normalizeTabsInCodeBlocks` (une
+ * tabulation dans un bloc de code devient le texte `\t` au lieu de scinder le bloc,
+ * R41-04) ; un document JSON passe tel quel.
+ */
+function normalizeContent(content: string | AsterDocument): string | AsterDocument {
+  return typeof content === 'string' ? normalizeTabsInCodeBlocks(content) : content;
+}
 
 /**
  * Implémentation de `AsterEditor`.
@@ -114,7 +124,7 @@ export class AsterEditorImpl implements AsterEditor {
 
     this.tiptap = new Editor({
       element: this.container,
-      content: options.content ?? '',
+      content: normalizeContent(options.content ?? ''),
       editable: !options.readOnly,
       injectCSS: false,
       autofocus: options.autofocus ? 'end' : false,
@@ -161,16 +171,27 @@ export class AsterEditorImpl implements AsterEditor {
    * Active, remplace ou désactive la vue page : classe `aster--page-view` et variables
    * `--aster-page-*` sur l'hôte, conteneurs d'en-tête et de pied autour du corps. `true`
    * vaut `{}` (A4 portrait, marges 25,4 mm), `false` retire tout. Indépendante de la
-   * lecture seule. Hors contrat : à proposer dans `api/editor.ts`.
+   * lecture seule. Si la nouvelle mise en page lève (entrée hostile), la vue précédente
+   * est remontée à l'identique avant de relayer l'erreur : l'appelant retrouve l'état
+   * d'avant l'appel, jamais un éditeur sans vue page (R41-05). Hors contrat : à proposer
+   * dans `api/editor.ts`.
    */
   setPageView(options: boolean | PageViewOptions): void {
-    this.pageView?.remove();
+    const previous = this.pageView;
+    previous?.remove();
     this.pageView = null;
     if (options === false || this.destroyed) {
       return;
     }
     const resolved: PageViewOptions = options === true ? {} : options;
-    this.pageView = applyPageView(this.element, this.contentElement, resolved);
+    try {
+      this.pageView = applyPageView(this.element, this.contentElement, resolved);
+    } catch (error) {
+      if (previous) {
+        this.pageView = applyPageView(this.element, this.contentElement, previous.options);
+      }
+      throw error;
+    }
   }
 
   /** Mise en page de la vue page active, `null` si elle est inactive. Hors contrat. */
@@ -249,13 +270,18 @@ export class AsterEditorImpl implements AsterEditor {
    * L'historique antérieur est ensuite vidé : ses étapes visaient l'ancien document, et
    * un `undo` les rejouerait, remappées, sur le nouveau (annulation fantôme). Le plugin
    * `history` ne s'efface pas, on le remplace par un neuf aux mêmes options.
+   *
+   * La méta `SET_CONTENT_META` signale aux plugins un chargement complet (le saut de
+   * section garde alors la numérotation reçue), ce qu'un collage de tout le document ne
+   * doit pas obtenir (R41-02).
    */
   private replaceContent(content: string | AsterDocument, emit: boolean): void {
     this.assertAlive();
     this.tiptap
       .chain()
-      .setContent(content, { emitUpdate: emit })
+      .setContent(normalizeContent(content), { emitUpdate: emit })
       .command(({ tr }) => {
+        tr.setMeta(SET_CONTENT_META, true);
         if (!emit) {
           tr.setMeta('addToHistory', false);
         }
@@ -305,7 +331,7 @@ export class AsterEditorImpl implements AsterEditor {
 
   insertHTML(html: string): void {
     this.assertAlive();
-    this.tiptap.chain().focus().insertContent(html).run();
+    this.tiptap.chain().focus().insertContent(normalizeTabsInCodeBlocks(html)).run();
   }
 
   isEmpty(): boolean {

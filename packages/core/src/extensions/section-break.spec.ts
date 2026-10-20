@@ -7,9 +7,11 @@ import { fr } from '../i18n/fr';
 import { SECTION_COMMAND_IDS } from '../commands/sections';
 import { PAGE_VIEW_CSS_VARIABLES, resolveSectionLayout } from './page-view';
 import {
+  MAX_SECTION_NUMBER,
   SECTION_BREAK_ATTRIBUTE,
   SECTION_BREAK_CLASS,
   SECTION_START_ATTRIBUTE,
+  SET_CONTENT_META,
   findSectionBreaks,
   getSections,
   sanitizeSectionNumber,
@@ -120,8 +122,10 @@ describe('SectionBreak', () => {
       mounted.editor.setHTML(
         '<p>a</p><hr data-section-break="abc"><hr data-section-break="0"><p>b</p>',
       );
+      // Deux sauts adjacents reçoivent un paragraphe entre eux (R41-03) ; les numéros
+      // chargés sont gardés tels quels, ici tous deux ramenés à 1.
       expect(mounted.editor.getHTML()).toBe(
-        '<p>a</p><hr data-section-break="1"><hr data-section-break="1"><p>b</p>',
+        '<p>a</p><hr data-section-break="1"><p></p><hr data-section-break="1"><p>b</p>',
       );
       mounted.editor.setJSON({
         type: 'doc',
@@ -170,14 +174,160 @@ describe('SectionBreak', () => {
       expect(getSections(mounted.editor).map((range) => range.section)).toEqual([1, 2]);
     });
 
-    it('ignore un saut imbriqué dans une citation', () => {
+    it('ignore un saut imbriqué dans une citation, ramené à un hr simple (R41-08)', () => {
       mounted.editor.setHTML(
         '<blockquote><p>a</p><hr data-section-break="1"><p>b</p></blockquote>',
       );
       expect(getSections(mounted.editor)).toHaveLength(1);
-      expect(mounted.editor.getHTML()).toBe(
-        '<blockquote><p>a</p><hr data-section-break="1"><p>b</p></blockquote><p></p>',
+      expect(mounted.editor.getHTML()).toBe('<blockquote><p>a</p><hr><p>b</p></blockquote><p></p>');
+    });
+  });
+
+  describe('invariants du plugin (R41)', () => {
+    /** Position du début du texte du premier bloc dont le contenu est `text`. */
+    function startOf(text: string): number {
+      let target = -1;
+      mounted.editor.tiptap.state.doc.descendants((node, pos) => {
+        if (target < 0 && node.isTextblock && node.textContent === text) {
+          target = pos + 1;
+        }
+        return target < 0;
+      });
+      if (target < 0) {
+        throw new Error(`bloc ${text} introuvable`);
+      }
+      return target;
+    }
+
+    it('R41-01 : un collage de plage qui remplace un saut par un autre renumérote (même nombre de sauts)', () => {
+      mounted.editor.setHTML(TWO_BREAKS);
+      // Du début de `b` au début de `c` : la plage avale le saut 2, le collage en apporte un 9.
+      mounted.editor.tiptap.commands.insertContentAt(
+        { from: startOf('b'), to: startOf('c') },
+        '<p>x</p><hr data-section-break="9"><p>y</p>',
       );
+      expect(numbers(mounted)).toEqual([1, 2]);
+      expect(mounted.editor.getHTML()).toBe(
+        '<p>a</p><hr data-section-break="1"><p>x</p><hr data-section-break="2"><p>y</p><p>c</p>',
+      );
+      expect(breakElements(mounted).map((el) => el.getAttribute(SECTION_BREAK_ATTRIBUTE))).toEqual([
+        '1',
+        '2',
+      ]);
+    });
+
+    it('R41-01 : déplacer un saut en une transaction (forme d’un drop) ou changer son attribut renumérote', () => {
+      mounted.editor.setHTML(TWO_BREAKS);
+      const [first] = findSectionBreaks(mounted.editor.tiptap.state.doc);
+      if (!first) {
+        throw new Error('saut attendu');
+      }
+      const { state, view } = mounted.editor.tiptap;
+      const tr = state.tr.delete(first.pos, first.pos + first.node.nodeSize);
+      tr.insert(tr.doc.content.size, first.node.type.create(first.node.attrs));
+      view.dispatch(tr);
+      expect(mounted.editor.getHTML()).toBe(
+        '<p>a</p><p>b</p><hr data-section-break="1"><p>c</p><hr data-section-break="2"><p></p>',
+      );
+      expect(getSections(mounted.editor).map((range) => range.section)).toEqual([1, 2, 3]);
+      expect(breakElements(mounted).map((el) => el.getAttribute(SECTION_BREAK_ATTRIBUTE))).toEqual([
+        '1',
+        '2',
+      ]);
+      // Un changement d'attribut seul est ramené à 1..n lui aussi.
+      const pos = findNodePos(mounted.editor, 'sectionBreak');
+      view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { section: 42 }));
+      expect(numbers(mounted)).toEqual([1, 2]);
+    });
+
+    it('R41-02 : Ctrl+A puis collage d’un HTML numéroté 7, 8 renumérote ; setHTML / setJSON gardent 7, 8', () => {
+      mounted.editor.setHTML('<p>a</p><p>b</p>');
+      mounted.editor.tiptap.commands.selectAll();
+      mounted.editor.insertHTML(
+        '<p>x</p><hr data-section-break="7"><p>y</p><hr data-section-break="8"><p>z</p>',
+      );
+      expect(mounted.editor.getHTML()).toBe(
+        '<p>x</p><hr data-section-break="1"><p>y</p><hr data-section-break="2"><p>z</p>',
+      );
+      // Même forme de pas qu'un setContent (remplacement de 0 à la fin) : une édition.
+      const size = mounted.editor.tiptap.state.doc.content.size;
+      mounted.editor.tiptap.commands.insertContentAt(
+        { from: 0, to: size },
+        '<p>x</p><hr data-section-break="7"><p>y</p>',
+      );
+      expect(numbers(mounted)).toEqual([1]);
+      // Seule la méta posée par replaceContent fait garder la numérotation reçue.
+      const loaded = (section: number) =>
+        mounted.editor.tiptap.schema.nodeFromJSON({
+          type: 'doc',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'x' }] },
+            { type: 'sectionBreak', attrs: { section } },
+            { type: 'paragraph' },
+          ],
+        }).content;
+      const { view } = mounted.editor.tiptap;
+      view.dispatch(
+        view.state.tr
+          .replaceWith(0, view.state.doc.content.size, loaded(7))
+          .setMeta(SET_CONTENT_META, true),
+      );
+      expect(numbers(mounted)).toEqual([7]);
+      view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, loaded(8)));
+      expect(numbers(mounted)).toEqual([1]);
+      mounted.editor.setHTML(
+        '<p>x</p><hr data-section-break="7"><p>y</p><hr data-section-break="8"><p>z</p>',
+      );
+      expect(numbers(mounted)).toEqual([7, 8]);
+      mounted.editor.setJSON(mounted.editor.getJSON());
+      expect(numbers(mounted)).toEqual([7, 8]);
+    });
+
+    it('R41-06 : un numéro hors borne retombe sur 1 au rendu, setHTML(getHTML()) reste stable', () => {
+      for (const section of [1e21, Number.MAX_SAFE_INTEGER + 2, 2 ** 53, MAX_SECTION_NUMBER + 1]) {
+        mounted.editor.setJSON({
+          type: 'doc',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'a' }] },
+            { type: 'sectionBreak', attrs: { section } },
+            { type: 'paragraph' },
+          ],
+        });
+        const first = mounted.editor.getHTML();
+        expect(first).toBe('<p>a</p><hr data-section-break="1"><p></p>');
+        mounted.editor.setHTML(first);
+        expect(mounted.editor.getHTML()).toBe(first);
+      }
+      expect(MAX_SECTION_NUMBER).toBe(10_000);
+      expect(sanitizeSectionNumber(MAX_SECTION_NUMBER)).toBe(MAX_SECTION_NUMBER);
+      expect(sanitizeSectionNumber(MAX_SECTION_NUMBER + 1)).toBe(1);
+      expect(sanitizeSectionNumber('1e+21')).toBe(1);
+      mounted.editor.setHTML(`<p>a</p><hr data-section-break="${MAX_SECTION_NUMBER}"><p>b</p>`);
+      expect(numbers(mounted)).toEqual([MAX_SECTION_NUMBER]);
+    });
+
+    it('R41-08 : un saut imbriqué (cellule, citation) redevient un hr simple, au chargement comme à l’édition', () => {
+      mounted.editor.setHTML(
+        '<table><tbody><tr><td><p>x</p><hr data-section-break="1"><p>y</p></td></tr></tbody></table><blockquote><p>q</p><hr data-section-break="1"></blockquote><p>c</p>',
+      );
+      const loaded =
+        '<table><tbody><tr><td><p>x</p><hr><p>y</p></td></tr></tbody></table><blockquote><p>q</p><hr></blockquote><p>c</p>';
+      expect(mounted.editor.getHTML()).toBe(loaded);
+      expect(getSections(mounted.editor)).toHaveLength(1);
+      expect(mounted.editor.commands.canRun('section.removeBreak')).toBe(false);
+      expect(mounted.editor.commands.canRun('section.renumber')).toBe(false);
+      // Un vrai saut après `c` est numéroté 1 : les « 1 » imbriqués d'avant ne comptent pas.
+      cursorIn(mounted, 'c');
+      expect(mounted.editor.commands.run('section.insertBreak')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe(
+        loaded.replace('<p>c</p>', '<p>c</p><hr data-section-break="1"><p></p>'),
+      );
+      // À l'édition : un saut inséré dans une cellule ne survit pas à la transaction.
+      cursorIn(mounted, 'y');
+      mounted.editor.tiptap.commands.insertContent('<hr data-section-break="5">');
+      expect(numbers(mounted)).toEqual([1]);
+      expect(mounted.editor.getHTML().match(/data-section-break/g)).toHaveLength(1);
+      expect(mounted.editor.getHTML()).toContain('<td><p>x</p><hr><hr><p>y</p></td>');
     });
   });
 

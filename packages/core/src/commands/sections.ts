@@ -5,7 +5,7 @@ import {
   findSectionBreaks,
   isSectionBreak,
   renumberSections,
-  sanitizeSectionNumber,
+  sectionBreakAttrs,
 } from '../extensions/section-break';
 import { iconIdFor } from './define';
 
@@ -44,14 +44,15 @@ function defineSectionCommand(
 
 /**
  * Position de premier niveau juste après le bloc qui contient la sélection : fin du bloc
- * de profondeur 1, ou fin du nœud sélectionné quand la sélection est un nœud de premier
- * niveau.
+ * de profondeur 1, ou, pour une sélection de profondeur 0, fin de ce qu'elle couvre : le
+ * nœud de premier niveau d'une `NodeSelection`, le dernier bloc du document d'une
+ * `AllSelection` (R41-03). Jamais en tête du document : un saut sans bloc avant lui
+ * ouvrirait une section vide.
  */
 function afterCurrentBlock(tr: Transaction): number {
-  const { selection } = tr;
-  const { $from } = selection;
+  const { $from, $to } = tr.selection;
   if ($from.depth === 0) {
-    return selection instanceof NodeSelection ? $from.pos + selection.node.nodeSize : $from.pos;
+    return $to.pos;
   }
   return $from.after(1);
 }
@@ -66,7 +67,9 @@ function isSectionBreakSelected(editor: AsterEditor): boolean {
  * Position du saut visé par `section.removeBreak` : le saut numéro `section` des arguments,
  * sinon le saut sélectionné, sinon le premier saut de premier niveau après le bloc courant
  * (celui qui clôt la section courante), sinon le dernier saut avant (la dernière section
- * n'a pas de saut de fin : on retire celui qui l'ouvre). `null` sans saut.
+ * n'a pas de saut de fin : on retire celui qui l'ouvre). `null` sans saut, et `null` pour
+ * un argument `section` qui n'est pas un entier ≥ 1 (R41-07) : un argument invalide est
+ * refusé, pas ramené à 1 comme le ferait le sanitiseur du schéma.
  */
 function targetBreakPos(editor: AsterEditor, args: RemoveSectionBreakArgs): number | null {
   const { state } = editor.tiptap;
@@ -75,8 +78,11 @@ function targetBreakPos(editor: AsterEditor, args: RemoveSectionBreakArgs): numb
     return null;
   }
   if (args.section !== undefined) {
-    const wanted = sanitizeSectionNumber(args.section);
-    return breaks.find(({ node }) => node.attrs['section'] === wanted)?.pos ?? null;
+    const wanted: unknown = args.section;
+    if (typeof wanted !== 'number' || !Number.isInteger(wanted) || wanted < 1) {
+      return null;
+    }
+    return breaks.find(({ node }) => sectionBreakAttrs(node).section === wanted)?.pos ?? null;
   }
   const { selection } = state;
   if (selection instanceof NodeSelection && isSectionBreak(selection.node)) {
@@ -98,7 +104,7 @@ function targetBreakPos(editor: AsterEditor, args: RemoveSectionBreakArgs): numb
  *   courant, numéroté (sauts avant + 1), renumérote les suivants et place le curseur au
  *   début du bloc suivant (un paragraphe est créé s'il n'y en a pas) ;
  * - `section.removeBreak { section? }` : retire un saut (voir `targetBreakPos`) et
- *   renumérote ;
+ *   renumérote ; `false` si `section` n'est pas un entier ≥ 1 ou ne désigne aucun saut ;
  * - `section.renumber` : renumérote les sauts 1..n dans l'ordre du document ; `false` si
  *   rien ne change.
  *

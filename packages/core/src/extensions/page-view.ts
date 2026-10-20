@@ -133,16 +133,37 @@ export function resolvePageMetrics(
   };
 }
 
+/** Vrai si la valeur est un tableau de sections (type garde, sans présumer des entrées). */
+function isSectionLayoutList(value: unknown): value is readonly SectionLayout[] {
+  return Array.isArray(value);
+}
+
+/** Vrai si la valeur est un objet de mise en page de section (une entrée `null` ou texte ne l'est pas). */
+function isSectionLayout(value: unknown): value is SectionLayout {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Sections déclarées par la mise en page, ou aucune : `sections` venu d'un JSON peut être
+ * tout sauf un tableau (R41-05), et `maxSectionWidthMm` levait alors `sections.map is not
+ * a function` après le retrait de la vue page précédente.
+ */
+function sectionLayouts(layout: DocumentLayout | undefined | null): readonly SectionLayout[] {
+  const sections: unknown = layout?.sections;
+  return isSectionLayoutList(sections) ? sections : [];
+}
+
 /**
  * Mise en page de la section `section` (numéro 1-based, celui de `data-section-break` et
  * de `getSections`). `layout.sections[section - 1]` quand elle existe ; sinon les champs
  * de premier niveau (`page`, `columns`, `headers`, `footers`, `titlePage`), qui sont la
  * seule section d'un document sans `sections` et la copie de la dernière section sinon
- * (compatibilité 0.5). Un numéro hors plage retombe donc sur la dernière section.
+ * (compatibilité 0.5). Un numéro hors plage, un `sections` qui n'est pas un tableau ou une
+ * entrée qui n'est pas un objet retombent donc sur la dernière section.
  */
 export function resolveSectionLayout(layout: DocumentLayout, section: number): SectionLayout {
-  const known = layout.sections?.[section - 1];
-  if (known) {
+  const known: unknown = sectionLayouts(layout)[section - 1];
+  if (isSectionLayout(known)) {
     return known;
   }
   const fallback: {
@@ -158,14 +179,21 @@ export function resolveSectionLayout(layout: DocumentLayout, section: number): S
 
 /**
  * Largeur de la plus large section en mm (`--aster-page-width-max`, L44), `null` sans
- * `layout.sections` : la feuille suit alors `--aster-page-width`.
+ * `layout.sections` : la feuille suit alors `--aster-page-width`. Chaque section est
+ * résolue comme ailleurs (`resolveSectionLayout`) : une entrée qui n'est pas un objet
+ * compte pour le premier niveau.
  */
 export function maxSectionWidthMm(layout: DocumentLayout | undefined | null): number | null {
-  const sections = layout?.sections;
-  if (!sections || sections.length === 0) {
+  const count = sectionLayouts(layout).length;
+  if (!layout || count === 0) {
     return null;
   }
-  return Math.max(...sections.map((section) => resolvePageMetrics(section).widthMm));
+  return Math.max(
+    ...Array.from(
+      { length: count },
+      (_, index) => resolvePageMetrics(resolveSectionLayout(layout, index + 1)).widthMm,
+    ),
+  );
 }
 
 /** Valeurs des variables CSS, dans l'ordre de `PAGE_VIEW_CSS_VARIABLES`. */
@@ -204,6 +232,8 @@ function notifyPageViewChange(contentElement: HTMLElement): void {
 
 /** Vue page montée : conteneurs et retrait. */
 export interface PageViewHandle {
+  /** Options telles que reçues, pour remonter la même vue si la suivante échoue (R41-05). */
+  readonly options: PageViewOptions;
   readonly layout: DocumentLayout;
   readonly header: HTMLElement | null;
   readonly footer: HTMLElement | null;
@@ -239,7 +269,7 @@ export function applyPageView(
     : '';
   // Le pied en bas de la feuille est celui de la dernière section (la pagination affiche
   // les pieds intermédiaires sur chaque coupure de section) ; l'en-tête, celui de la première.
-  const last = resolveSectionLayout(layout, layout.sections?.length ?? 1);
+  const last = resolveSectionLayout(layout, sectionLayouts(layout).length || 1);
   const footerHtml = showHeadersFooters
     ? sanitizeHeaderFooterHtml(last.footers?.default?.html ?? '')
     : '';
@@ -278,6 +308,7 @@ export function applyPageView(
 
   let removed = false;
   return {
+    options,
     layout,
     header,
     footer,

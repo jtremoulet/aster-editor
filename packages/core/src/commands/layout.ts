@@ -12,7 +12,7 @@ import {
   normalizeParagraphLayoutValue,
 } from '../extensions/paragraph-layout';
 import { isCaps, type RunCaps } from '../extensions/run-layout';
-import { TAB_NODE_NAME, sanitizeTabStop } from '../extensions/tab';
+import { TAB_NODE_NAME, canInsertTab, sanitizeTabStop } from '../extensions/tab';
 import { defineStandardCommand, iconIdFor } from './define';
 
 /** Arguments de `text.setLetterSpacing` : espacement en points, `null` pour retirer. */
@@ -326,16 +326,23 @@ export const TEXT_LAYOUT_COMMANDS: readonly AsterCommand[] = [
  * Commande additive `text.insertTab { stopPt? }` (session 4) : insère un nœud `tab` à la
  * sélection, avec la position de taquet si elle est donnée et valide (nombre de mise en
  * page ≥ 0 ; une valeur invalide est ignorée, pas refusée). C'est l'équivalent de la
- * touche Tab dans un paragraphe, sans la réserve des listes et des tables.
+ * touche Tab dans un paragraphe, sans la réserve des listes et des tables, mais avec la
+ * même garde (`canInsertTab`, R41-04) : refusée dans un bloc de code ou là où le nœud `tab`
+ * n'est pas accepté, plutôt que de scinder le bloc.
  */
 export const TAB_COMMANDS: readonly AsterCommand[] = [
   defineTextLayoutCommand('text.insertTab', {
     run: (editor, args) => {
+      if (!canInsertTab(editor.tiptap.state)) {
+        return false;
+      }
       const stopPt = sanitizeTabStop(readArgs(args)['stopPt']);
       const content =
         stopPt === null ? { type: TAB_NODE_NAME } : { type: TAB_NODE_NAME, attrs: { stopPt } };
       return editor.tiptap.chain().focus().insertContent(content).run();
     },
-    canRun: (editor) => editor.tiptap.can().insertContent({ type: TAB_NODE_NAME }),
+    canRun: (editor) =>
+      canInsertTab(editor.tiptap.state) &&
+      editor.tiptap.can().insertContent({ type: TAB_NODE_NAME }),
   }),
 ];

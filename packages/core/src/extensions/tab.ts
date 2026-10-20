@@ -50,6 +50,47 @@ function isTabReserved(state: EditorState): boolean {
 }
 
 /**
+ * Vrai si une tabulation peut être insérée à la sélection (R41-04) : le bloc courant est
+ * un bloc de texte qui n'est pas du code (`spec.code`, le `codeBlock` de Tiptap : la touche
+ * Tab lui reste, et la tabulation y est le texte `\t`) et dont le contenu accepte le nœud
+ * `tab` à cet endroit. Sans cette garde, `insertContent` ne pouvait pas placer l'atome dans
+ * le bloc de code et le scindait pour l'insérer dans un paragraphe neuf.
+ */
+export function canInsertTab(state: EditorState): boolean {
+  const type = state.schema.nodes[TAB_NODE_NAME];
+  const { $from } = state.selection;
+  const { parent } = $from;
+  if (!type || !parent.isTextblock || parent.type.spec.code === true) {
+    return false;
+  }
+  return parent.canReplaceWith($from.index(), $from.index(), type);
+}
+
+/**
+ * Dans un HTML à charger, remplace chaque `span[data-tab]` d'un `pre` par le texte `\t`
+ * (R41-04). Un bloc de code n'accepte que du texte : sans cela, ProseMirror referme le bloc
+ * pour placer l'atome dans un paragraphe neuf et scinde le code en deux. Le `\t` texte est
+ * la forme native d'une tabulation dans un bloc de code (`white-space: pre`). Le HTML est
+ * rendu tel quel (même chaîne) dès qu'un test de chaîne exclut le cas : aucun parse DOM
+ * pour un document ordinaire.
+ */
+export function normalizeTabsInCodeBlocks(html: string): string {
+  if (!html.includes(TAB_ATTRIBUTE) || !/<pre[\s>]/i.test(html)) {
+    return html;
+  }
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const spans = template.content.querySelectorAll(`pre span[${TAB_ATTRIBUTE}]`);
+  if (spans.length === 0) {
+    return html;
+  }
+  spans.forEach((span) => span.replaceWith(TAB_TEXT));
+  const container = document.createElement('div');
+  container.appendChild(template.content);
+  return container.innerHTML;
+}
+
+/**
  * NodeView minimal d'une tabulation : `<span class="aster-tab" contenteditable="false"
  * data-tab="">` avec une largeur de repli inline (`display: inline-block; min-width: 2em`)
  * et, quand le taquet est connu, `data-stop` et `--aster-tab-stop`. La feuille `ui` fait
@@ -104,8 +145,9 @@ export function renderTabNodeView(): NodeViewRenderer {
  * `<span data-tab=""></span>` ou `<span data-tab="" data-stop="36pt"></span>` ;
  * `getText()` rend `\t`. La touche Tab insère une tabulation dans un paragraphe ou un
  * titre, mais reste `sinkListItem` dans une liste et la navigation de cellule dans une
- * table (l'extension est de priorité basse : ces keymaps passent avant). Backspace et
- * Delete effacent la tabulation adjacente d'un coup, comme un caractère.
+ * table (l'extension est de priorité basse : ces keymaps passent avant), et n'est pas
+ * consommée dans un bloc de code ni là où le nœud `tab` n'est pas accepté (`canInsertTab`).
+ * Backspace et Delete effacent la tabulation adjacente d'un coup, comme un caractère.
  */
 export const Tab = Node.create({
   name: TAB_NODE_NAME,
@@ -151,7 +193,7 @@ export const Tab = Node.create({
     return {
       Tab: ({ editor }) => {
         const { state } = editor;
-        if (isTabReserved(state) || !state.selection.$from.parent.isTextblock) {
+        if (isTabReserved(state) || !canInsertTab(state)) {
           return false;
         }
         return editor.commands.insertContent({ type: this.name });

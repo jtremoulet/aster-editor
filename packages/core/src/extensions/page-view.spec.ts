@@ -9,8 +9,11 @@ import {
   PAGE_HEADER_CLASS,
   PAGE_VIEW_CLASS,
   PAGE_VIEW_CSS_VARIABLES,
+  PAGE_WIDTH_MAX_CSS_VARIABLE,
+  maxSectionWidthMm,
   pageViewCssValues,
   resolvePageMetrics,
+  resolveSectionLayout,
   sanitizeHeaderFooterHtml,
 } from './page-view';
 import { mountEditor, type MountedEditor } from '../testing/mount';
@@ -449,6 +452,67 @@ describe('vue page', () => {
       // Après destroy, setPageView est un no-op.
       editor.setPageView(true);
       expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(false);
+    });
+  });
+
+  describe('sections hostiles (R41-05)', () => {
+    const TWO_SECTIONS: DocumentLayout = {
+      sections: [{ page: { size: 'A5' } }, { page: { size: 'A3' } }],
+    };
+
+    it('resolveSectionLayout et maxSectionWidthMm ignorent un sections qui n’est pas un tableau', () => {
+      const text: DocumentLayout = { page: { size: 'A5' }, sections: 'abc' as never };
+      expect(resolveSectionLayout(text, 1)).toEqual({ page: { size: 'A5' } });
+      expect(maxSectionWidthMm(text)).toBeNull();
+      const arrayLike: DocumentLayout = { sections: { length: 2, 0: {} } as never };
+      expect(resolveSectionLayout(arrayLike, 1)).toEqual({});
+      expect(maxSectionWidthMm(arrayLike)).toBeNull();
+      // Une entrée qui n'est pas un objet vaut une entrée absente : repli premier niveau.
+      const entries: DocumentLayout = { page: { size: 'Legal' }, sections: ['x', null] as never };
+      expect(resolveSectionLayout(entries, 1)).toEqual({ page: { size: 'Legal' } });
+      expect(resolveSectionLayout(entries, 2)).toEqual({ page: { size: 'Legal' } });
+      expect(maxSectionWidthMm(entries)).toBe(215.9);
+      expect(maxSectionWidthMm(TWO_SECTIONS)).toBe(297);
+    });
+
+    it('setPageView avec un sections texte ne lève pas et remplace la vue sans sections', () => {
+      mounted = mountEditor({ content: '<p>a</p><hr data-section-break="1"><p>b</p>' });
+      const editor = impl(mounted.editor);
+      editor.setPageView({ layout: TWO_SECTIONS });
+      expect(cssVariables(mounted.element)[0]).toBe('148mm');
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('297mm');
+      const text: DocumentLayout = { sections: 'abc' as never };
+      expect(() => editor.setPageView({ layout: text })).not.toThrow();
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+      expect(cssVariables(mounted.element)[0]).toBe('210mm');
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('');
+      expect(editor.getLayout()).toBe(text);
+      expect(editor.getSectionLayout(1)).toEqual({});
+      expect(mounted.element.querySelector('hr')?.getAttribute('style')).toBeNull();
+    });
+
+    it('une mise en page qui lève laisse la vue page précédente en place et relaie l’erreur', () => {
+      mounted = mountEditor({ content: '<p>a</p>' });
+      const editor = impl(mounted.editor);
+      editor.setPageView({ layout: TWO_SECTIONS });
+      const hostile: DocumentLayout = {
+        get sections(): readonly never[] {
+          throw new Error('sections hostiles');
+        },
+      };
+      expect(() => editor.setPageView({ layout: hostile })).toThrow('sections hostiles');
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+      expect(cssVariables(mounted.element)[0]).toBe('148mm');
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('297mm');
+      expect(mounted.element.querySelectorAll(`.${PAGE_HEADER_CLASS}`)).toHaveLength(1);
+      expect(mounted.element.querySelectorAll(`.${PAGE_FOOTER_CLASS}`)).toHaveLength(1);
+      expect(editor.getLayout()).toBe(TWO_SECTIONS);
+      // Sans vue page avant l'appel, l'erreur remonte et rien n'est posé.
+      editor.setPageView(false);
+      expect(() => editor.setPageView({ layout: hostile })).toThrow('sections hostiles');
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(false);
+      expect(mounted.element.getAttribute('style')).toBeNull();
+      expect(editor.getLayout()).toBeNull();
     });
   });
 });
