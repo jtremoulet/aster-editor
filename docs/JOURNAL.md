@@ -450,3 +450,12 @@
 1. `BILAN_SESSION3.md` (5 min), puis `docs/ROADMAP_SESSION3.md` et la section « Différé » du bilan.
 2. Ouvrir dans Word réel les exports dans le gabarit (`samples/README.md`, points 18-31) et les documents clients.
 3. Prochain chantier structurant : sections multiples conservées dans le corps (perte principale sur le document client et la fixture 16), puis bascule du défaut `fidelity: 'styled'` (0.6).
+
+## 🌙 Session 4 — sections, tabulations, bordures, bascule stylée (20-21 octobre 2026)
+
+### 20/10 23:07 — GO, phase 0
+
+- Joris donne la nuit jusqu'à 05:00, objectif : « la suite des devs », avec pour fil rouge faire passer son document au-dessus de 0,98 dans le gabarit. Plan dans `docs/ROADMAP_SESSION4.md` (« Déroulé de la session 4 »), version cible 0.6.0.
+- Scan de sécurité du dépôt public demandé par Joris : aucun secret, aucun `.env` / `.npmrc`, document client ni suivi ni dans l'historique, aucun nom d'organisation cliente ; seul le nom du fichier client apparaît dans docs et tests.
+- Contrat additif (`core/src/api/layout.ts`) : `DocumentLayout.sections`, `SectionLayout`, `SectionStart`, `SectionBreakAttrs` (`<hr data-section-break="n">`), `TabAttrs` (`<span data-tab="" data-stop="36pt">`), `BlockBorder.spacePt` (`padding-<côté>`), `TableLayoutAttrs.align` (`data-align`).
+- Vague 1 lancée à 23:35 : L40 fixtures 18-19, L41 core (sectionBreak, tab, spacePt, align, vue page par section côté core), L42 lecteur (sections, tabulations, bordures nil et couleurs, w:jc, styles conditionnels), L43 export (sectPr par section greffés, w:tab, bordures, w:jc), L44 pagination et feuille par section. Convention figée sans attendre L41 : les variables `--aster-page-*` de la section suivante sont posées sur le `hr` du saut.

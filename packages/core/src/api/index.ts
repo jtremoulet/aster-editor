@@ -40,6 +40,10 @@ export type {
   ParagraphLayoutAttrName,
   ParagraphLayoutAttrs,
   RunLayoutAttrs,
+  SectionBreakAttrs,
+  SectionLayout,
+  SectionStart,
+  TabAttrs,
   TableLayoutAttrs,
 } from './layout';
 export { PARAGRAPH_LAYOUT_ATTR_NAMES } from './layout';

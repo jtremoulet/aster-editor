@@ -78,6 +78,47 @@ export interface DocumentLayout {
   readonly footers?: HeaderFooterSet;
   /** Première page différente (en-tête et pied `first`). */
   readonly titlePage?: boolean;
+  /**
+   * Sections du document dans l'ordre (session 4). La dernière est aussi recopiée dans
+   * `page`, `columns`, `headers`, `footers`, `titlePage` (compatibilité 0.5). Absent ou vide
+   * = une seule section. Le corps marque la fin de chaque section sauf la dernière par un
+   * nœud `sectionBreak` (`<hr data-section-break="n">`).
+   */
+  readonly sections?: readonly SectionLayout[];
+}
+
+/** Type de saut qui ouvre une section (`w:type` du `sectPr`). `nextPage` par défaut. */
+export type SectionStart = 'nextPage' | 'continuous' | 'evenPage' | 'oddPage';
+
+/** Mise en page d'une section : ce que Word porte dans un `w:sectPr`. */
+export interface SectionLayout {
+  readonly page?: PageSetup;
+  readonly columns?: number;
+  readonly headers?: HeaderFooterSet;
+  readonly footers?: HeaderFooterSet;
+  readonly titlePage?: boolean;
+  readonly start?: SectionStart;
+}
+
+/**
+ * Saut de section : nœud bloc atomique `<hr data-section-break="n">` où `n` (à partir de 1)
+ * est l'index dans `DocumentLayout.sections` de la section qui **se termine** ici ; la
+ * section `n + 1` commence au bloc suivant. Jamais émis pour la dernière section. La vue
+ * page change de feuille (format, marges, en-têtes) à chaque saut ; l'export écrit un
+ * `w:sectPr` dans le dernier paragraphe de la section, greffé depuis le gabarit quand il
+ * existe. `setHTML(getHTML())` conserve l'attribut.
+ */
+export interface SectionBreakAttrs {
+  readonly section: number;
+}
+
+/**
+ * Tabulation : nœud inline atomique `<span data-tab=""></span>` (plus `data-stop="36pt"`
+ * quand la position du taquet est connue). Rendu comme un espace élastique par la feuille
+ * de style ; l'export écrit `w:tab`. Remplace l'espace cadratin de la 0.5.
+ */
+export interface TabAttrs {
+  readonly stopPt?: number | null;
 }
 
 /** Côtés d'une bordure de paragraphe ; `between` sépare deux paragraphes bordés consécutifs. */
@@ -92,6 +133,11 @@ export interface BlockBorder {
   readonly widthPt: number;
   /** Couleur CSS (`#rrggbb`). */
   readonly color: string;
+  /**
+   * Distance entre le texte et la bordure, en points (`w:space`). Sérialisée juste après
+   * les `border-*` en `padding-<côté>: Npt` ; absente = défaut de l'export (1 pt).
+   */
+  readonly spacePt?: number;
 }
 
 /**
@@ -190,6 +236,8 @@ export interface TableLayoutAttrs {
   readonly width?: string | null;
   readonly borders?: readonly BlockBorder[] | null;
   readonly docxStyle?: string | null;
+  /** Alignement horizontal du tableau (`w:jc`), sérialisé en `data-align`. */
+  readonly align?: 'left' | 'center' | 'right' | null;
 }
 
 export interface CellLayoutAttrs {
