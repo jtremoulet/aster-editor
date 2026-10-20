@@ -15,6 +15,9 @@ async function context(overrides: Partial<ExportContext> = {}): Promise<ExportCo
     variables: { mode: 'placeholders', values: {}, pattern: /\{\{(\w+)\}\}/g },
     footnotes: new Map(),
     footnoteCalls: new Set(),
+    knownStyles: new Set(),
+    template: false,
+    templateNumbering: null,
     ...overrides,
   };
 }

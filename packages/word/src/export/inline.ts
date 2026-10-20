@@ -1,25 +1,53 @@
 import type { IRunOptions, ImageRun, ParagraphChild } from 'docx';
-import { warn, type ExportContext } from './context';
-import { parseColor, parseFontFamily, parseFontSize, parseStyle } from './css';
+import { resolveDocxStyle, warn, type ExportContext } from './context';
+import {
+  highlightName,
+  parseColor,
+  parseFontFamily,
+  parseFontSize,
+  parsePoints,
+  parseStyle,
+  pointsToTwips,
+  type HighlightName,
+} from './css';
 import { BLOCK_TAGS, DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from './dom';
 import { imageRun } from './images';
 import { sanitizeXmlText } from './sanitize';
 import { CODE_FONT, STYLE_IDS } from './styles';
 import { mergeField, resolvedValue, splitVariables, variableNameOf } from './variables';
 
+/** Attribut du style de caractère Word d'origine d'un span (`RunLayoutAttrs.docxRunStyle`). */
+export const DOCX_RUN_STYLE_ATTRIBUTE = 'data-docx-run-style';
+
+/** Styles de trait du souligné (`w:u w:val`), valeurs de `UnderlineType` de `docx`. */
+export type UnderlineStyle = 'single' | 'double' | 'dotted' | 'dash' | 'wave';
+
 /** Marques héritées le long de la descente dans les éléments inline. */
 export interface InlineState {
   readonly bold?: boolean;
   readonly italics?: boolean;
   readonly underline?: boolean;
+  /** Trait du souligné (`text-decoration-style`), simple par défaut. */
+  readonly underlineStyle?: UnderlineStyle;
   readonly strike?: boolean;
+  /** Barré double (`<s style="text-decoration-style: double">`), `w:dstrike`. */
+  readonly doubleStrike?: boolean;
   readonly subScript?: boolean;
   readonly superScript?: boolean;
   readonly code?: boolean;
-  readonly highlight?: boolean;
+  /** Surlignage nommé de Word (`yellow`…), pour les seize couleurs qu'il connaît. */
+  readonly highlight?: HighlightName;
+  /** Fond de run `RRGGBB` (`w:shd`) pour toute autre couleur de fond. */
+  readonly shading?: string;
   readonly color?: string;
   readonly font?: string;
   readonly size?: number;
+  /** Espacement des caractères en twips (`letter-spacing`). */
+  readonly letterSpacing?: number;
+  /** Casse forcée : `text-transform: uppercase` ou `font-variant: small-caps`. */
+  readonly caps?: 'all' | 'small';
+  /** Style de caractère Word d'origine (`data-docx-run-style`), s'il est défini. */
+  readonly runStyle?: string;
   /** URL du lien englobant, `undefined` hors lien. */
   readonly href?: string;
 }
@@ -67,8 +95,32 @@ export function encodeHref(href: string): string {
   }
 }
 
-/** Applique au state les marques portées par un élément inline (balise + `style`). */
-export function applyElementState(element: Element, state: InlineState): InlineState {
+/** `text-decoration-style` CSS → trait de souligné Word, `undefined` pour `solid`/absent. */
+function underlineStyleOf(value: string | undefined): UnderlineStyle | undefined {
+  switch (value?.trim().toLowerCase()) {
+    case 'double':
+      return 'double';
+    case 'dotted':
+      return 'dotted';
+    case 'dashed':
+      return 'dash';
+    case 'wavy':
+      return 'wave';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Applique au state les marques portées par un élément inline (balise + `style` +
+ * `data-docx-run-style`). Le contexte sert à valider le style de caractère Word : sans
+ * lui, l'attribut est ignoré.
+ */
+export function applyElementState(
+  element: Element,
+  state: InlineState,
+  ctx?: ExportContext,
+): InlineState {
   const style = parseStyle(element.getAttribute('style'));
   let next: InlineState = state;
   switch (tagOf(element)) {
@@ -81,13 +133,19 @@ export function applyElementState(element: Element, state: InlineState): InlineS
       next = { ...next, italics: true };
       break;
     case 'u':
-    case 'ins':
-      next = { ...next, underline: true };
+    case 'ins': {
+      const underlineStyle = underlineStyleOf(style.get('text-decoration-style'));
+      next = { ...next, underline: true, ...(underlineStyle ? { underlineStyle } : {}) };
       break;
+    }
     case 's':
     case 'strike':
     case 'del':
-      next = { ...next, strike: true };
+      if (style.get('text-decoration-style')?.trim().toLowerCase() === 'double') {
+        next = { ...next, doubleStrike: true };
+      } else {
+        next = { ...next, strike: true };
+      }
       break;
     case 'sub':
       next = { ...next, subScript: true, superScript: false };
@@ -101,7 +159,7 @@ export function applyElementState(element: Element, state: InlineState): InlineS
       next = { ...next, code: true };
       break;
     case 'mark':
-      next = { ...next, highlight: true };
+      next = { ...next, highlight: 'yellow', shading: undefined };
       break;
     case 'a': {
       const href = sanitizeXmlText(element.getAttribute('href') ?? '').trim();
@@ -127,8 +185,31 @@ export function applyElementState(element: Element, state: InlineState): InlineS
   if (font) next = { ...next, font };
   const size = parseFontSize(style.get('font-size'));
   if (size) next = { ...next, size };
-  const background = style.get('background-color') ?? style.get('background');
-  if (background && parseColor(background)) next = { ...next, highlight: true };
+  const background = parseColor(style.get('background-color') ?? style.get('background'));
+  if (background) {
+    // Les seize couleurs de Word restent un surlignage ; les autres deviennent un fond de run.
+    const named = highlightName(background);
+    next = named
+      ? { ...next, highlight: named, shading: undefined }
+      : { ...next, shading: background, highlight: undefined };
+  }
+  const letterSpacing = parsePoints(style.get('letter-spacing'));
+  if (letterSpacing !== null && letterSpacing !== 0) {
+    next = { ...next, letterSpacing: pointsToTwips(letterSpacing) };
+  }
+  const transform = style.get('text-transform')?.trim().toLowerCase();
+  if (transform === 'uppercase') next = { ...next, caps: 'all' };
+  else if (transform === 'none' && next.caps === 'all') next = { ...next, caps: undefined };
+  const variant = style.get('font-variant')?.trim().toLowerCase();
+  if (variant === 'small-caps' || style.get('font-variant-caps')?.trim() === 'small-caps') {
+    next = { ...next, caps: 'small' };
+  } else if (variant === 'normal' && next.caps === 'small') {
+    next = { ...next, caps: undefined };
+  }
+  if (ctx) {
+    const runStyle = resolveDocxStyle(ctx, element.getAttribute(DOCX_RUN_STYLE_ATTRIBUTE), 'run');
+    if (runStyle) next = { ...next, runStyle };
+  }
   return next;
 }
 
@@ -140,20 +221,28 @@ export function runOptions(state: InlineState, text?: string): IRunOptions {
   if (text !== undefined) options.text = text;
   if (state.bold) options.bold = true;
   if (state.italics) options.italics = true;
-  if (state.underline) options.underline = {};
+  if (state.underline)
+    options.underline = state.underlineStyle ? { type: state.underlineStyle } : {};
   if (state.strike) options.strike = true;
+  if (state.doubleStrike) options.doubleStrike = true;
   if (state.subScript) options.subScript = true;
   if (state.superScript) options.superScript = true;
-  if (state.highlight) options.highlight = 'yellow';
+  if (state.highlight) options.highlight = state.highlight;
+  if (state.shading) options.shading = { fill: state.shading, type: 'clear', color: 'auto' };
   if (state.color) options.color = state.color;
   if (state.size) options.size = state.size;
+  if (state.letterSpacing) options.characterSpacing = state.letterSpacing;
+  if (state.caps === 'all') options.allCaps = true;
+  if (state.caps === 'small') options.smallCaps = true;
   if (state.code) {
     options.style = STYLE_IDS.code;
     options.font = CODE_FONT;
   } else if (state.font) {
     options.font = state.font;
   }
-  // Le style de caractère « Hyperlink » prime sur « Code » : Word n'en accepte qu'un.
+  // Un style de caractère Word d'origine prime sur « Code », et « Hyperlink » sur tout :
+  // Word n'en accepte qu'un par run.
+  if (state.runStyle) options.style = state.runStyle;
   if (state.href) options.style = STYLE_IDS.hyperlink;
   return options;
 }
@@ -314,7 +403,7 @@ async function collectPieces(
     warn(ctx, 'unsupported-element', `Élément <${tag}> ignoré : pas d'équivalent Word`);
     return;
   }
-  const next = applyElementState(node, state);
+  const next = applyElementState(node, state, ctx);
   const variable = variableNameOf(node);
   if (variable !== null) {
     // Puce de variable : le span est atomique, son texte d'origine sert de repli.

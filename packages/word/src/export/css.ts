@@ -189,3 +189,238 @@ export function parsePixels(value: string | null | undefined): number | null {
   if (!Number.isFinite(amount) || amount <= 0) return null;
   return Math.round(match[2] === 'pt' ? amount / 0.75 : amount);
 }
+
+/** Points par unité CSS absolue. Un nombre nu est lu en points (contrat de mise en page). */
+const POINTS_PER_UNIT: Readonly<Record<string, number>> = {
+  pt: 1,
+  px: 0.75,
+  in: 72,
+  cm: 72 / 2.54,
+  mm: 72 / 25.4,
+  pc: 12,
+  '': 1,
+};
+
+/**
+ * Longueur CSS absolue → points, signée (`-18pt` est un retrait suspendu), deux décimales.
+ * `null` pour une unité relative (`em`, `%`), un mot-clé ou une valeur illisible.
+ */
+export function parsePoints(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const match = /^(-?[\d.]+)\s*(pt|px|in|cm|mm|pc)?$/.exec(value.trim().toLowerCase());
+  if (!match) return null;
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) return null;
+  return Math.round(amount * (POINTS_PER_UNIT[match[2] ?? ''] ?? 1) * 100) / 100;
+}
+
+/** Points → twips (1/20 de point), entier. */
+export function pointsToTwips(points: number): number {
+  return Math.round(points * 20);
+}
+
+/** Styles de trait du contrat de mise en page (`BlockBorder.style`). */
+export type CssBorderStyle = 'solid' | 'dashed' | 'dotted' | 'double';
+
+/** Bordure CSS lue : style, épaisseur en points, couleur `RRGGBB`. */
+export interface CssBorder {
+  readonly style: CssBorderStyle;
+  readonly widthPt: number;
+  readonly color: string;
+}
+
+/** Côtés d'une bordure de bloc ou de cellule. */
+export type CssBorderSide = 'top' | 'right' | 'bottom' | 'left';
+
+/** Côtés dans l'ordre de sérialisation du contrat. */
+export const CSS_BORDER_SIDES: readonly CssBorderSide[] = ['top', 'right', 'bottom', 'left'];
+
+/** Mots-clés `border-style` CSS → style du contrat ; les autres (`groove`…) deviennent `solid`. */
+function borderStyleKeyword(word: string): CssBorderStyle | null {
+  switch (word) {
+    case 'solid':
+    case 'groove':
+    case 'ridge':
+    case 'inset':
+    case 'outset':
+      return 'solid';
+    case 'dashed':
+    case 'dotted':
+    case 'double':
+      return word;
+    default:
+      return null;
+  }
+}
+
+/** Épaisseurs nommées de `border-width`, en points (valeurs usuelles des navigateurs). */
+const BORDER_WIDTH_KEYWORDS: Readonly<Record<string, number>> = {
+  thin: 0.75,
+  medium: 2.25,
+  thick: 3.75,
+};
+
+/**
+ * Raccourci `border` / `border-<côté>` CSS (`1pt solid #000000`, dans n'importe quel
+ * ordre, couleur `#hex`, `rgb()` ou nom) → bordure, `undefined` si la valeur est illisible,
+ * `null` pour `none` / `hidden` / `0` (bordure explicitement absente). Une épaisseur
+ * absente vaut `medium`, un style absent `solid`, une couleur absente noir.
+ */
+export function parseBorder(value: string | undefined): CssBorder | null | undefined {
+  if (!value) return undefined;
+  const raw = value.trim().toLowerCase();
+  if (raw === '' || raw === 'none' || raw === 'hidden' || raw === '0') return null;
+  // Les espaces d'un `rgb(r, g, b)` ne séparent pas des mots : on les retire avant la découpe.
+  const tokens = raw.replace(
+    /\(\s*([^)]*?)\s*\)/g,
+    (_, inner: string) => `(${inner.replace(/\s+/g, '')})`,
+  );
+  let style: CssBorderStyle | null = null;
+  let widthPt: number | null = null;
+  let color: string | null = null;
+  for (const token of tokens.split(/\s+/)) {
+    const keyword = borderStyleKeyword(token);
+    if (keyword) {
+      style = keyword;
+      continue;
+    }
+    const named = BORDER_WIDTH_KEYWORDS[token];
+    if (named !== undefined) {
+      widthPt = named;
+      continue;
+    }
+    const points = parsePoints(token);
+    if (points !== null) {
+      widthPt = points;
+      continue;
+    }
+    const parsed = parseColor(token);
+    if (parsed) color = parsed;
+    else if (token === 'transparent') return null;
+  }
+  if (widthPt !== null && widthPt <= 0) return null;
+  if (style === null && widthPt === null && color === null) return undefined;
+  return { style: style ?? 'solid', widthPt: widthPt ?? 2.25, color: color ?? '000000' };
+}
+
+/**
+ * Bordures d'un `style` inline, côté par côté : raccourci `border` (tous les côtés) puis
+ * `border-<côté>`, puis les propriétés longues `border-<côté>-width|style|color` qui
+ * complètent ou corrigent. Un côté absent de la map n'est pas déclaré ; `null` le déclare
+ * explicitement sans bordure (`border-top: none`).
+ */
+export function parseBorders(
+  style: ReadonlyMap<string, string>,
+): ReadonlyMap<CssBorderSide, CssBorder | null> {
+  const result = new Map<CssBorderSide, CssBorder | null>();
+  const all = parseBorder(style.get('border'));
+  for (const side of CSS_BORDER_SIDES) {
+    let border: CssBorder | null | undefined = all;
+    const own = parseBorder(style.get(`border-${side}`));
+    if (own !== undefined) border = own;
+    const width = parsePoints(style.get(`border-${side}-width`));
+    const styleWord = style.get(`border-${side}-style`)?.trim().toLowerCase();
+    const colorValue = parseColor(style.get(`border-${side}-color`));
+    if (width !== null || styleWord !== undefined || colorValue) {
+      if (styleWord === 'none' || styleWord === 'hidden' || (width !== null && width <= 0)) {
+        border = null;
+      } else {
+        const base: CssBorder = border ?? { style: 'solid', widthPt: 2.25, color: '000000' };
+        border = {
+          style: (styleWord ? borderStyleKeyword(styleWord) : null) ?? base.style,
+          widthPt: width ?? base.widthPt,
+          color: colorValue ?? base.color,
+        };
+      }
+    }
+    if (border !== undefined) result.set(side, border);
+  }
+  return result;
+}
+
+/** Interligne lu : multiple (`1.15`) ou exact en points (`14pt`). */
+export type CssLineHeight =
+  | { readonly kind: 'multiple'; readonly value: number }
+  | { readonly kind: 'exact'; readonly points: number };
+
+/**
+ * `line-height` CSS → interligne Word : nombre nu ou pourcentage = multiple, longueur
+ * absolue = exact. `normal`, `inherit` et les unités relatives sont ignorés.
+ */
+export function parseLineHeight(value: string | undefined): CssLineHeight | null {
+  if (!value) return null;
+  const raw = value.trim().toLowerCase();
+  if (/^[\d.]+$/.test(raw)) {
+    const multiple = Number(raw);
+    return Number.isFinite(multiple) && multiple > 0 ? { kind: 'multiple', value: multiple } : null;
+  }
+  const percent = /^([\d.]+)%$/.exec(raw);
+  if (percent) {
+    const multiple = Number(percent[1]) / 100;
+    return Number.isFinite(multiple) && multiple > 0 ? { kind: 'multiple', value: multiple } : null;
+  }
+  const points = parsePoints(raw);
+  return points !== null && points > 0 ? { kind: 'exact', points } : null;
+}
+
+/**
+ * `padding` CSS (1 à 4 valeurs, règle TRBL) → points `[haut, droite, bas, gauche]`.
+ * `null` si une valeur est illisible.
+ */
+export function parsePadding(
+  value: string | undefined,
+): readonly [number, number, number, number] | null {
+  if (!value) return null;
+  const parts = value.trim().split(/\s+/).map(parsePoints);
+  if (parts.length === 0 || parts.length > 4 || parts.some((part) => part === null)) return null;
+  const [a = 0, b = a, c = a, d = b] = parts as number[];
+  return [a, b, c, d];
+}
+
+/** Les seize surlignages nommés de Word (`w:highlight`), valeurs de `HighlightColor` de `docx`. */
+export type HighlightName =
+  | 'yellow'
+  | 'green'
+  | 'cyan'
+  | 'magenta'
+  | 'blue'
+  | 'red'
+  | 'darkBlue'
+  | 'darkCyan'
+  | 'darkGreen'
+  | 'darkMagenta'
+  | 'darkRed'
+  | 'darkYellow'
+  | 'darkGray'
+  | 'lightGray'
+  | 'black'
+  | 'white';
+
+/** Surlignages nommés de Word et la couleur que Word affiche pour chacun. */
+const HIGHLIGHT_NAMES: ReadonlyArray<readonly [HighlightName, string]> = [
+  ['yellow', 'FFFF00'],
+  ['green', '00FF00'],
+  ['cyan', '00FFFF'],
+  ['magenta', 'FF00FF'],
+  ['blue', '0000FF'],
+  ['red', 'FF0000'],
+  ['darkBlue', '000080'],
+  ['darkCyan', '008080'],
+  ['darkGreen', '008000'],
+  ['darkMagenta', '800080'],
+  ['darkRed', '800000'],
+  ['darkYellow', '808000'],
+  ['darkGray', '808080'],
+  ['lightGray', 'C0C0C0'],
+  ['black', '000000'],
+  ['white', 'FFFFFF'],
+];
+
+/**
+ * Nom de surlignage Word (`w:highlight`) d'une couleur `RRGGBB`, `null` si aucun des seize
+ * ne correspond : le fond est alors écrit en `w:shd`, que Word affiche à l'identique.
+ */
+export function highlightName(color: string): HighlightName | null {
+  const upper = color.toUpperCase();
+  return HIGHLIGHT_NAMES.find(([, hex]) => hex === upper)?.[0] ?? null;
+}

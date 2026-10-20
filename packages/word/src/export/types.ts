@@ -19,6 +19,13 @@ import type { DocxInput, HtmlParser } from '../docx/types';
  *   lignes, plafonds de Word.
  * - `page-margins-clamped` : marge de page négative (défaut appliqué) ou somme des marges
  *   qui ne laisse pas 1 cm utile (marges réduites).
+ * - `template-invalid` : `options.template` n'est pas un `.docx` lisible (archive ou
+ *   partie principale absente) ; export neuf à la place, jamais d'exception.
+ * - `template-numbering-fallback` : une liste portait `data-docx-num-id` mais cette
+ *   numérotation n'existe pas (ou plus) dans le gabarit ; numérotation neuve ajoutée.
+ * - `template-style-missing` : un bloc ou un run référence un style (`data-docx-style`,
+ *   `data-docx-run-style`) absent du gabarit et de l'export neuf ; seules ses
+ *   propriétés directes sont écrites.
  */
 export type DocxExportWarningCode =
   | 'image-skipped'
@@ -28,7 +35,10 @@ export type DocxExportWarningCode =
   | 'footnote-not-allowed'
   | 'footnote-duplicate'
   | 'table-span-clamped'
-  | 'page-margins-clamped';
+  | 'page-margins-clamped'
+  | 'template-invalid'
+  | 'template-numbering-fallback'
+  | 'template-style-missing';
 
 /**
  * Avertissement générique de la passerelle .docx, paramétré par le code. Les

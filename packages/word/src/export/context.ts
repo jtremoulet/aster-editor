@@ -1,4 +1,5 @@
 import type { Paragraph } from 'docx';
+import type { NumberingResolver } from '../docx/reader/types';
 import type { DocxModule } from './docx-module';
 import type { ListKind } from './styles';
 import type {
@@ -24,6 +25,11 @@ export interface ListDefinition {
   readonly level: number;
   /** Premier numéro (`<ol start>`), 1 par défaut. */
   readonly start: number;
+  /**
+   * `numId` du gabarit (`data-docx-num-id`, posé par l'import) que l'export dans le gabarit
+   * réutilise à la place de la numérotation générée. Ignoré par l'export neuf.
+   */
+  readonly templateNumId?: string;
 }
 
 /** Options de variables résolues : mode effectif, valeurs et motif du texte brut. */
@@ -66,6 +72,20 @@ export interface ExportContext {
    * un second appel est dégradé en exposant `[n]`.
    */
   readonly footnoteCalls: Set<string>;
+  /**
+   * Identifiants de styles que le document final définit : ceux de l'export neuf, plus
+   * ceux du gabarit en export dans le gabarit. Un `data-docx-style` / `data-docx-run-style`
+   * hors de cet ensemble n'est pas écrit (ses propriétés directes suffisent).
+   */
+  readonly knownStyles: ReadonlySet<string>;
+  /** Vrai en export dans le gabarit : un style inconnu y vaut un avertissement `template-style-missing`. */
+  readonly template: boolean;
+  /**
+   * Numérotations du gabarit (export dans le gabarit), pour retrouver le niveau d'une
+   * liste `data-docx-num-id` quand la profondeur HTML ne le donne pas (liste Word au
+   * niveau 1 sans parent). `null` en export neuf.
+   */
+  readonly templateNumbering: NumberingResolver | null;
 }
 
 /** Ajoute un avertissement typé au contexte. */
@@ -79,8 +99,38 @@ export function registerList(
   kind: ListKind,
   level: number,
   start: number,
+  templateNumId?: string,
 ): string {
   const reference = `aster-${kind}-${String(ctx.lists.length + 1)}`;
-  ctx.lists.push({ reference, kind, level, start });
+  ctx.lists.push({
+    reference,
+    kind,
+    level,
+    start,
+    ...(templateNumId !== undefined ? { templateNumId } : {}),
+  });
   return reference;
+}
+
+/**
+ * Identifiant de style Word d'un attribut `data-docx-style` / `data-docx-run-style` :
+ * tel quel s'il est défini dans le document final, sinon `null`, avec un avertissement
+ * `template-style-missing` en export dans le gabarit (l'export neuf ne le promet pas).
+ */
+export function resolveDocxStyle(
+  ctx: ExportContext,
+  value: string | null,
+  what: 'paragraphe' | 'run' | 'tableau',
+): string | null {
+  const id = value?.trim() ?? '';
+  if (id === '') return null;
+  if (ctx.knownStyles.has(id)) return id;
+  if (ctx.template) {
+    const message = `Style de ${what} « ${id} » absent du gabarit et de l'export : propriétés directes seules`;
+    // Un style manquant revient à chaque bloc qui le porte : un seul avertissement suffit.
+    if (!ctx.warnings.some((warning) => warning.message === message)) {
+      warn(ctx, 'template-style-missing', message);
+    }
+  }
+  return null;
 }
