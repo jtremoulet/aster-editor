@@ -23,6 +23,8 @@ Monorepo `C:\workspace\aster-editor`, `develop`. Lire `CLAUDE.md`, `docs/ROADMAP
 - Fixtures servies : copie `fixtures/docx/13-styles-nommes.docx` et `16-sections.docx` dans `apps/demo/public/samples/` (ton périmètre) avec un bouton « Charger l'exemple stylé ».
 - Tests de page (création, rendu du rapport avec un `compareWithTemplate` mocké, liste des objets perdus).
 
+- **En-têtes et pieds éditables** (demande de Joris) : dans la page « Modèle », un panneau « En-tête / Pied » avec deux petits éditeurs Aster (toolbar `minimal`) initialisés depuis `layout().headers?.default?.html` et `footers`, dont le HTML alimente un `layout` modifié passé à `exportDocx({ layout })` (export neuf : réécrits ; export dans le gabarit : L27 régénère la partie quand `layout.headers` / `footers` est fourni et diffère) ; output `layoutChanged` émis à chaque modification. Composant : input `layout: DocumentLayout | undefined` qui, s'il est fourni, prime sur celui de l'import et se répercute sur la vue page.
+
 ### README du paquet
 
 Section « Fidélité Word » : import stylé, vue page, export dans le gabarit, rapport de fidélité, limites (pas de pagination, objets non représentables).
