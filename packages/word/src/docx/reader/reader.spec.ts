@@ -72,7 +72,7 @@ describe('lecteur OOXML (squelette de phase 0)', () => {
 
   it('le chemin sémantique renseigne aussi gabarit, mise en page vide et objets perdus', async () => {
     const buffer = await fixture('01-headings-lists.docx');
-    const result = await importDocx(buffer);
+    const result = await importDocx(buffer, { fidelity: 'semantic' });
     expect(result.template).toBe(buffer);
     expect(result.layout).toEqual({});
     expect(result.lost).toEqual([]);

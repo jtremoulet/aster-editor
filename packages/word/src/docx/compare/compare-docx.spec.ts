@@ -7,6 +7,7 @@ import { compareTable } from './compare-tables';
 import type { TableModel } from './model';
 import { Tally } from './tally';
 import type { FidelityProperty, FidelityReport } from './types';
+import { ABSENT } from './values';
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -642,6 +643,104 @@ describe('compareDocx — rendu Word plutôt que forme XML (L28c)', () => {
       where: 'tableau 1 cellule (1,1)',
       expected: '225.65',
       actual: '200',
+    });
+  });
+
+  describe('styles conditionnels et alignement de tableau (session 4, L46)', () => {
+    /** Style de tableau `Cond` : première ligne grasse sur fond bleu, bandes impaires grises. */
+    const CONDITIONAL_STYLES = stylesXml(
+      '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+        '<w:style w:type="table" w:styleId="Cond"><w:name w:val="Cond"/>' +
+        '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/></w:tcPr></w:tblStylePr>' +
+        '<w:tblStylePr w:type="band1Horz"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/></w:tcPr></w:tblStylePr>' +
+        '</w:style>',
+    );
+    const LOOK =
+      '<w:tblLook w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>';
+    const cell = (text: string, fill = '', rPr = ''): string =>
+      `<w:tc>${fill ? `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/></w:tcPr>` : ''}${p(text, '', rPr)}</w:tc>`;
+    const table = (tblPr: string, rows: readonly string[]): string =>
+      `<w:tbl><w:tblPr><w:tblStyle w:val="Cond"/>${tblPr}</w:tblPr>${rows.map((row) => `<w:tr>${row}</w:tr>`).join('')}</w:tbl>`;
+    const original = table('<w:jc w:val="center"/>' + LOOK, [cell('A'), cell('B'), cell('C')]);
+    const styles = { 'word/styles.xml': CONDITIONAL_STYLES };
+
+    it('comparé à lui-même : fond, gras et drapeaux conditionnels conservés', async () => {
+      const a = await buildDocx(original, styles);
+      const report = await compareDocx(a, a.slice(0));
+      expect(report.score).toBe(1);
+      expect(property(report, 'table.conditional')).toMatchObject({ total: 1, kept: 1 });
+      expect(property(report, 'table.align')).toMatchObject({ total: 1, kept: 1 });
+      // Le format conditionnel est résolu dans les cellules : fond ×2 (A, B), gras ×1 (A).
+      expect(property(report, 'table.cellShading')).toMatchObject({ total: 2, kept: 2 });
+      expect(property(report, 'run.bold')).toMatchObject({ total: 1, kept: 1 });
+    });
+
+    it('tolérance : la mise en forme conditionnelle posée directement sur les cellules vaut le style', async () => {
+      // Ce qu'Aster produit aujourd'hui : fond et gras directs, style conservé, `w:tblLook`
+      // et `w:jc` non réécrits (writer hors contrat).
+      const baked = table('', [cell('A', 'D9E2F3', '<w:b/>'), cell('B', 'F2F2F2'), cell('C')]);
+      const report = await compareDocx(
+        await buildDocx(original, styles),
+        await buildDocx(baked, styles),
+      );
+      expect(property(report, 'table.cellShading')).toMatchObject({ total: 2, kept: 2 });
+      expect(property(report, 'run.bold')).toMatchObject({ total: 1, kept: 1 });
+      expect(property(report, 'paragraph.text')).toMatchObject({ total: 3, kept: 3 });
+      // Sans `w:tblLook`, Word applique 0x04A0 : `firstColumn` s'active en plus. Mesuré, pas corrigé.
+      expect(property(report, 'table.conditional')).toMatchObject({ total: 1, kept: 0 });
+      expect(property(report, 'table.conditional').examples[0]).toEqual({
+        where: 'tableau 1',
+        expected: 'firstRow,noVBand',
+        actual: 'firstRow,firstColumn,noVBand',
+      });
+      expect(property(report, 'table.align').examples[0]).toEqual({
+        where: 'tableau 1',
+        expected: 'center',
+        actual: ABSENT,
+      });
+      expect(
+        names(report)
+          .filter((name) => name.startsWith('table.'))
+          .sort(),
+      ).toEqual(
+        [
+          'table.rows',
+          'table.columns',
+          'table.style',
+          'table.align',
+          'table.conditional',
+          'table.columnWidths',
+          'table.cellShading',
+        ].sort(),
+      );
+    });
+
+    it('une bande oubliée est une perte de fond, un gras perdu une perte de run', async () => {
+      const forgotten = table('<w:jc w:val="center"/>' + LOOK, [
+        cell('A', '', '<w:b w:val="0"/>'),
+        cell('B', 'FFFFFF'),
+        cell('C'),
+      ]);
+      const report = await compareDocx(
+        await buildDocx(original, styles),
+        await buildDocx(forgotten, styles),
+      );
+      expect(property(report, 'table.conditional')).toMatchObject({ total: 1, kept: 1 });
+      expect(property(report, 'table.cellShading')).toMatchObject({ total: 2, kept: 1 });
+      expect(property(report, 'table.cellShading').examples[0]).toEqual({
+        where: 'tableau 1 cellule (2,1)',
+        expected: '#f2f2f2',
+        actual: '#ffffff',
+      });
+      expect(property(report, 'run.bold')).toMatchObject({ total: 1, kept: 0 });
+    });
+
+    it('sans format conditionnel dans le style, w:tblLook n’est pas comparé', async () => {
+      const plain = (tblPr: string): string =>
+        `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tr>${cell('A')}</w:tr></w:tbl>`;
+      const report = await compareDocx(await buildDocx(plain(LOOK)), await buildDocx(plain('')));
+      expect(names(report)).not.toContain('table.conditional');
+      expect(report.score).toBe(1);
     });
   });
 });

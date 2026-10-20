@@ -3,7 +3,8 @@ import { importDocx } from './import-docx';
 
 /**
  * mammoth est mocké ici car les fixtures synthétiques ne déclenchent aucun message :
- * on vérifie uniquement la traduction `result.messages` → `DocxImportWarning`.
+ * on vérifie uniquement la traduction `result.messages` → `DocxImportWarning`. Chemin
+ * `fidelity: 'semantic'` explicite : le défaut (`styled`, 0.6) n'appelle jamais mammoth.
  */
 vi.mock('mammoth', () => {
   const convertToHtml = vi.fn(async () => ({
@@ -22,7 +23,7 @@ const ZIP_LIKE = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]).buffer as 
 
 describe('importDocx — messages mammoth', () => {
   it('traduit chaque message mammoth en avertissement de code mammoth', async () => {
-    const { html, warnings } = await importDocx(ZIP_LIKE);
+    const { html, warnings } = await importDocx(ZIP_LIKE, { fidelity: 'semantic' });
     expect(html).toBe('<p>Contenu</p>');
     expect(warnings).toEqual([
       {
@@ -35,7 +36,10 @@ describe('importDocx — messages mammoth', () => {
 
   it('passe la style map Aster suivie des règles utilisateur à mammoth', async () => {
     const mammoth = await import('mammoth');
-    await importDocx(ZIP_LIKE, { styleMap: ["p[style-name='Note'] => aside:fresh"] });
+    await importDocx(ZIP_LIKE, {
+      fidelity: 'semantic',
+      styleMap: ["p[style-name='Note'] => aside:fresh"],
+    });
     const call = vi.mocked(mammoth.convertToHtml).mock.lastCall;
     const styleMap = call?.[1]?.styleMap;
     expect(Array.isArray(styleMap)).toBe(true);

@@ -196,12 +196,14 @@ function resolveParser(parse: HtmlParser | undefined): HtmlParser {
 }
 
 /**
- * Convertit un document Word (.docx) en HTML sémantique prêt pour `AsterEditor.setHTML`
- * ou `insertHTML`. Accepte un `File`, un `ArrayBuffer` ou une vue typée (`Uint8Array`,
- * `Buffer` Node). Ne lève jamais pour un document Word valide : les éléments non
- * convertis fidèlement sont signalés dans `warnings`. Rejette avec une erreur
- * `DocxImportError` (message `invalid-docx: …`) si l'entrée n'est ni l'un de ces types,
- * ni une archive .docx lisible.
+ * Convertit un document Word (.docx) en HTML prêt pour `AsterEditor.setHTML` ou
+ * `insertHTML`. Sans option, c'est le lecteur OOXML d'Aster qui lit (`fidelity: 'styled'`,
+ * défaut depuis la 0.6) : HTML stylé, mise en page, gabarit et objets perdus renseignés ;
+ * `fidelity: 'semantic'` retrouve le chemin mammoth des versions 0.4.x (HTML sémantique).
+ * Accepte un `File`, un `ArrayBuffer` ou une vue typée (`Uint8Array`, `Buffer` Node). Ne
+ * lève jamais pour un document Word valide : les éléments non convertis fidèlement sont
+ * signalés dans `warnings`. Rejette avec une erreur `DocxImportError` (message
+ * `invalid-docx: …`) si l'entrée n'est ni l'un de ces types, ni une archive .docx lisible.
  */
 export async function importDocx(
   input: DocxInput,
@@ -227,7 +229,8 @@ export async function importDocx(
     });
   }
 
-  if (options.fidelity === 'styled') {
+  // Défaut `styled` depuis la 0.6 : seul `fidelity: 'semantic'` emprunte encore mammoth.
+  if (options.fidelity !== 'semantic') {
     return importStyled(
       buffer,
       mammothBuffer,

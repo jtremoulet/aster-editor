@@ -1,6 +1,8 @@
 import { parseMergeField, type MergeField } from '../preprocess/fields';
 import { toVariableName } from '../preprocess/names';
 import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
+import { applyTableStyle } from '../reader/paragraphs';
+import { docDefaultsOf } from '../reader/styles';
 import type { ResolvedRunProps } from '../reader/types';
 import { emuToPx } from '../reader/units';
 import type {
@@ -25,7 +27,11 @@ import type {
  *   **brut** de l'instruction est conservé dans `fields` (R30-04) : deux vrais champs ne
  *   sont égaux que par leur nom brut, la normalisation ne vaut que face à un `{{}}` en clair ;
  * - les runs voisins de mêmes propriétés résolues sont fusionnés ; le run `{{nom}}` d'un
- *   champ prend les propriétés du premier run de son résultat et fusionne comme les autres.
+ *   champ prend les propriétés du premier run de son résultat et fusionne comme les autres ;
+ * - dans une cellule, le style de tableau vu par la cellule (formats conditionnels compris,
+ *   `ctx.tableStyle`) s'intercale entre `docDefaults` et le style de paragraphe, avec la
+ *   règle du lecteur (`reader/paragraphs.ts`, L46) : un gras de première ligne venu du
+ *   style vaut le même gras posé directement sur le run.
  */
 
 /** Champ complexe ouvert : instruction accumulée, phase résultat atteinte, champ de fusion capturé. */
@@ -138,7 +144,11 @@ function isEmpty(segment: Segment): boolean {
  */
 export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] {
   const pPr = childNamed(p, 'pPr');
-  const props = ctx.styles.paragraph(pPr);
+  const props = applyTableStyle(
+    ctx.styles.paragraph(pPr),
+    ctx.tableStyle ?? null,
+    docDefaultsOf(ctx.styles),
+  );
   const segments: Segment[] = [];
   let current = newSegment();
   const openFields: OpenField[] = [];

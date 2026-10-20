@@ -4,12 +4,24 @@ import { describe, expect, it } from 'vitest';
 import { importDocx } from '../import-docx';
 
 /**
- * Régénère `fixtures/docx/expected/11-19.html` depuis le chemin `styled`. Inactif par
- * défaut : `ASTER_REGEN=1 npx vitest run src/docx/reader/regen-expected.spec.ts`, puis
- * relire le diff git avant de figer. À utiliser quand une décision de sérialisation change.
+ * Régénère les attendus stylés `fixtures/docx/expected/*.html` depuis le chemin par défaut
+ * (`styled` depuis la 0.6, L46) : 01-06 et 08-10 (la 07, fixture de charge, n'a pas
+ * d'attendu) puis 11-19. Les attendus du chemin `semantic` (mammoth) vivent dans
+ * `expected/semantic/` et ne sont pas régénérés ici : ils figent le comportement 0.4.x.
+ * Inactif par défaut : `ASTER_REGEN=1 npx vitest run src/docx/reader/regen-expected.spec.ts`,
+ * puis relire le diff git avant de figer. À utiliser quand une décision de sérialisation change.
  */
 const FIXTURES = join(import.meta.env.ASTER_FIXTURES, 'docx');
 const NAMES = [
+  '01-headings-lists',
+  '02-tables',
+  '03-images',
+  '04-rapport-client',
+  '05-tableaux-complexes',
+  '06-styles-francais',
+  '08-variables-braces',
+  '09-variables-mergefields',
+  '10-variables-content-controls',
   '11-styles-inline',
   '12-paragraphes',
   '13-styles-nommes',

@@ -9,6 +9,7 @@ import type {
   ParagraphBlock,
   ResolvedParagraphProps,
   ResolvedRunProps,
+  TableStyleProps,
 } from './types';
 
 /**
@@ -38,17 +39,19 @@ const INHERITABLE_RUN_KEYS = ['fontFamily', 'fontSizePt', 'bold', 'italic', 'col
  * paragraphe a posé lui-même, on ne prend la valeur du tableau que là où le paragraphe
  * est encore égal aux `docDefaults` (même règle pour les taquets, R42-07 : ceux du style
  * de tableau quand le paragraphe n'en a pas d'autres que ceux des `docDefaults`).
+ * `tableStyle` est le style vu par la cellule, formats conditionnels compris. Exportée
+ * pour que le comparateur (`compare/model-paragraph.ts`) résolve comme le lecteur (L46).
  */
-function applyTableStyle(
+export function applyTableStyle(
   props: ResolvedParagraphProps,
-  ctx: ConverterContext,
+  tableStyle: TableStyleProps | null,
   defaults: { paragraph: ResolvedParagraphProps; run: ResolvedRunProps },
 ): ResolvedParagraphProps {
-  if (!ctx.tableStyle) return props;
+  if (!tableStyle) return props;
   const paragraph: { -readonly [K in keyof DocxParagraphProps]?: DocxParagraphProps[K] } = {
     ...props,
   };
-  const tableParagraph = tableParagraphDefaultsOf(ctx.tableStyle);
+  const tableParagraph = tableParagraphDefaultsOf(tableStyle);
   if (tableParagraph) {
     for (const key of INHERITABLE_PARAGRAPH_KEYS) {
       const value = tableParagraph[key];
@@ -75,7 +78,7 @@ function applyTableStyle(
       else paragraph.lineHeight = tableParagraph.lineHeight;
     }
   }
-  const tableRun = ctx.tableStyle.runDefaults;
+  const tableRun = tableStyle.runDefaults;
   if (tableRun) {
     const run: { -readonly [K in keyof ResolvedRunProps]?: ResolvedRunProps[K] } = {
       ...props.runDefaults,
@@ -194,7 +197,7 @@ export async function convertParagraph(
 ): Promise<ParagraphBlock> {
   const pPr = childNamed(paragraph, 'pPr');
   const defaults = docDefaultsOf(ctx.styles);
-  const resolved = applyTableStyle(ctx.styles.paragraph(pPr), ctx, defaults);
+  const resolved = applyTableStyle(ctx.styles.paragraph(pPr), ctx.tableStyle, defaults);
   const { props, fromList } = applyListIndent(resolved, pPr, ctx);
   const inline = await convertRuns(paragraph, ctx, props);
   const tag = props.headingLevel ? `h${String(props.headingLevel)}` : 'p';

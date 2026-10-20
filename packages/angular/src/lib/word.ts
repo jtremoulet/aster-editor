@@ -27,10 +27,14 @@ export type DocxImportFidelity = NonNullable<DocxImportOptions['fidelity']>;
 /** Objet Word non représentable signalé par l'import (`DocxImportResult.lost`). */
 export type DocxLostObject = DocxImportResult['lost'][number];
 
-/** Ce que le composant sait au moment d'importer : hook d'upload et chemin de lecture. */
+/**
+ * Ce que le composant sait au moment d'importer : hook d'upload et chemin de lecture.
+ * `fidelity` absent = défaut de la lib (`styled` depuis la 0.6) : le composant ne force
+ * plus de valeur, seul un `importFidelity` explicite est transmis.
+ */
 export interface WordImportDefaults {
   readonly upload: UploadHandler | undefined;
-  readonly fidelity: DocxImportFidelity;
+  readonly fidelity: DocxImportFidelity | undefined;
 }
 
 /** Import d'un fichier avec le hook d'upload de l'éditeur et le chemin de lecture demandé. */
@@ -41,7 +45,7 @@ export async function importWord(
   const { importDocx } = await import('@aster-editor/word');
   return importDocx(file, {
     ...(defaults.upload ? { upload: defaults.upload } : {}),
-    fidelity: defaults.fidelity,
+    ...(defaults.fidelity ? { fidelity: defaults.fidelity } : {}),
   });
 }
 

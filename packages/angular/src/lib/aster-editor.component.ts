@@ -157,7 +157,8 @@ export class AsterEditorComponent implements ControlValueAccessor {
   /**
    * Chemin de lecture d'`importDocx` : `styled` (lecteur OOXML d'Aster, HTML stylé, mise en
    * page et gabarit renseignés) ou `semantic` (mammoth, HTML sémantique, mise en page vide).
-   * Défaut effectif : `styled`. Lu à chaque import.
+   * Défaut effectif : `styled`, celui de la lib depuis la 0.6 (non transmis quand absent).
+   * Lu à chaque import.
    */
   readonly importFidelity = input<DocxImportFidelity | undefined>(undefined);
   /**
@@ -404,7 +405,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * un chunk séparé), remplace le contenu de l'éditeur en émettant `change` pour que le
    * formulaire voie la nouvelle valeur, et rend le résultat avec ses avertissements.
    * Le hook d'upload de l'éditeur est réutilisé pour les images embarquées. En mode `styled`
-   * (défaut, voir `importFidelity`), le gabarit, la mise en page et les objets non
+   * (défaut de la lib, voir `importFidelity`), le gabarit, la mise en page et les objets non
    * représentables sont conservés dans `importedTemplate`, `layout` et `lostObjects`, et la
    * mise en page est appliquée à la vue page si elle est active. Si le composant est détruit
    * ou remonté pendant l'import, le résultat est rendu mais rien n'est écrit ni conservé :
@@ -414,7 +415,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
     this.requireEditor('importDocx');
     const defaults = untracked(() => ({
       upload: this.resolvedOptions().upload,
-      fidelity: this.importFidelity() ?? 'styled',
+      fidelity: this.importFidelity(),
     }));
     const result = await importWord(file, defaults);
     const editor = this.instance?.editor;

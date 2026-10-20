@@ -60,13 +60,18 @@ const b = 2;</code></pre>
 <p>Ligne 1<br>Ligne 2</p>
 `;
 
-/** Exporte puis réimporte : le résultat d'`importDocx` sur le .docx produit. */
+/**
+ * Exporte puis réimporte : le résultat d'`importDocx` sur le .docx produit. Relecture en
+ * `fidelity: 'semantic'` (mammoth) : les tests de l'export assertent le HTML sémantique
+ * sans attributs de style, et plusieurs documentent des limites propres à mammoth
+ * (M-1, M-2, X-3). Le chemin stylé, défaut depuis la 0.6, est couvert par `layout.spec.ts`.
+ */
 export async function roundTrip(
   html: string,
   options: DocxExportOptions = {},
 ): Promise<DocxImportResult> {
   const blob = await exportDocx(html, options);
-  return importDocx(await blob.arrayBuffer());
+  return importDocx(await blob.arrayBuffer(), { fidelity: 'semantic' });
 }
 
 /** Parse un fragment HTML dans un `Document` jsdom isolé. */

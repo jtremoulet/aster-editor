@@ -14,8 +14,10 @@ function loadFixture(name: string): ArrayBuffer {
   ) as ArrayBuffer;
 }
 
-function loadExpected(name: string): string {
-  return readFileSync(`${import.meta.env.ASTER_FIXTURES}docx/expected/${name}.html`, 'utf8');
+/** Attendu du chemin par défaut (stylé, 0.6), ou du chemin `semantic` (mammoth, 0.4.x). */
+function loadExpected(name: string, fidelity: 'styled' | 'semantic' = 'styled'): string {
+  const dir = fidelity === 'semantic' ? 'expected/semantic' : 'expected';
+  return readFileSync(`${import.meta.env.ASTER_FIXTURES}docx/${dir}/${name}.html`, 'utf8');
 }
 
 describe('importDocx : variables', () => {
@@ -40,9 +42,21 @@ describe('importDocx : variables', () => {
       expect(result.warnings).toEqual([]);
     });
 
-    it('correspond au HTML attendu', async () => {
+    it('correspond au HTML stylé attendu (chemin par défaut)', async () => {
       const { html } = await importDocx(loadFixture('08-variables-braces'));
       expect(normalizeHtml(html)).toBe(normalizeHtml(loadExpected('08-variables-braces')));
+    });
+
+    it('fidelity: semantic correspond au HTML sémantique attendu, mêmes variables', async () => {
+      const result = await importDocx(loadFixture('08-variables-braces'), {
+        fidelity: 'semantic',
+      });
+      expect(normalizeHtml(result.html)).toBe(
+        normalizeHtml(loadExpected('08-variables-braces', 'semantic')),
+      );
+      expect(result.variables.map((variable) => variable.name)).toEqual(
+        (await importDocx(loadFixture('08-variables-braces'))).variables.map((v) => v.name),
+      );
     });
 
     it('garde {{nom}} en texte quand braces est désactivé', async () => {
@@ -70,13 +84,33 @@ describe('importDocx : variables', () => {
       expect(result.warnings).toEqual([]);
     });
 
-    it('correspond au HTML attendu', async () => {
+    it('correspond au HTML stylé attendu (chemin par défaut)', async () => {
       const { html } = await importDocx(loadFixture('09-variables-mergefields'));
       expect(normalizeHtml(html)).toBe(normalizeHtml(loadExpected('09-variables-mergefields')));
     });
 
-    it('perd les champs comme mammoth seul quand mergeFields est désactivé', async () => {
+    it('fidelity: semantic correspond au HTML sémantique attendu', async () => {
+      const { html } = await importDocx(loadFixture('09-variables-mergefields'), {
+        fidelity: 'semantic',
+      });
+      expect(normalizeHtml(html)).toBe(
+        normalizeHtml(loadExpected('09-variables-mergefields', 'semantic')),
+      );
+    });
+
+    it('garde le résultat des champs quand mergeFields est désactivé (lecteur stylé)', async () => {
       const result = await importDocx(loadFixture('09-variables-mergefields'), {
+        variables: { detect: ['braces'] },
+      });
+      expect(result.variables).toEqual([]);
+      // Le lecteur stylé rend le résultat affiché par Word, sans en faire une variable.
+      expect(result.html).toContain('Madame, Monsieur «Nom», votre facture');
+      expect(result.html).not.toContain('data-aster-variable');
+    });
+
+    it('perd les champs comme mammoth seul quand mergeFields est désactivé (semantic)', async () => {
+      const result = await importDocx(loadFixture('09-variables-mergefields'), {
+        fidelity: 'semantic',
         variables: { detect: ['braces'] },
       });
       expect(result.variables).toEqual([]);
@@ -96,10 +130,19 @@ describe('importDocx : variables', () => {
       expect(result.warnings).toEqual([]);
     });
 
-    it('correspond au HTML attendu', async () => {
+    it('correspond au HTML stylé attendu (chemin par défaut)', async () => {
       const { html } = await importDocx(loadFixture('10-variables-content-controls'));
       expect(normalizeHtml(html)).toBe(
         normalizeHtml(loadExpected('10-variables-content-controls')),
+      );
+    });
+
+    it('fidelity: semantic correspond au HTML sémantique attendu', async () => {
+      const { html } = await importDocx(loadFixture('10-variables-content-controls'), {
+        fidelity: 'semantic',
+      });
+      expect(normalizeHtml(html)).toBe(
+        normalizeHtml(loadExpected('10-variables-content-controls', 'semantic')),
       );
     });
 
@@ -154,18 +197,25 @@ describe('importDocx : variables', () => {
       const blob = await exportDocx(html, {
         variables: { mode: 'fields', values: { nom: 'Alice', societe: 'ACME & Cie' } },
       });
-      const result = await importDocx(await blob.arrayBuffer());
-      expect(result.variables).toEqual([
+      const expectedVariables = [
         { name: 'nom', value: 'Alice' },
         { name: 'societe', value: 'ACME & Cie' },
         { name: 'ville' },
-      ]);
-      expect(result.html).toBe(
-        '<p>Bonjour <span data-aster-variable="nom">{{nom}}</span>, de ' +
-          '<span data-aster-variable="societe">{{societe}}</span> ' +
-          '(<span data-aster-variable="ville">{{ville}}</span>).</p>',
-      );
-      expect(result.warnings).toEqual([]);
+      ];
+      const expectedBody =
+        'Bonjour <span data-aster-variable="nom">{{nom}}</span>, de ' +
+        '<span data-aster-variable="societe">{{societe}}</span> ' +
+        '(<span data-aster-variable="ville">{{ville}}</span>).';
+      // Chemin par défaut (stylé) : le paragraphe porte son style Word, les puces sont les mêmes.
+      const styled = await importDocx(await blob.arrayBuffer());
+      expect(styled.variables).toEqual(expectedVariables);
+      expect(styled.html).toBe(`<p data-docx-style="Normal">${expectedBody}</p>`);
+      expect(styled.warnings).toEqual([]);
+      // Chemin mammoth : HTML nu, mêmes variables.
+      const semantic = await importDocx(await blob.arrayBuffer(), { fidelity: 'semantic' });
+      expect(semantic.variables).toEqual(expectedVariables);
+      expect(semantic.html).toBe(`<p>${expectedBody}</p>`);
+      expect(semantic.warnings).toEqual([]);
     });
 
     it('n’avertit pas sur le style PlaceholderText d’un contrôle au texte de remplissage (I-5)', async () => {

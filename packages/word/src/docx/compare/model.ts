@@ -1,6 +1,14 @@
 import type { CellVerticalAlign } from '@aster-editor/core';
 import { childNamed, childrenNamed, textOf, wordAttribute } from '../preprocess/xml-utils';
 import { readDocumentLang } from '../reader/sections';
+import { conditionalFormatsOf } from '../reader/styles';
+import {
+  applyConditionalFormats,
+  conditionalTypesOf,
+  readBandSizes,
+  readTableLook,
+  type TableLook,
+} from '../reader/table-conditional';
 import type {
   DocxPackage,
   NumberingResolver,
@@ -33,7 +41,10 @@ import { readSections } from './model-sections';
  * `w:lastRenderedPageBreak`, `w:proofErr` et signets ne sont pas lus, sauf les
  * identifiants de révision du paragraphe, exposés pour l'option `ignoreRevisionIds: false`.
  * Les bordures et largeurs de cellules sont celles que Word rend (`model-borders.ts`), les
- * sauts de page et champs de fusion sont modélisés par `model-paragraph.ts`.
+ * sauts de page et champs de fusion sont modélisés par `model-paragraph.ts`. Le style de
+ * tableau vu par chaque cellule est résolu comme le lecteur (L46) : formats conditionnels
+ * du style (`w:tblStylePr`) activés par `w:tblLook` selon la position de la cellule, fondus
+ * dans ses bordures, son fond et les défauts de ses runs.
  */
 
 export interface RunModel {
@@ -105,7 +116,14 @@ export interface TableModel {
   readonly placeholderText: string;
   readonly styleId?: string;
   readonly width?: string;
+  /** `w:jc` du tableau (`center`, `right`…), absent pour `left` ou sans élément. */
   readonly align?: string;
+  /**
+   * Drapeaux `w:tblLook` effectifs (`firstRow,noVBand`…, défaut de Word `0x04A0` sans
+   * l'élément), posés seulement quand le style du tableau définit des formats
+   * conditionnels : ailleurs ils n'ont aucun effet sur le rendu.
+   */
+  readonly conditional?: string;
   /** Bordures extérieures effectives (style puis `w:tblBorders`), côtés visibles seulement. */
   readonly borders?: EffectiveBorders;
   readonly columnWidthsPt: readonly number[];
@@ -143,6 +161,8 @@ export interface ModelContext {
   readonly styles: StyleResolver;
   readonly numbering: NumberingResolver;
   readonly notes: ReadonlyMap<string, string>;
+  /** Style de tableau vu par la cellule en cours (formats conditionnels compris), absent hors tableau. */
+  readonly tableStyle?: TableStyleProps | null;
 }
 
 const VERTICAL_ALIGNS: ReadonlyMap<string, CellVerticalAlign> = new Map([
@@ -179,8 +199,9 @@ function tableWidth(tblW: Element | null): string | undefined {
   return Number.isFinite(value) ? `${String(twipsToPt(value))}pt` : undefined;
 }
 
-/** Contexte de lecture d'une cellule : style et bordures du tableau, grille, position. */
+/** Contexte de lecture d'une cellule : style vu par la cellule, bordures du tableau, grille, position. */
 interface CellContext {
+  /** Style du tableau complété par les formats conditionnels de cette cellule. */
   readonly style: TableStyleProps | null;
   readonly tblBorders: BorderMap;
   readonly gridTwips: readonly number[];
@@ -227,8 +248,13 @@ function readCell(tc: Element, ctx: ModelContext, cell: CellContext): CellModel 
     ...(borders ? { borders } : {}),
     ...(shading ? { shading } : {}),
     ...(verticalAlign ? { verticalAlign } : {}),
-    blocks: readBlocks(tc, ctx),
+    blocks: readBlocks(tc, { ...ctx, tableStyle: cell.style }),
   };
+}
+
+/** Drapeaux actifs d'un `w:tblLook`, dans l'ordre de Word (`firstRow,noVBand`), vide si aucun. */
+function lookSummary(look: TableLook): string {
+  return (Object.keys(look) as (keyof TableLook)[]).filter((key) => look[key]).join(',');
 }
 
 /**
@@ -267,6 +293,16 @@ function readTable(tbl: Element, ctx: ModelContext): TableModel {
   const tblBorders = readBorders(tblPr ? childNamed(tblPr, 'tblBorders') : null);
   const style = ctx.styles.tableStyle(styleId || null);
   const borders = nonEmptyBorders(effectiveTableBorders(style, tblBorders));
+  // Formats conditionnels du style, activés par `w:tblLook` (défaut de Word sans l'élément),
+  // résolus par cellule comme le lecteur (`reader/tables.ts`). Les drapeaux ne sont
+  // comparés que s'ils ont un effet, c'est-à-dire si le style définit au moins un format.
+  const conditional = conditionalFormatsOf(style);
+  const look = readTableLook(tblPr);
+  const bands = readBandSizes(tblPr);
+  const cellStyle = (position: Parameters<typeof conditionalTypesOf>[0]): TableStyleProps | null =>
+    style && conditional
+      ? applyConditionalFormats(style, conditional, conditionalTypesOf(position, look, bands))
+      : style;
   const grid = childNamed(tbl, 'tblGrid');
   const gridTwips = grid
     ? childrenNamed(grid, 'gridCol')
@@ -290,7 +326,19 @@ function readTable(tbl: Element, ctx: ModelContext): TableModel {
         left: gridStart === 0,
         right: gridStart + colspan >= columns,
       };
-      const model = readCell(tc, ctx, { style, tblBorders, gridTwips, gridStart, edges });
+      const effectiveStyle = cellStyle({
+        row: r,
+        rowCount: trs.length,
+        column: gridStart,
+        lastColumn: edges.right,
+      });
+      const model = readCell(tc, ctx, {
+        style: effectiveStyle,
+        tblBorders,
+        gridTwips,
+        gridStart,
+        edges,
+      });
       gridStart += colspan;
       return model;
     });
@@ -305,6 +353,7 @@ function readTable(tbl: Element, ctx: ModelContext): TableModel {
     ...(styleId ? { styleId } : {}),
     ...(width ? { width } : {}),
     ...(align ? { align } : {}),
+    ...(conditional ? { conditional: lookSummary(look) } : {}),
     ...(borders ? { borders } : {}),
     columnWidthsPt: gridTwips.map(twipsToPt),
     rows,
