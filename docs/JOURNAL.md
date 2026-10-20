@@ -397,7 +397,7 @@
 - Propositions de contrat en attente : `setPageView` / `getLayout` dans `api/editor.ts`, commandes `text.*`, `image.setAttributes.height`, `DocumentLayout.defaultParagraph`.
 - Revue R23 lancée ; L30 pagination lancé.
 
-### 20/10 17:52 — Revues R24, R25, R26 rendues, correctifs F24, F25, F26 lancés
+### 20/10 17:33 — Revues R24, R25, R26 rendues, correctifs F24, F25, F26 lancés
 
 - **R24** (lecteur runs, 20 min, 283k tokens) : 1 bloquant déjà corrigé par l'orchestrateur avant le rapport (ordre des marques), 4 majeurs prouvés : injection CSS par un nom de police (`w:rFonts` contenant `; position: fixed`), champ `HYPERLINK` complexe jamais fermé qui contamine tous les paragraphes suivants, `w:sym` hors Unicode qui rejette tout l'import, fragment `\l` d'un champ `HYPERLINK` mal placé ; mineurs : bornes absentes, chaînes de styles quadratiques (19 s sur 1 500 niveaux), toggles ECMA-376 non XOR, `DarkBlue` perdu, protocoles de liens non filtrés dans `result.html`.
 - **R25** (lecteur blocs, 16 min, 264k tokens) : 1 bloquant (`gridSpan` énorme → `colspan` géant → le core explose en mémoire à `setHTML`), 4 majeurs : zone de texte avec image prise pour une image seule, compteurs de liste remis à zéro par un tableau, **`mc:AlternateContent` ignoré** (forme systématique des dessins Word 2010+, la fixture 17 ne la couvrait pas), `w:customXml` de bloc aplati ; mineurs : bornes, `numId` inconnu silencieux, notes, continuation d'item sur un titre. Relayé au core : `colspan` à borner au parse, `data-docx-num-indent` jeté par le core (expected/15 non idempotent).
