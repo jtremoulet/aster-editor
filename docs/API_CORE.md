@@ -1,42 +1,44 @@
 # 📚 Référence API — `@aster-editor/core`
 
-> Référence exhaustive du contrat public défini dans `packages/core/src/api/`. Chaque type, chaque champ, avec la sémantique que la JSDoc du code garantit en 0.4.0. Le fichier source fait foi ; le [README du core](../packages/core/README.md) est le tutoriel.
+> Référence exhaustive du contrat public défini dans `packages/core/src/api/`. Chaque type, chaque champ, avec la sémantique que la JSDoc du code garantit en 0.5.0. Le fichier source fait foi ; le [README du core](../packages/core/README.md) est le tutoriel.
 
-Le contrat est figé : `ui`, `word` et `angular` codent contre ces types. Tout est réexporté depuis `@aster-editor/core`. Ce qui a été ajouté depuis sans toucher au contrat (recherche `search.*`, reproduction de mise en forme `formatPainter.*`, sommaire `Outline`, Markdown, autosave, NodeViews d'image et de variable, `resolveVariablesHtml`) vit hors de `api/` et est décrit dans le README du core. La session 2 a enrichi le contrat sans rupture : `variables.ts`, `AsterOptions.variables`, `AsterEditor.variables`, `getHTML(options?)`, `variable.insert` / `variable.remove`, `variablesChange`.
+Le contrat est figé : `ui`, `word` et `angular` codent contre ces types. Tout est réexporté depuis `@aster-editor/core`. Ce qui a été ajouté depuis sans toucher au contrat (recherche `search.*`, reproduction de mise en forme `formatPainter.*`, commandes `text.*`, sommaire `Outline`, Markdown, autosave, NodeViews d'image et de variable, `resolveVariablesHtml`, `setPageView` / `getLayout`, pagination) vit hors de `api/` et est décrit dans le README du core. La session 2 a enrichi le contrat sans rupture : `variables.ts`, `AsterOptions.variables`, `AsterEditor.variables`, `getHTML(options?)`, `variable.insert` / `variable.remove`, `variablesChange`. La session 3 l'a enrichi de la même façon : `layout.ts` (mise en page, partagé avec `word` et `angular`), `AsterOptions.pageView`, `paragraph.setLayout` / `paragraph.unsetLayout`, `PageViewOptions.pagination`.
 
 ## 🧭 Index
 
-| Type                                                                                                                                                                | Fichier        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| `AsterOptions`, `LinkPolicy`, `UploadHandler`                                                                                                                       | `options.ts`   |
-| `AsterEditor`                                                                                                                                                       | `editor.ts`    |
-| `AsterCommand`, `CommandRegistry`, `CommandId`, `StandardCommandId`, `STANDARD_COMMAND_IDS`, `StandardCommandArgs`, `CommandArgs`, `CommandRunArgs`, `HeadingLevel` | `commands.ts`  |
-| `AsterEvents`, `AsterEventName`, `Unsubscribe`                                                                                                                      | `events.ts`    |
-| `AsterVariable`, `VariableValues`, `VariableResolver`, `VariableSource`, `VariableRenderMode`, `GetHtmlOptions`, `VariableStore`                                    | `variables.ts` |
-| `AsterDocument`, `AsterCounts`                                                                                                                                      | `document.ts`  |
-| `I18n`, `AsterLocale`, `AsterDictionary`, `TranslateParams`                                                                                                         | `i18n.ts`      |
-| `PasteTransformer`, `PasteContext`                                                                                                                                  | `paste.ts`     |
-| `AsterTheme`, `ToolbarConfig`, `ToolbarPreset`, `ToolbarGroup`, `ToolbarItem`, `ToolbarButtonItem`, `ToolbarDropdownItem`, `ToolbarWidgetItem`                      | `toolbar.ts`   |
+| Type                                                                                                                                                                                                                                                                                                                                                                                                                                               | Fichier        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `AsterOptions`, `LinkPolicy`, `UploadHandler`                                                                                                                                                                                                                                                                                                                                                                                                      | `options.ts`   |
+| `DocumentLayout`, `PageSetup`, `PageMargins`, `PageDimensions`, `PageSizeName`, `PageOrientation`, `HeaderFooterSet`, `HeaderFooterContent`, `DefaultFont`, `ParagraphLayoutAttrs`, `ParagraphLayoutAttrName`, `PARAGRAPH_LAYOUT_ATTR_NAMES`, `BlockBorder`, `BorderSide`, `BorderStyle`, `RunLayoutAttrs`, `DecorationStyle`, `ListLayoutAttrs`, `OrderedListType`, `TableLayoutAttrs`, `CellLayoutAttrs`, `CellVerticalAlign`, `PageViewOptions` | `layout.ts`    |
+| `AsterEditor`                                                                                                                                                                                                                                                                                                                                                                                                                                      | `editor.ts`    |
+| `AsterCommand`, `CommandRegistry`, `CommandId`, `StandardCommandId`, `STANDARD_COMMAND_IDS`, `StandardCommandArgs`, `CommandArgs`, `CommandRunArgs`, `HeadingLevel`                                                                                                                                                                                                                                                                                | `commands.ts`  |
+| `AsterEvents`, `AsterEventName`, `Unsubscribe`                                                                                                                                                                                                                                                                                                                                                                                                     | `events.ts`    |
+| `AsterVariable`, `VariableValues`, `VariableResolver`, `VariableSource`, `VariableRenderMode`, `GetHtmlOptions`, `VariableStore`                                                                                                                                                                                                                                                                                                                   | `variables.ts` |
+| `AsterDocument`, `AsterCounts`                                                                                                                                                                                                                                                                                                                                                                                                                     | `document.ts`  |
+| `I18n`, `AsterLocale`, `AsterDictionary`, `TranslateParams`                                                                                                                                                                                                                                                                                                                                                                                        | `i18n.ts`      |
+| `PasteTransformer`, `PasteContext`                                                                                                                                                                                                                                                                                                                                                                                                                 | `paste.ts`     |
+| `AsterTheme`, `ToolbarConfig`, `ToolbarPreset`, `ToolbarGroup`, `ToolbarItem`, `ToolbarButtonItem`, `ToolbarDropdownItem`, `ToolbarWidgetItem`                                                                                                                                                                                                                                                                                                     | `toolbar.ts`   |
 
 ## ⚙️ `AsterOptions`
 
 Options de `createEditor(options)`. Seul `element` est obligatoire.
 
-| Champ               | Type                          | Obligatoire | Défaut                       | Description                                                                              |
-| ------------------- | ----------------------------- | ----------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `element`           | `HTMLElement`                 | oui         | —                            | Élément hôte. Le core y crée le conteneur `.aster-content` et le contenteditable.        |
-| `content`           | `string \| AsterDocument`     | non         | `''`                         | Contenu initial, HTML ou document JSON ProseMirror.                                      |
-| `placeholder`       | `string`                      | non         | `editor.placeholder` traduit | Texte affiché quand le document est vide. Fonction de la locale si absent.               |
-| `readOnly`          | `boolean`                     | non         | `false`                      | Démarre en lecture seule.                                                                |
-| `locale`            | `AsterLocale`                 | non         | `'fr'`                       | Locale initiale.                                                                         |
-| `autofocus`         | `boolean`                     | non         | `false`                      | Donne le focus (fin de document) au montage.                                             |
-| `extensions`        | `readonly AnyExtension[]`     | non         | `[]`                         | Extensions Tiptap additionnelles, ajoutées après le jeu standard.                        |
-| `commands`          | `readonly AsterCommand[]`     | non         | `[]`                         | Commandes custom enregistrées au montage, après les standard (même `id` = remplacement). |
-| `pasteTransformers` | `readonly PasteTransformer[]` | non         | `[]`                         | Transformateurs de collage, dans l'ordre d'application.                                  |
-| `upload`            | `UploadHandler`               | non         | —                            | Hook d'upload d'image. Absent : data URL base64.                                         |
-| `linkPolicy`        | `LinkPolicy`                  | non         | voir `LinkPolicy`            | Politique de sécurité et de comportement des liens, appliquée aussi aux images.          |
-| `variables`         | `VariableSource`              | non         | `{}`                         | Variables de document (champs de fusion) : déclarations, valeurs, résolveur.             |
-| `disabledCommands`  | `readonly string[]`           | non         | `[]`                         | Commandes standard désactivées par identifiant : retirées du registre, raccourci avalé.  |
+| Champ               | Type                          | Obligatoire | Défaut                       | Description                                                                                                                                                                                                                                                                                                     |
+| ------------------- | ----------------------------- | ----------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `element`           | `HTMLElement`                 | oui         | —                            | Élément hôte. Le core y crée le conteneur `.aster-content` et le contenteditable.                                                                                                                                                                                                                               |
+| `content`           | `string \| AsterDocument`     | non         | `''`                         | Contenu initial, HTML ou document JSON ProseMirror.                                                                                                                                                                                                                                                             |
+| `placeholder`       | `string`                      | non         | `editor.placeholder` traduit | Texte affiché quand le document est vide. Fonction de la locale si absent.                                                                                                                                                                                                                                      |
+| `readOnly`          | `boolean`                     | non         | `false`                      | Démarre en lecture seule.                                                                                                                                                                                                                                                                                       |
+| `locale`            | `AsterLocale`                 | non         | `'fr'`                       | Locale initiale.                                                                                                                                                                                                                                                                                                |
+| `autofocus`         | `boolean`                     | non         | `false`                      | Donne le focus (fin de document) au montage.                                                                                                                                                                                                                                                                    |
+| `extensions`        | `readonly AnyExtension[]`     | non         | `[]`                         | Extensions Tiptap additionnelles, ajoutées après le jeu standard.                                                                                                                                                                                                                                               |
+| `commands`          | `readonly AsterCommand[]`     | non         | `[]`                         | Commandes custom enregistrées au montage, après les standard (même `id` = remplacement).                                                                                                                                                                                                                        |
+| `pasteTransformers` | `readonly PasteTransformer[]` | non         | `[]`                         | Transformateurs de collage, dans l'ordre d'application.                                                                                                                                                                                                                                                         |
+| `upload`            | `UploadHandler`               | non         | —                            | Hook d'upload d'image. Absent : data URL base64.                                                                                                                                                                                                                                                                |
+| `linkPolicy`        | `LinkPolicy`                  | non         | voir `LinkPolicy`            | Politique de sécurité et de comportement des liens, appliquée aussi aux images.                                                                                                                                                                                                                                 |
+| `variables`         | `VariableSource`              | non         | `{}`                         | Variables de document (champs de fusion) : déclarations, valeurs, résolveur.                                                                                                                                                                                                                                    |
+| `pageView`          | `boolean \| PageViewOptions`  | non         | `false`                      | Vue page au montage : feuille aux dimensions et marges de `layout.page`, en-têtes et pieds `default` en lecture seule, pagination approximative (vraie par défaut, voir `PageViewOptions`). `true` vaut `{}` : A4 portrait, marges 25,4 mm. Une vue page qui lève au montage est ignorée avec un avertissement. |
+| `disabledCommands`  | `readonly string[]`           | non         | `[]`                         | Commandes standard désactivées par identifiant : retirées du registre, raccourci avalé.                                                                                                                                                                                                                         |
 
 ### `LinkPolicy`
 
@@ -111,11 +113,11 @@ Instance retournée par `createEditor`. Toute l'API est synchrone sauf mention c
 
 ### `STANDARD_COMMAND_IDS` et `StandardCommandId`
 
-Tuple `as const` des 50 identifiants standard, dans l'ordre : `bold`, `italic`, `underline`, `strike`, `subscript`, `superscript`, `code`, `highlight`, `clearFormatting`, `paragraph`, `heading`, `blockquote`, `codeBlock`, `horizontalRule`, `hardBreak`, `bulletList`, `orderedList`, `taskList`, `indent`, `outdent`, `alignLeft`, `alignCenter`, `alignRight`, `alignJustify`, `link.set`, `link.unset`, `image.insert`, `image.upload`, `image.setAttributes`, `table.insert`, `table.delete`, `table.addRowBefore`, `table.addRowAfter`, `table.deleteRow`, `table.addColumnBefore`, `table.addColumnAfter`, `table.deleteColumn`, `table.mergeCells`, `table.splitCell`, `table.toggleHeaderRow`, `table.toggleHeaderColumn`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `variable.insert`, `variable.remove`, `undo`, `redo`, `selectAll`.
+Tuple `as const` des 52 identifiants standard, dans l'ordre : `bold`, `italic`, `underline`, `strike`, `subscript`, `superscript`, `code`, `highlight`, `clearFormatting`, `paragraph`, `heading`, `blockquote`, `codeBlock`, `horizontalRule`, `hardBreak`, `bulletList`, `orderedList`, `taskList`, `indent`, `outdent`, `alignLeft`, `alignCenter`, `alignRight`, `alignJustify`, `link.set`, `link.unset`, `image.insert`, `image.upload`, `image.setAttributes`, `table.insert`, `table.delete`, `table.addRowBefore`, `table.addRowAfter`, `table.deleteRow`, `table.addColumnBefore`, `table.addColumnAfter`, `table.deleteColumn`, `table.mergeCells`, `table.splitCell`, `table.toggleHeaderRow`, `table.toggleHeaderColumn`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `variable.insert`, `variable.remove`, `paragraph.setLayout`, `paragraph.unsetLayout`, `undo`, `redo`, `selectAll`.
 
 `StandardCommandId = (typeof STANDARD_COMMAND_IDS)[number]`. Un identifiant pointé indique un domaine (`table.insert`).
 
-Les six commandes `search.*` (`SEARCH_COMMAND_IDS`, `SearchCommandId`, `SearchCommandArgs` dans `commands/search.ts`) et les deux commandes `formatPainter.*` (`FORMAT_PAINTER_COMMAND_IDS`, `FormatPainterCommandId` dans `commands/format-painter.ts`) sont enregistrées par le core en plus de ces 50 mais restent hors du contrat figé : elles passent par la surcharge libre de `run`.
+Les six commandes `search.*` (`SEARCH_COMMAND_IDS`, `SearchCommandId`, `SearchCommandArgs` dans `commands/search.ts`), les deux commandes `formatPainter.*` (`FORMAT_PAINTER_COMMAND_IDS`, `FormatPainterCommandId` dans `commands/format-painter.ts`) et les trois commandes `text.*` (`TEXT_LAYOUT_COMMAND_IDS`, `TextLayoutCommandId`, `SetLetterSpacingArgs`, `SetCapsArgs` dans `commands/layout.ts`) sont enregistrées par le core en plus de ces 52 mais restent hors du contrat figé : elles passent par la surcharge libre de `run`. Le registre compte 63 commandes au montage.
 
 ### `CommandId`
 
@@ -135,19 +137,21 @@ type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 Arguments typés des commandes standard qui en prennent. Les commandes absentes de cette table n'en prennent pas.
 
-| Commande              | Arguments                                                                                 |
-| --------------------- | ----------------------------------------------------------------------------------------- |
-| `heading`             | `{ level: HeadingLevel }`                                                                 |
-| `link.set`            | `{ href: string; target?: '_blank' \| '_self'; title?: string }`                          |
-| `image.insert`        | `{ src: string; alt?: string; title?: string; width?: number }`                           |
-| `image.upload`        | `{ file: File }`                                                                          |
-| `image.setAttributes` | `{ alt?: string; title?: string; width?: number; align?: 'left' \| 'center' \| 'right' }` |
-| `table.insert`        | `{ rows: number; cols: number; withHeaderRow?: boolean }`                                 |
-| `textColor`           | `{ color: string \| null }` (`null` retire)                                               |
-| `backgroundColor`     | `{ color: string \| null }`                                                               |
-| `fontFamily`          | `{ family: string \| null }`                                                              |
-| `fontSize`            | `{ size: string \| null }`                                                                |
-| `variable.insert`     | `{ name: string; label?: string }`                                                        |
+| Commande                | Arguments                                                                                                                                                                                                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `heading`               | `{ level: HeadingLevel }`                                                                                                                                                                                                                                                                                       |
+| `link.set`              | `{ href: string; target?: '_blank' \| '_self'; title?: string }`                                                                                                                                                                                                                                                |
+| `image.insert`          | `{ src: string; alt?: string; title?: string; width?: number }`                                                                                                                                                                                                                                                 |
+| `image.upload`          | `{ file: File }`                                                                                                                                                                                                                                                                                                |
+| `image.setAttributes`   | `{ alt?: string; title?: string; width?: number; align?: 'left' \| 'center' \| 'right' }`                                                                                                                                                                                                                       |
+| `table.insert`          | `{ rows: number; cols: number; withHeaderRow?: boolean }`                                                                                                                                                                                                                                                       |
+| `textColor`             | `{ color: string \| null }` (`null` retire)                                                                                                                                                                                                                                                                     |
+| `backgroundColor`       | `{ color: string \| null }`                                                                                                                                                                                                                                                                                     |
+| `fontFamily`            | `{ family: string \| null }`                                                                                                                                                                                                                                                                                    |
+| `fontSize`              | `{ size: string \| null }`                                                                                                                                                                                                                                                                                      |
+| `variable.insert`       | `{ name: string; label?: string }`                                                                                                                                                                                                                                                                              |
+| `paragraph.setLayout`   | `ParagraphLayoutAttrs` : fusionne les attributs donnés dans chaque paragraphe et titre de la sélection (plage par plage, sélection de cellules comprise) ; `null` efface un attribut, un attribut absent est laissé tel quel, une valeur invalide est ignorée (`run` rend `false` s'il ne reste rien de valide) |
+| `paragraph.unsetLayout` | `{ attrs?: readonly ParagraphLayoutAttrName[] } \| undefined` : efface les attributs nommés, ou tous sans argument                                                                                                                                                                                              |
 
 ### `CommandArgs<K>` et `CommandRunArgs<K>`
 
@@ -418,10 +422,10 @@ Menu déroulant regroupant plusieurs entrées.
 
 Composant UI spécialisé fourni par `ui`.
 
-| Champ    | Type       | Obligatoire | Description                                                                                                                                                                                                                                                                                     |
-| -------- | ---------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`   | `'widget'` | oui         |                                                                                                                                                                                                                                                                                                 |
-| `widget` | `string`   | oui         | Identifiants cités par le contrat : `heading`, `table`, `link`, `image`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `search`, `source`, `fullscreen`, `specialChars`, `print`, `variable`. `ui` en reconnaît deux de plus en 0.4.0 : `outline` et `formatPainter` (16 au total). |
+| Champ    | Type       | Obligatoire | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------- | ---------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`   | `'widget'` | oui         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `widget` | `string`   | oui         | Identifiants cités par le contrat : `heading`, `table`, `link`, `image`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `search`, `source`, `fullscreen`, `specialChars`, `print`, `variable`. `ui` en reconnaît deux de plus depuis 0.4.0 (`outline`, `formatPainter`) et huit depuis la session 3 (`lineSpacing`, `paragraphSpacing`, `indentIncrease`, `indentDecrease`, `paragraphBorders`, `caps`, `underlineStyle`, `pageLayout`) : 24 au total (`WIDGETS`). |
 
 ### `ToolbarItem`, `ToolbarGroup`, `ToolbarConfig`
 
@@ -433,10 +437,181 @@ type ToolbarConfig = ToolbarPreset | readonly ToolbarGroup[] | false;
 
 Un groupe = une série de boutons séparée visuellement des autres. `false` = aucune toolbar.
 
+## 📐 Mise en page (`layout.ts`)
+
+Contrat de la session 3, partagé par `core` (attributs de paragraphe, marques de run, vue page), `word` (lecture et écriture `.docx`) et `angular`. Principe : tout ce qui vient de Word et que l'éditeur sait représenter devient un attribut ProseMirror sérialisé en `style` inline normalisé ou en `data-docx-*` ; tout ce qu'il ne sait pas représenter reste dans le gabarit `.docx` (hors corps) ou est signalé. Unités : millimètres pour la page, points typographiques (`pt`) pour le texte et les paragraphes, nombre sans unité pour un interligne multiple. Jamais de twips ni d'EMU hors du paquet `word`. Tous les champs sont `readonly`.
+
+### Page
+
+```ts
+type PageSizeName = 'A3' | 'A4' | 'A5' | 'Letter' | 'Legal';
+interface PageDimensions {
+  widthMm: number;
+  heightMm: number;
+}
+type PageOrientation = 'portrait' | 'landscape';
+```
+
+`PageDimensions` est le format libre en millimètres, quand le document n'utilise pas un format nommé.
+
+#### `PageMargins`
+
+| Champ      | Type     | Description                                             |
+| ---------- | -------- | ------------------------------------------------------- |
+| `topMm`    | `number` | Marge haute. 25,4 mm par défaut partout.                |
+| `rightMm`  | `number` |                                                         |
+| `bottomMm` | `number` |                                                         |
+| `leftMm`   | `number` |                                                         |
+| `headerMm` | `number` | Distance du bord haut à l'en-tête (12,7 mm par défaut). |
+| `footerMm` | `number` | Distance du bord bas au pied (12,7 mm par défaut).      |
+
+#### `PageSetup`
+
+| Champ         | Type                             | Défaut       | Description                         |
+| ------------- | -------------------------------- | ------------ | ----------------------------------- |
+| `size`        | `PageSizeName \| PageDimensions` | `'A4'`       | Format nommé ou libre.              |
+| `orientation` | `PageOrientation`                | `'portrait'` | Paysage inverse largeur et hauteur. |
+| `margins`     | `PageMargins`                    | 25,4 mm      |                                     |
+
+### En-têtes et pieds
+
+```ts
+interface HeaderFooterContent {
+  html: string; // fragment HTML stylé, mêmes règles que le corps
+}
+interface HeaderFooterSet {
+  default?: HeaderFooterContent; // toutes les pages
+  first?: HeaderFooterContent; // première page si `DocumentLayout.titlePage`
+  even?: HeaderFooterContent; // pages paires si le document distingue pair / impair
+}
+interface DefaultFont {
+  family?: string; // style `Normal` résolu
+  sizePt?: number;
+}
+```
+
+### `DocumentLayout`
+
+Mise en page d'un document : ce que l'import `.docx` lit dans la **dernière section** et ce que l'export réécrit (export neuf) ou conserve (export dans le gabarit). Tous les champs sont optionnels : un objet vide = les défauts d'Aster (A4 portrait, 25,4 mm).
+
+| Champ         | Type              | Description                                                                           |
+| ------------- | ----------------- | ------------------------------------------------------------------------------------- |
+| `page`        | `PageSetup`       |                                                                                       |
+| `columns`     | `number`          | Nombre de colonnes de texte, 1 par défaut. Conservé, **non affiché** par la vue page. |
+| `defaultFont` | `DefaultFont`     |                                                                                       |
+| `lang`        | `string`          | Langue BCP 47, ex. `fr-FR`.                                                           |
+| `headers`     | `HeaderFooterSet` |                                                                                       |
+| `footers`     | `HeaderFooterSet` |                                                                                       |
+| `titlePage`   | `boolean`         | Première page différente (en-tête et pied `first`).                                   |
+
+### Bordures
+
+```ts
+type BorderSide = 'top' | 'right' | 'bottom' | 'left' | 'between'; // `between` sépare deux paragraphes bordés consécutifs
+type BorderStyle = 'solid' | 'dashed' | 'dotted' | 'double';
+interface BlockBorder {
+  side: BorderSide;
+  style: BorderStyle;
+  widthPt: number; // épaisseur en points
+  color: string; // `#rrggbb`
+}
+```
+
+### `ParagraphLayoutAttrs`
+
+Attributs de mise en page d'un paragraphe ou d'un titre. `null` ou absent = hérité du style de l'éditeur. Sérialisation HTML figée, dans cet ordre, uniquement pour les valeurs présentes :
+
+```html
+<p
+  style="line-height: 1.15; margin-top: 6pt; margin-bottom: 6pt; margin-left: 36pt; margin-right: 0pt; text-indent: 18pt; border-bottom: 1pt solid #000000; background-color: #eeeeee"
+  data-docx-style="Normal"
+  data-keep-next
+  data-page-break-before
+></p>
+```
+
+| Champ               | Type                             | Sérialisation                                                                                                                                                                                                                                                   |
+| ------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lineHeight`        | `number \| null`                 | `line-height: 1.15`, multiple sans unité. Exclusif de `lineHeightPt`, qui l'emporte.                                                                                                                                                                            |
+| `lineHeightPt`      | `number \| null`                 | `line-height: 14pt`, exact.                                                                                                                                                                                                                                     |
+| `spacingBeforePt`   | `number \| null`                 | `margin-top`                                                                                                                                                                                                                                                    |
+| `spacingAfterPt`    | `number \| null`                 | `margin-bottom`                                                                                                                                                                                                                                                 |
+| `indentLeftPt`      | `number \| null`                 | `margin-left`                                                                                                                                                                                                                                                   |
+| `indentRightPt`     | `number \| null`                 | `margin-right`                                                                                                                                                                                                                                                  |
+| `indentFirstLinePt` | `number \| null`                 | `text-indent` ; négatif = retrait suspendu.                                                                                                                                                                                                                     |
+| `borders`           | `readonly BlockBorder[] \| null` | `border-<côté>: <pt> <style> <#rrggbb>` par côté ; le côté `between` n'a pas d'équivalent CSS et va dans `data-border-between`.                                                                                                                                 |
+| `shading`           | `string \| null`                 | `background-color`, couleur CSS.                                                                                                                                                                                                                                |
+| `keepWithNext`      | `boolean \| null`                | `data-keep-next`                                                                                                                                                                                                                                                |
+| `pageBreakBefore`   | `boolean \| null`                | `data-page-break-before`                                                                                                                                                                                                                                        |
+| `docxStyle`         | `string \| null`                 | `data-docx-style` : identifiant du style Word d'origine (`Heading1`, `Normal`, style personnalisé), posé par l'import et relu par l'export dans le gabarit, qui ne réécrit en propriétés directes que ce qui diffère du style. Jamais interprété par l'éditeur. |
+
+`setHTML(getHTML())` doit conserver chaque attribut à l'identique. `PARAGRAPH_LAYOUT_ATTR_NAMES` est le tuple `as const` des douze noms dans l'ordre de sérialisation ; `ParagraphLayoutAttrName` en est l'union.
+
+### `RunLayoutAttrs` et `DecorationStyle`
+
+Attributs de run portés par la marque `textStyle` en plus de ceux de Tiptap (`fontFamily`, `fontSize`, `color`, `backgroundColor`), sérialisés dans le `style` du `<span>` :
+
+| Champ             | Type                       | Sérialisation                                            |
+| ----------------- | -------------------------- | -------------------------------------------------------- |
+| `letterSpacingPt` | `number \| null`           | `letter-spacing: 1pt`                                    |
+| `caps`            | `'all' \| 'small' \| null` | `text-transform: uppercase` / `font-variant: small-caps` |
+| `docxRunStyle`    | `string \| null`           | `data-docx-run-style` : nom du style de caractère Word.  |
+
+`DecorationStyle = 'solid' | 'double' | 'dotted' | 'dashed' | 'wavy'` : style de trait des marques `underline` et `strike`, `style="text-decoration-style: …"`.
+
+### `ListLayoutAttrs` et `OrderedListType`
+
+`OrderedListType = '1' | 'a' | 'A' | 'i' | 'I'` (valeurs de l'attribut HTML `type`). `<ol type="a" start="3" data-docx-num-id="5">`, `<ul data-bullet="–" data-docx-num-id="7">` :
+
+| Champ       | Type                      | Description                                                                                               |
+| ----------- | ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `type`      | `OrderedListType \| null` | Format de numérotation.                                                                                   |
+| `start`     | `number \| null`          | Premier numéro.                                                                                           |
+| `bullet`    | `string \| null`          | Caractère de puce.                                                                                        |
+| `docxNumId` | `string \| null`          | Relie la liste à la définition de numérotation du gabarit pour l'export, jamais interprété par l'éditeur. |
+
+### `TableLayoutAttrs`, `CellLayoutAttrs`, `CellVerticalAlign`
+
+Table : `width: 100%` ou `width: 450pt`, `border-collapse` implicite, `data-docx-style`. Cellule : `border-top: 0.5pt solid #000000` (un par côté), `background-color: #rrggbb`, `vertical-align: middle`, `padding: 2pt 4pt`. `colwidth` reste celui de Tiptap.
+
+| Type               | Champ           | Type                                                | Description                                         |
+| ------------------ | --------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `TableLayoutAttrs` | `width`         | `string \| null`                                    | `100%` ou `450pt`.                                  |
+|                    | `borders`       | `readonly BlockBorder[] \| null`                    | Bordures extérieures.                               |
+|                    | `docxStyle`     | `string \| null`                                    | Nom du style de tableau Word.                       |
+| `CellLayoutAttrs`  | `borders`       | `readonly BlockBorder[] \| null`                    |                                                     |
+|                    | `shading`       | `string \| null`                                    | Fond.                                               |
+|                    | `verticalAlign` | `CellVerticalAlign \| null`                         | `'top' \| 'middle' \| 'bottom'`.                    |
+|                    | `paddingPt`     | `readonly [number, number, number, number] \| null` | Marges internes en points, `top right bottom left`. |
+
+### `PageViewOptions`
+
+Vue page : l'hôte de l'éditeur rend une feuille aux dimensions et marges de `layout.page`, avec les en-têtes et pieds `default` en lecture seule au-dessus et au-dessous du corps. La pagination est **approximative** : des coupures visuelles sont posées là où la hauteur utile de la page est dépassée (blocs insécables, sauts de page explicites respectés), sans garantie d'exactitude avec Word.
+
+| Champ                | Type             | Défaut | Description                                                                              |
+| -------------------- | ---------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `layout`             | `DocumentLayout` | `{}`   | Mise en page affichée.                                                                   |
+| `showHeadersFooters` | `boolean`        | `true` | Afficher les en-têtes et pieds.                                                          |
+| `pagination`         | `boolean`        | `true` | Pagination approximative (coupures visuelles, numéros de page). Ajouté par L30, additif. |
+
+## 📝 Propositions de contrat de la session 3
+
+Les lots proposent, l'orchestrateur tranche (`docs/JOURNAL.md`, session 3). État au gel de 0.5.0 :
+
+| Proposition                                                                                           | Origine  | Décision                                                                                                                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PageViewOptions.pagination`                                                                          | L30      | **Acceptée**, additive, dans `layout.ts`.                                                                                                                                                                                     |
+| `paragraph.setLayout` / `paragraph.unsetLayout` dans `STANDARD_COMMAND_IDS`                           | phase 0  | **Acceptée** (contrat figé en phase 0).                                                                                                                                                                                       |
+| `setPageView(options)` / `getLayout()` dans `api/editor.ts`                                           | L23, L26 | **Différée.** Implémentées sur `AsterEditorImpl`, hors interface `AsterEditor` ; `ui` (`pageViewApiOf`) et `angular` les détectent à l'exécution. À entrer dans le contrat en 0.6 avec le changement de défaut de `fidelity`. |
+| `text.setLetterSpacing` / `text.setCaps` / `text.unsetCaps` dans le contrat                           | L23, L26 | **Différée.** Enregistrées comme commandes additives (`TEXT_LAYOUT_COMMAND_IDS`), surcharge libre de `run`.                                                                                                                   |
+| `image.setAttributes.height` (hauteur d'image, verrou de proportions)                                 | L26      | **Différée.** Le dialogue d'image de `ui` propose la hauteur et le verrou ; le core accepte `height: null` (effacement) et ignore une hauteur explicite tant que le contrat ne la déclare pas.                                |
+| `DocumentLayout.defaultParagraph` (interligne et espacement par défaut du document, pour la vue page) | L24      | **Différée.** Les valeurs des `docDefaults` sont écrites sur chaque bloc qui en diffère ; la vue page n'en a pas eu besoin.                                                                                                   |
+| `DocxStyleResolver.docDefaults()`, `TableStyleProps.paragraphDefaults`                                | L24, L25 | **Acceptées** dans le contrat interne du lecteur (`packages/word/src/docx/reader/types.ts`), pas dans `api/` du core.                                                                                                         |
+
 ## 🏭 Fabrique
 
 ```ts
 function createEditor(options: AsterOptions): AsterEditor;
 ```
 
-Crée un éditeur monté dans `options.element`. Fabrique plutôt que classe exposée : le contrat public est l'interface `AsterEditor`.
+Crée un éditeur monté dans `options.element`. Fabrique plutôt que classe exposée : le contrat public est l'interface `AsterEditor`. L'implémentation expose en plus `setPageView` et `getLayout` (voir « Propositions de contrat »).

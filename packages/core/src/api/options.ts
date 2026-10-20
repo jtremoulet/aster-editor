@@ -49,7 +49,7 @@ export interface AsterOptions {
   variables?: VariableSource;
   /**
    * Vue page : feuille aux dimensions et marges de `layout.page`, en-têtes et pieds
-   * affichés en lecture seule. `true` = A4 portrait par défaut. Pas de pagination.
+   * affichés en lecture seule. `true` = A4 portrait par défaut. Pagination approximative, désactivable par `pagination: false`.
    */
   pageView?: boolean | PageViewOptions;
   /**

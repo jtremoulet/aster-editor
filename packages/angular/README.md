@@ -256,7 +256,9 @@ les images embarquées. Appelé avant le montage, il rejette avec une erreur exp
 l'import est **stylé** (`importFidelity: 'styled'`) : polices, tailles, couleurs, interlignes,
 bordures, tableaux et listes sont conservés, et le composant garde le gabarit et la mise en page
 du document, voir « Fidélité Word ». `importFidelity: 'semantic'` retrouve le HTML propre de
-mammoth (comportement 0.4.x), sans mise en page.
+mammoth (comportement 0.4.x), sans mise en page. Attention à la différence avec la lib : le
+composant choisit `styled` pour toi, alors que `importDocx` de `@aster-editor/word` appelé
+directement reste en `semantic` en 0.5.0 (bascule prévue en 0.6).
 
 > ⚠️ **Vite à froid** : sur `ng serve`, le tout premier `importDocx` d'une session déclenche
 > l'optimisation de `mammoth` par Vite et **recharge la page** en plein import, sans erreur.
@@ -410,10 +412,13 @@ ait à les connaître.
 
 `pageView` (`true`, ou `{ layout, pagination, showHeadersFooters }`) rend une feuille aux
 dimensions et marges de `layout()`, avec les en-têtes et pieds `default` en lecture seule
-au-dessus et au-dessous du corps ; importe `@aster-editor/ui/themes/page.css` (inclus dans
-`aster.css`). Après un import, la mise en page lue est appliquée à la vue page active. Le bouton
-« Mise en page » de la toolbar (presets `standard` et `full`) peut l'activer, la modifier ou la
-retirer : le composant relit alors la mise en page, `layout()` suit et `layoutChanged` est émis.
+au-dessus et au-dessous du corps et une pagination **approximative** (coupures « Page n sur N »
+posées en décorations, jamais dans le HTML) ; importe `@aster-editor/ui/themes/page.css` (inclus
+dans `aster.css`). Après un import, la mise en page lue est appliquée à la vue page active. Le
+bouton « Mise en page » de la toolbar (widget `pageLayout`, preset `full` ; `standard` n'a que
+l'interligne et les retraits) peut l'activer, la modifier ou la retirer : le composant relit alors
+la mise en page, `layout()` suit et `layoutChanged` est émis. La vue page survit à un remontage
+(`toolbar`). `config.pageView` est honoré, l'input dédié prime.
 
 L'input `layout` impose une mise en page : il prime sur celle de l'import et sur celle du
 dialogue, se répercute sur la vue page active et sur `exportDocx`. Comme il masque ce que le
@@ -443,26 +448,40 @@ const report = await this.editor().compareWithTemplate();
 if (report) console.log(report.score, report.properties, report.changedParts);
 ```
 
-`compareWithTemplate()` exporte le document courant dans son gabarit puis le compare à
-l'original propriété par propriété (`compareDocx` de `word`) : score pondéré entre 0 et 1,
-propriétés conservées / perdues par groupe (`text`, `paragraph-format`, `run-format`, `table`,
-`header-footer`, `package-part`…) avec des exemples, parties du paquet identiques ou non,
-objets perdus. `null` sans gabarit importé. Un aller-retour sans modification vise un score ≥
-0,98 ; c'est le critère d'acceptation, pas une impression visuelle.
+`compareWithTemplate()` exporte le document courant dans son gabarit (valeurs du magasin de
+variables, mise en page effective, comme `exportDocx({ template })`) puis le compare à
+l'original propriété par propriété (`compareDocx` de `word`, chargé à la demande) : score
+pondéré entre 0 et 1, propriétés conservées / perdues par groupe (`text`, `paragraph-style`,
+`paragraph-format`, `run-format`, `list`, `table`, `image`, `note`, `header-footer`, `section`,
+`package-part`) avec jusqu'à cinq exemples, parties du paquet identiques ou non, objets perdus,
+notes. `null` sans gabarit importé. Un aller-retour sans modification vise un score ≥ 0,98 ;
+c'est le critère d'acceptation, pas une impression visuelle. Scores mesurés sur les fixtures et
+le document client dans [`fixtures/docx/README.md`](../../fixtures/docx/README.md) (1 pour les
+fixtures 11, 13 et 15 ; 0,889 pour le document client, dont les trois sections ressortent en
+une seule).
 
 ### Limites
 
 - **Pas de pagination exacte** : la vue page donne le format, les marges, les en-têtes et pieds,
   les sauts de page explicites, et une pagination **approximative** (coupures visuelles, numéros
-  de page) qui ne garantit pas le même nombre de pages que Word.
+  de page, tableaux et listes jamais coupés) qui ne garantit pas le même nombre de pages que Word.
 - **Objets non représentables** : conservés tels quels dans le gabarit quand ils sont hors du
   corps (en-têtes, pieds), remplacés par leur texte et listés dans `lostObjects()` quand ils sont
   dans le corps édité.
-- Avec un gabarit, les options `page`, `header`, `footer`, `defaultFont`, `lang`,
-  `headingStyles` de l'export sont ignorées : le gabarit les porte.
+- **Sections multiples** : seule la dernière section du document est lue (`layout()`) et
+  survit à l'export dans le gabarit ; un document à plusieurs formats de page ressort avec un
+  seul.
+- Avec un gabarit, les options `page`, `pageSize`, `header`, `footer`, `defaultFont`, `lang`,
+  `headingStyles` de l'export sont ignorées, ainsi que `layout.page`, `layout.columns`,
+  `layout.titlePage`, `layout.defaultFont` et `layout.lang` : le gabarit les porte (JSDoc de
+  `template` dans `packages/word/src/export/types.ts`). `variables`, `toc`, `numberedHeadings`,
+  `title`, `creator`, `layout.headers` et `layout.footers` s'appliquent.
 - Seuls les en-têtes et pieds `default` sont affichés par la vue page ; `first` et `even` sont
-  conservés dans le gabarit et dans `layout()`.
-- Le chemin `semantic` ne renseigne ni `layout()` (objet vide) ni `lostObjects()`.
+  conservés dans le gabarit et dans `layout()`. Un en-tête ou pied édité via `[layout]` est
+  régénéré par l'export neuf et perd ce que celui-ci ne sait pas écrire (tableaux complexes,
+  images ancrées, champs autres que `PAGE` / `NUMPAGES` / fusion).
+- Le chemin `semantic` ne renseigne ni `layout()` (objet vide) ni `lostObjects()` ; le gabarit
+  (`importedTemplate()`) est conservé sur les deux chemins.
 
 ## 📋 Collage depuis Word
 
@@ -487,8 +506,8 @@ représentables).
 ## 🧪 Tests
 
 ```bash
-npx ng test aster-angular --watch=false   # 49 tests du composant et de provideAster
-npx ng test demo --watch=false            # 30 tests des pages de la démo
+npx ng test aster-angular --watch=false   # 49 tests du composant et de provideAster (importFidelity, exportInTemplate, pageView, layout, compareWithTemplate compris)
+npx ng test demo --watch=false            # 30 tests des pages de la démo (Import : sélecteur styled / semantic ; Modèle : vue page, en-tête et pied, rapport de fidélité, objets perdus)
 npm run e2e -- --project=demo             # tests Playwright sur la démo, page Modèle comprise (ng serve lancé par Playwright)
 ```
 

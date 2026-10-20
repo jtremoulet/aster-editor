@@ -85,7 +85,7 @@ export interface DocxImportOptions {
    */
   emptyParagraphs?: 'keep' | 'drop';
   /**
-   * Chemin de lecture. `styled` (défaut à partir de 0.5.0) : lecteur OOXML d'Aster, HTML
+   * Chemin de lecture. `styled` (défaut du composant Angular, de la démo et du playground ; défaut de la lib prévu en 0.6) : lecteur OOXML d'Aster, HTML
    * stylé (polices, interlignes, bordures, tableaux complets, listes fidèles), `layout`
    * renseigné. `semantic` : mammoth, HTML sémantique sans mise en forme, comportement
    * des versions 0.4.x.
