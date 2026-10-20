@@ -1,0 +1,204 @@
+/*
+ * Aster Editor — variables de document (champs de fusion).
+ * Puce `span.aster-variable` (NodeView du core), widget `variable` de la toolbar,
+ * panneau de suggestion `{{` et dialogue d'édition de puce.
+ * Complète `base.css` ; mêmes variables `--aster-*`, aucune valeur en dur hors repli.
+ */
+
+/* ---------- Puce dans le contenu ----------------------------------------- */
+
+.aster-content .ProseMirror .aster-variable {
+  display: inline;
+  padding: 0.05em 0.45em;
+  margin: 0 0.05em;
+  border: 1px solid var(--aster-border);
+  border-radius: var(--aster-radius);
+  background: var(--aster-accent-soft);
+  color: var(--aster-text);
+  font-family: var(--aster-font-ui);
+  font-size: 0.9em;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.aster-content .ProseMirror .aster-variable--resolved {
+  border-color: var(--aster-accent);
+  font-style: normal;
+}
+
+/* Valeur connue mais vide : la puce resterait invisible, on affiche « ∅ » en muet. */
+.aster-content .ProseMirror .aster-variable--resolved:empty::before {
+  content: '\2205';
+  color: var(--aster-text-muted);
+}
+
+.aster-content .ProseMirror .aster-variable--unresolved {
+  border-style: dashed;
+  border-color: var(--aster-danger);
+  color: var(--aster-text-muted);
+  font-style: italic;
+}
+
+.aster-content .ProseMirror .aster-variable.ProseMirror-selectednode,
+.aster-content .ProseMirror .aster-variable--selected {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--aster-accent);
+  background: var(--aster-selection);
+}
+
+/* Décoration posée par @tiptap/suggestion sur le texte `{{…` en cours de saisie. */
+.aster-content .ProseMirror .aster-variable-suggestion__decoration {
+  border-radius: 2px;
+  background: var(--aster-accent-soft);
+  box-shadow: 0 1px 0 var(--aster-accent);
+}
+
+/* ---------- Entrée de variable (menu + suggestion) ----------------------- */
+
+.aster-variable-entry__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.aster-variable-entry__name {
+  flex: 0 0 auto;
+  color: var(--aster-text-muted);
+  font-family: var(--aster-font-mono);
+  font-size: 0.85em;
+}
+
+.aster-variable-entry__value {
+  flex: 0 1 auto;
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--aster-accent);
+  font-size: 0.85em;
+}
+
+.aster-variable-entry__unresolved {
+  flex: 0 0 auto;
+  padding: 0 var(--aster-space-1);
+  border: 1px dashed var(--aster-danger);
+  border-radius: var(--aster-radius);
+  color: var(--aster-danger);
+  font-size: 0.75em;
+  line-height: 1.5;
+}
+
+/* ---------- Widget `variable` (menu de la toolbar) ----------------------- */
+
+.aster-variable-menu {
+  min-width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.aster-variable-menu__item {
+  gap: var(--aster-space-2);
+}
+
+.aster-variable-menu__empty {
+  padding: var(--aster-space-1) var(--aster-space-2);
+  color: var(--aster-text-muted);
+  font-size: 0.9em;
+}
+
+.aster-variable-menu__new {
+  margin-top: var(--aster-space-1);
+  padding-top: var(--aster-space-1);
+  border-top: 1px solid var(--aster-border);
+  border-radius: 0 0 var(--aster-radius) var(--aster-radius);
+}
+
+/* Formulaire « Nouvelle variable » : le panneau `menu` prend la mise en page d'un dialogue. */
+.aster-variable-menu--create {
+  gap: var(--aster-space-3);
+  padding: var(--aster-space-3);
+}
+
+.aster-variable-menu__name {
+  font-family: var(--aster-font-mono);
+}
+
+/* ---------- Panneau de suggestion `{{` ----------------------------------- */
+
+.aster-variable-suggestion {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 240px;
+  max-width: 360px;
+  max-height: 280px;
+  padding: var(--aster-space-1);
+  overflow-y: auto;
+  background: var(--aster-surface);
+  color: var(--aster-text);
+  border: 1px solid var(--aster-border);
+  border-radius: var(--aster-radius-lg);
+  box-shadow: var(--aster-shadow);
+  font-family: var(--aster-font-ui);
+  font-size: var(--aster-font-size-ui);
+}
+
+.aster-variable-suggestion[hidden] {
+  display: none;
+}
+
+.aster-variable-suggestion__option {
+  justify-content: flex-start;
+  gap: var(--aster-space-2);
+  width: 100%;
+  height: auto;
+  min-height: var(--aster-button-size);
+  padding: var(--aster-space-1) var(--aster-space-2);
+  text-align: left;
+}
+
+.aster-variable-suggestion__option--selected,
+.aster-variable-suggestion__option[aria-selected='true'] {
+  background: var(--aster-accent-soft);
+  color: var(--aster-accent);
+}
+
+.aster-variable-suggestion__option--create .aster-variable-entry__label {
+  color: var(--aster-accent);
+  font-weight: 600;
+}
+
+/* ---------- Dialogue d'édition de puce ----------------------------------- */
+
+.aster-variable-dialog {
+  position: fixed;
+  z-index: 60;
+  min-width: 300px;
+  background: var(--aster-surface);
+  color: var(--aster-text);
+  border: 1px solid var(--aster-border);
+  border-radius: var(--aster-radius-lg);
+  box-shadow: var(--aster-shadow);
+  font-family: var(--aster-font-ui);
+  font-size: var(--aster-font-size-ui);
+}
+
+.aster-variable-dialog[hidden] {
+  display: none;
+}
+
+.aster-variable-dialog__title {
+  padding-bottom: var(--aster-space-2);
+  border-bottom: 1px solid var(--aster-border);
+}
+
+.aster-variable-dialog__title .aster-variable-entry__name {
+  color: var(--aster-text);
+  font-size: 1em;
+}

@@ -1,0 +1,115 @@
+/*
+ * Aster Editor — recherche / remplacement, vue source HTML, plein écran.
+ * Complète `base.css` ; mêmes variables `--aster-*`, aucune valeur en dur hors repli.
+ */
+
+/* ---------- Surlignage des correspondances ------------------------------- */
+
+.aster-content .ProseMirror .aster-search-match {
+  background: var(--aster-highlight, #fff176);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--aster-highlight, #fff176);
+}
+
+.aster-content .ProseMirror .aster-search-match--current {
+  background: var(--aster-accent-soft);
+  box-shadow: 0 0 0 2px var(--aster-accent);
+}
+
+/* ---------- Panneau de recherche ---------------------------------------- */
+
+.aster-search-panel {
+  min-width: 340px;
+}
+
+.aster-search-panel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--aster-space-2);
+}
+
+.aster-search-panel__row .aster-dialog__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aster-search-panel__count {
+  flex: 0 0 auto;
+  min-width: 3.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--aster-text-muted);
+  font-size: 0.9em;
+}
+
+.aster-search-panel__nav {
+  flex: 0 0 auto;
+  border-color: var(--aster-border);
+}
+
+.aster-search-panel__replace,
+.aster-search-panel__replace-all {
+  flex: 0 0 auto;
+}
+
+/* ---------- Vue source --------------------------------------------------- */
+
+.aster--source .aster-content[hidden],
+.aster--source .ProseMirror[hidden] {
+  display: none;
+}
+
+.aster-source {
+  display: block;
+  width: 100%;
+  min-height: var(--aster-content-min-height);
+  padding: var(--aster-space-3) var(--aster-space-4);
+  margin: 0;
+  border: 0;
+  border-radius: 0 0 var(--aster-radius-lg) var(--aster-radius-lg);
+  background: var(--aster-surface);
+  color: var(--aster-text);
+  font-family: var(--aster-font-mono);
+  font-size: var(--aster-font-size-ui);
+  line-height: 1.5;
+  tab-size: 2;
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+}
+
+.aster-source:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--aster-accent);
+}
+
+/* ---------- Plein écran -------------------------------------------------- */
+
+.aster--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: auto;
+  height: auto;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.aster--fullscreen .aster__toolbar {
+  border-radius: 0;
+}
+
+.aster--fullscreen .aster__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.aster--fullscreen .aster-source {
+  height: 100%;
+  border-radius: 0;
+  resize: none;
+}

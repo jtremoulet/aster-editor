@@ -1,0 +1,61 @@
+{
+  "name": "@aster-editor/ui",
+  "version": "0.4.2",
+  "description": "Toolbar vanilla et thèmes CSS pour Aster Editor",
+  "license": "MIT",
+  "author": "Joris Tremoulet",
+  "keywords": [
+    "aster-editor",
+    "toolbar",
+    "themes",
+    "vanilla",
+    "editor-ui"
+  ],
+  "homepage": "https://github.com/jtremoulet/aster-editor/tree/main/packages/ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtremoulet/aster-editor.git",
+    "directory": "packages/ui"
+  },
+  "bugs": {
+    "url": "https://github.com/jtremoulet/aster-editor/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./themes/*": "./themes/*"
+  },
+  "files": [
+    "dist",
+    "themes"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@aster-editor/core": "^0.4.2"
+  },
+  "dependencies": {
+    "@tiptap/suggestion": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@floating-ui/dom": "^1.8.0"
+  }
+}

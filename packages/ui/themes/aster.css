@@ -1,0 +1,12 @@
+/*
+ * Aster Editor — feuille tout-en-un : structure + thèmes light et night.
+ * Importe-la telle quelle, ou importe `base.css` + un seul thème pour alléger.
+ */
+@import './base.css';
+@import './images-tables.css';
+@import './search-source.css';
+@import './print.css';
+@import './variables.css';
+@import './bubbles.css';
+@import './light.css';
+@import './night.css';

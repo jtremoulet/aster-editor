@@ -1,0 +1,88 @@
+/** Options du normaliseur de collage Word. */
+export interface WordPasteOptions {
+  /** Conserver les couleurs de texte explicites. Faux par défaut : on privilégie le sémantique. */
+  keepColors?: boolean;
+  /** Conserver l'alignement des paragraphes. Vrai par défaut. */
+  keepAlignment?: boolean;
+  /**
+   * Fournisseur de `Document` pour parser le HTML. Par défaut `DOMParser` global.
+   * Injectable pour les tests et les environnements sans DOM.
+   */
+  parse?: (html: string) => Document;
+  /**
+   * Transformer `{{nom}}` en puce `<span data-aster-variable>`. Vrai par défaut ;
+   * `{ pattern }` remplace la syntaxe `{{nom}}` par un motif dont le groupe 1 est le nom.
+   */
+  variables?: boolean | PasteVariableOptions;
+}
+
+/** Motif de variable personnalisé pour le collage. */
+export interface PasteVariableOptions {
+  readonly pattern?: RegExp;
+}
+
+/** Détection des variables résolue, telle que la dernière passe la lit. */
+export interface ResolvedVariableOptions {
+  readonly enabled: boolean;
+  readonly pattern?: RegExp;
+}
+
+/** Applique le défaut (actif, syntaxe `{{nom}}`) à l'option `variables`. */
+export function resolveVariableOptions(
+  option: boolean | PasteVariableOptions | undefined,
+): ResolvedVariableOptions {
+  if (option === false) return { enabled: false };
+  if (option === true || option === undefined) return { enabled: true };
+  return option.pattern ? { enabled: true, pattern: option.pattern } : { enabled: true };
+}
+
+/**
+ * Format de numérotation d'un niveau de liste Word, tel que déclaré par
+ * `mso-level-number-format` dans le bloc `<style>` du presse-papier.
+ * `bullet` donne un `<ul>`, les autres un `<ol>` avec l'attribut `type` HTML correspondant.
+ */
+export type ListLevelFormat =
+  'bullet' | 'decimal' | 'alpha-lower' | 'alpha-upper' | 'roman-lower' | 'roman-upper';
+
+/**
+ * Déclaration d'un niveau de liste lue dans le `<style>` Word : son format et, quand
+ * `mso-level-start-at` est présent, le numéro de départ.
+ */
+export interface ListLevelDeclaration {
+  readonly format: ListLevelFormat;
+  readonly start?: number | undefined;
+}
+
+/**
+ * Options résolues passées à chaque passe du pipeline. Les valeurs par défaut sont
+ * appliquées une seule fois par `normalizeWordHtml`, les passes n'ont plus à les deviner.
+ */
+export interface ResolvedPasteOptions {
+  readonly keepColors: boolean;
+  readonly keepAlignment: boolean;
+  /**
+   * Déclarations lues dans le `<style>` Word, indexées par `lX:levelN` (ex. `l0:level1`)
+   * pour une définition, `lfoM:lX:levelN` pour l'override d'une instance. Vide quand le
+   * presse-papier ne contient pas de feuille de style, auquel cas les passes se rabattent
+   * sur le texte du marqueur de liste.
+   */
+  readonly listFormats: ReadonlyMap<string, ListLevelDeclaration>;
+  /** Détection des variables. Absente (options construites à la main) : active, `{{nom}}`. */
+  readonly variables?: ResolvedVariableOptions;
+}
+
+/** Signature commune des passes : elles mutent le `Document` en place et ne renvoient rien. */
+export type PastePass = (doc: Document, options: ResolvedPasteOptions) => void;
+
+/** Construit des options résolues avec les valeurs par défaut du normaliseur. */
+export function resolvePasteOptions(
+  options: WordPasteOptions = {},
+  listFormats: ReadonlyMap<string, ListLevelDeclaration> = new Map(),
+): ResolvedPasteOptions {
+  return {
+    keepColors: options.keepColors ?? false,
+    keepAlignment: options.keepAlignment ?? true,
+    listFormats,
+    variables: resolveVariableOptions(options.variables),
+  };
+}

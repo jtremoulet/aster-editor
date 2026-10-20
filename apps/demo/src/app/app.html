@@ -1,0 +1,17 @@
+<header class="demo-header">
+  <a class="demo-header__brand" routerLink="/">Aster Editor</a>
+  <nav class="demo-nav" aria-label="Pages de la démo">
+    @for (link of links; track link.path) {
+    <a
+      [routerLink]="link.path"
+      routerLinkActive="is-active"
+      [routerLinkActiveOptions]="{ exact: link.exact }"
+    >
+      {{ link.label }}
+    </a>
+    }
+  </nav>
+</header>
+<main class="demo-main">
+  <router-outlet />
+</main>

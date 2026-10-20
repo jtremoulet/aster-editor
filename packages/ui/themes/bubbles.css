@@ -1,0 +1,217 @@
+/*
+ * Aster Editor — bulles contextuelles (lien, image), menu `/`, sommaire et
+ * reproduction de mise en forme (lot L18).
+ * Complète `base.css` ; mêmes variables `--aster-*`, aucune valeur en dur hors repli.
+ * À importer après `base.css` (ou via `aster.css`).
+ */
+
+/* ---------- Bulles contextuelles ---------------------------------------- */
+
+.aster-bubble {
+  position: fixed;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--aster-space-1);
+  max-width: min(92vw, 560px);
+  padding: var(--aster-space-1);
+  background: var(--aster-surface);
+  color: var(--aster-text);
+  border: 1px solid var(--aster-border);
+  border-radius: var(--aster-radius-lg);
+  box-shadow: var(--aster-shadow);
+  font-family: var(--aster-font-ui);
+  font-size: var(--aster-font-size-ui);
+}
+
+.aster-bubble[hidden] {
+  display: none;
+}
+
+.aster-bubble__separator {
+  flex: 0 0 auto;
+  width: 1px;
+  height: calc(var(--aster-button-size) - var(--aster-space-2));
+  margin: 0 var(--aster-space-1);
+  background: var(--aster-border);
+}
+
+.aster-bubble__button {
+  flex: 0 0 auto;
+  gap: var(--aster-space-1);
+  padding: 0 var(--aster-space-2);
+}
+
+.aster-bubble__button--primary {
+  background: var(--aster-accent);
+  color: var(--aster-accent-contrast);
+}
+
+.aster-bubble__button--primary:hover:not(:disabled) {
+  background: var(--aster-accent);
+  filter: brightness(1.08);
+}
+
+.aster-bubble__button--danger {
+  color: var(--aster-danger);
+}
+
+.aster-bubble__button--danger:hover:not(:disabled) {
+  background: var(--aster-danger);
+  color: var(--aster-danger-contrast);
+}
+
+.aster-bubble__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 280px;
+  padding: 0 var(--aster-space-2);
+  overflow: hidden;
+  color: var(--aster-accent);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--aster-button-size);
+}
+
+.aster-bubble__url:hover {
+  text-decoration: underline;
+}
+
+.aster-bubble__url:focus-visible {
+  outline: none;
+  border-radius: var(--aster-radius);
+  box-shadow: var(--aster-focus-ring);
+}
+
+.aster-bubble__input {
+  flex: 1 1 auto;
+  min-width: 220px;
+}
+
+.aster-image-bubble__size {
+  min-width: calc(var(--aster-button-size) + var(--aster-space-2));
+  font-family: var(--aster-font-mono);
+  font-size: 0.85em;
+}
+
+/* ---------- Menu `/` ------------------------------------------------------ */
+
+.aster-slash-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 260px;
+  max-width: 380px;
+  max-height: 320px;
+  padding: var(--aster-space-1);
+  overflow-y: auto;
+  background: var(--aster-surface);
+  color: var(--aster-text);
+  border: 1px solid var(--aster-border);
+  border-radius: var(--aster-radius-lg);
+  box-shadow: var(--aster-shadow);
+  font-family: var(--aster-font-ui);
+  font-size: var(--aster-font-size-ui);
+}
+
+.aster-slash-menu[hidden] {
+  display: none;
+}
+
+.aster-slash-menu__option {
+  justify-content: flex-start;
+  gap: var(--aster-space-2);
+  width: 100%;
+  height: auto;
+  min-height: var(--aster-button-size);
+  padding: var(--aster-space-1) var(--aster-space-2);
+  text-align: left;
+}
+
+.aster-slash-menu__option--selected,
+.aster-slash-menu__option[aria-selected='true'] {
+  background: var(--aster-accent-soft);
+  color: var(--aster-accent);
+}
+
+.aster-slash-menu__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aster-slash-menu__shortcut {
+  flex: 0 0 auto;
+  color: var(--aster-text-muted);
+  font-family: var(--aster-font-mono);
+  font-size: 0.8em;
+}
+
+.aster-slash-menu__empty {
+  padding: var(--aster-space-1) var(--aster-space-2);
+  color: var(--aster-text-muted);
+  font-size: 0.9em;
+}
+
+/* Décoration posée par @tiptap/suggestion sur le texte `/…` en cours de saisie. */
+.aster-content .ProseMirror .aster-slash-menu__decoration {
+  border-radius: 2px;
+  background: var(--aster-accent-soft);
+}
+
+/* ---------- Sommaire (widget `outline`) --------------------------------- */
+
+.aster-outline {
+  min-width: 260px;
+  max-width: 420px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.aster-outline__item .aster-toolbar__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aster-outline__item--h1 {
+  font-weight: 600;
+}
+
+.aster-outline__item--h2 {
+  padding-left: calc(var(--aster-space-2) + var(--aster-space-3));
+}
+
+.aster-outline__item--h3 {
+  padding-left: calc(var(--aster-space-2) + 2 * var(--aster-space-3));
+}
+
+.aster-outline__item--h4 {
+  padding-left: calc(var(--aster-space-2) + 3 * var(--aster-space-3));
+}
+
+.aster-outline__item--h5 {
+  padding-left: calc(var(--aster-space-2) + 4 * var(--aster-space-3));
+}
+
+.aster-outline__item--h6 {
+  padding-left: calc(var(--aster-space-2) + 5 * var(--aster-space-3));
+}
+
+.aster-outline__empty {
+  padding: var(--aster-space-1) var(--aster-space-2);
+  color: var(--aster-text-muted);
+  font-size: 0.9em;
+}
+
+/* ---------- Reproduction de mise en forme (widget `formatPainter`) ------ */
+
+.aster-format-painter--locked,
+.aster-format-painter--locked[aria-pressed='true'] {
+  border-color: var(--aster-accent);
+  box-shadow: inset 0 0 0 1px var(--aster-accent);
+}

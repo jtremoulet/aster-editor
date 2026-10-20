@@ -1,0 +1,70 @@
+/*
+ * Aster Editor — thème « light » (par défaut).
+ *
+ * Ce fichier ne contient QUE des variables `--aster-*` sur `.aster[data-theme="light"]`.
+ * Pour créer un thème custom, copie ce fichier, change le sélecteur en
+ * `.aster[data-theme="mon-theme"]` et surcharge les valeurs. Aucune classe à toucher.
+ *
+ * Variables :
+ *   --aster-surface            fond principal (zone de contenu)
+ *   --aster-surface-2          fond secondaire (toolbar, menus, cellules d'en-tête)
+ *   --aster-surface-3          fond de survol et de code inline
+ *   --aster-text               couleur du texte principal
+ *   --aster-text-muted         texte secondaire (placeholder, libellés de taille)
+ *   --aster-accent             couleur d'accent (état actif, focus, liens, sélection)
+ *   --aster-accent-contrast    texte posé sur l'accent
+ *   --aster-accent-soft        accent translucide (fond de bouton actif, cellule sélectionnée)
+ *   --aster-border             bordures (toolbar, tables, champs)
+ *   --aster-border-strong      bordures appuyées (en-tête de table, focus de champ)
+ *   --aster-danger             actions destructives (supprimer le lien)
+ *   --aster-danger-contrast    texte posé sur le danger
+ *   --aster-radius             rayon des boutons et champs
+ *   --aster-radius-lg          rayon des panneaux et de l'éditeur
+ *   --aster-space-1 … -4       échelle d'espacements
+ *   --aster-font-ui            police de la toolbar et des dialogues
+ *   --aster-font-content       police du contenu éditable
+ *   --aster-font-mono          police du code
+ *   --aster-font-size-ui       taille de texte de l'UI
+ *   --aster-font-size-content  taille de texte du contenu
+ *   --aster-line-height        interligne du contenu
+ *   --aster-shadow             ombre des panneaux flottants
+ *   --aster-focus-ring         anneau de focus visible
+ *   --aster-button-size        côté des boutons de toolbar
+ *   --aster-content-min-height hauteur minimale de la zone de contenu
+ *   --aster-highlight          fond du mark `highlight` par défaut
+ *   --aster-selection          fond de la sélection de texte
+ */
+.aster[data-theme='light'] {
+  --aster-surface: #ffffff;
+  --aster-surface-2: #f5f6f8;
+  --aster-surface-3: #e9ebef;
+  --aster-text: #1c1f26;
+  --aster-text-muted: #5f6673;
+  --aster-accent: #2f5bea;
+  --aster-accent-contrast: #ffffff;
+  --aster-accent-soft: rgba(47, 91, 234, 0.14);
+  --aster-border: #d6d9e0;
+  --aster-border-strong: #a9afbb;
+  --aster-danger: #c62828;
+  --aster-danger-contrast: #ffffff;
+  --aster-radius: 6px;
+  --aster-radius-lg: 10px;
+  --aster-space-1: 4px;
+  --aster-space-2: 8px;
+  --aster-space-3: 12px;
+  --aster-space-4: 16px;
+  --aster-font-ui:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --aster-font-content: Georgia, 'Times New Roman', serif;
+  --aster-font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  --aster-font-size-ui: 14px;
+  --aster-font-size-content: 16px;
+  --aster-line-height: 1.6;
+  --aster-shadow: 0 8px 24px rgba(16, 20, 30, 0.14);
+  --aster-focus-ring: 0 0 0 2px var(--aster-surface), 0 0 0 4px var(--aster-accent);
+  --aster-button-size: 32px;
+  --aster-content-min-height: 200px;
+  --aster-highlight: #fff176;
+  --aster-selection: rgba(47, 91, 234, 0.22);
+  color-scheme: light;
+}

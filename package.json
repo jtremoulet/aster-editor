@@ -1,0 +1,69 @@
+{
+  "name": "aster-editor",
+  "version": "0.4.2",
+  "private": true,
+  "description": "Éditeur de texte riche MIT, framework-agnostic, avec wrapper Angular et import Word",
+  "license": "MIT",
+  "author": "Joris Tremoulet",
+  "type": "module",
+  "packageManager": "npm@11.19.0",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "workspaces": [
+    "packages/core",
+    "packages/word",
+    "packages/ui",
+    "packages/angular"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/core -w packages/word -w packages/ui && ng build aster-angular",
+    "test": "npm run test --workspaces --if-present && ng test demo --watch=false",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write .",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p apps/demo/tsconfig.app.json --noEmit && tsc -p e2e/tsconfig.json --noEmit",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "demo": "ng serve demo",
+    "demo:build": "ng build demo",
+    "fixtures": "node scripts/generate-fixtures.ts && node scripts/generate-fixtures-extra.ts && node scripts/generate-fixtures-variables.ts",
+    "playground": "node scripts/vanilla-playground.mjs",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
+    "version:set": "node scripts/set-version.mjs",
+    "smoke:install": "node scripts/smoke-install.mjs",
+    "release:dry": "node scripts/release.mjs --dry-run",
+    "release": "node scripts/release.mjs"
+  },
+  "dependencies": {
+    "@angular/common": "^22.2.0",
+    "@angular/compiler": "^22.2.0",
+    "@angular/core": "^22.2.0",
+    "@angular/forms": "^22.2.0",
+    "@angular/platform-browser": "^22.2.0",
+    "@angular/router": "^22.2.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.2",
+    "@angular/cli": "^22.2.2",
+    "@angular/compiler-cli": "^22.2.0",
+    "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "docx": "^9.10.0",
+    "eslint": "^10.0.0",
+    "jsdom": "^30.0.0",
+    "ng-packagr": "^22.2.0",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtremoulet/aster-editor.git"
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm",
+    "analytics": false
+  },
+  "projects": {
+    "demo": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "apps/demo",
+      "sourceRoot": "apps/demo/src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "apps/demo/src/main.ts",
+            "tsConfig": "apps/demo/tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "apps/demo/public"
+              }
+            ],
+            "styles": ["apps/demo/src/styles.css"],
+            "allowedCommonJsDependencies": [
+              "mammoth",
+              "lop",
+              "base64-js",
+              "jszip",
+              "dingbat-to-unicode",
+              "xmlbuilder",
+              "@xmldom/xmldom",
+              "@xmldom/xmldom/lib/dom"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "demo:build:production"
+            },
+            "development": {
+              "buildTarget": "demo:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test"
+        }
+      }
+    },
+    "aster-angular": {
+      "projectType": "library",
+      "root": "packages/angular",
+      "sourceRoot": "packages/angular/src",
+      "prefix": "aster",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "configurations": {
+            "production": {
+              "tsConfig": "packages/angular/tsconfig.lib.prod.json"
+            },
+            "development": {
+              "tsConfig": "packages/angular/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production",
+          "options": {
+            "project": "packages/angular/ng-package.json"
+          }
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "packages/angular/tsconfig.spec.json"
+          }
+        }
+      }
+    }
+  }
+}
