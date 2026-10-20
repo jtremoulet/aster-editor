@@ -3,6 +3,7 @@ import type { CommandRegistry } from './commands';
 import type { AsterCounts, AsterDocument } from './document';
 import type { AsterEventName, AsterEvents, Unsubscribe } from './events';
 import type { I18n } from './i18n';
+import type { DocumentLayout, PageViewOptions, SectionLayout } from './layout';
 import type { GetHtmlOptions, VariableStore } from './variables';
 
 /**
@@ -74,6 +75,32 @@ export interface AsterEditor {
   setReadOnly(value: boolean): void;
   isReadOnly(): boolean;
   isDestroyed(): boolean;
+
+  // --- Vue page (session 4, L45b : entrée au contrat, additif) ------------
+
+  /**
+   * Active, remplace ou retire la vue page : classe `aster--page-view` et variables
+   * `--aster-page-*` sur `element`, conteneurs d'en-tête et de pied autour du corps.
+   * `true` vaut `{}` (A4 portrait, marges 25,4 mm), `false` retire tout. Indépendante de
+   * la lecture seule. Une mise en page hostile (qui lève à la lecture) laisse la vue
+   * précédente en place et relaie l'erreur. Émet `pageViewChange` une fois l'état à jour,
+   * en plus de l'événement DOM `aster:page-view-change` sur `contentElement`.
+   *
+   * Optionnelle, comme `getLayout` et `getSectionLayout` : `createEditor` les fournit
+   * toujours, mais un double de test ou un core réduit peut ne pas porter de vue page
+   * (`ui` les détecte déjà à l'exécution). Elles deviendront obligatoires quand tous les
+   * doubles les porteront.
+   */
+  setPageView?(options: boolean | PageViewOptions): void;
+  /** Mise en page de la vue page active (`options.layout`, ou `{}` pour `true`), `null` si elle est inactive. */
+  getLayout?(): DocumentLayout | null;
+  /**
+   * Mise en page de la section `index` (numéro 1-based, celui de `data-section-break` et
+   * de `getSections`) dans la vue page active : `layout.sections[index - 1]`, sinon les
+   * champs de premier niveau (seule section d'un document sans `sections`, copie de la
+   * dernière sinon). `null` hors vue page.
+   */
+  getSectionLayout?(index: number): SectionLayout | null;
 
   // --- Événements ----------------------------------------------------------
 

@@ -92,6 +92,8 @@ export interface StandardCommandArgs {
     alt?: string;
     title?: string;
     width?: number;
+    /** Hauteur explicite en pixels (session 4, L45b) ; `0` ou absente avec `width` : hauteur automatique (ratio conservé). */
+    height?: number;
     align?: 'left' | 'center' | 'right';
   };
   'table.insert': { rows: number; cols: number; withHeaderRow?: boolean };

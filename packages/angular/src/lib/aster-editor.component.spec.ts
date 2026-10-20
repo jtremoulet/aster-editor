@@ -720,6 +720,41 @@ describe('AsterEditorComponent', () => {
       expect(next?.element.classList.contains('aster--page-view')).toBe(false);
     });
 
+    it('suit pageViewChange du contrat : une vue posée sans layout n’adopte rien, une mise en page explicite oui (L45b)', async () => {
+      const { fixture, component, editor } = await mount({ toolbar: 'minimal' });
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+      expect(component.layout()).toBeNull();
+
+      // `pageView: true` à chaud : le core résout `{}` mais le composant n'adopte pas une
+      // mise en page vide (même comportement que la relecture sur l'événement DOM).
+      fixture.componentRef.setInput('pageView', true);
+      fixture.detectChanges();
+      expect(editor.element.classList.contains('aster--page-view')).toBe(true);
+      expect(editor.getLayout?.()).toEqual({});
+      expect(component.layout()).toBeNull();
+      expect(layoutChanged).not.toHaveBeenCalled();
+
+      // Appel direct par le contrat (plus de duck typing) : la mise en page est adoptée.
+      const fromContract = { page: { size: 'A5' as const } };
+      editor.setPageView?.({ layout: fromContract });
+      expect(component.layout()).toBe(fromContract);
+      // `layoutChanged` part de l'effet sur `layout()` : au prochain rendu.
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+      expect(layoutChanged).toHaveBeenCalledWith(fromContract);
+
+      // L'événement DOM seul (intégrateur vanilla) ne pilote plus le composant.
+      editor.contentElement.dispatchEvent(new CustomEvent('aster:page-view-change'));
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+
+      editor.setPageView?.(false);
+      fixture.detectChanges();
+      expect(component.layout()).toBe(fromContract);
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+    });
+
     it('config.pageView est honoré et l’input dédié prime', async () => {
       const { fixture, editor } = await mount({ config: { pageView: true } });
       expect(editor.element.classList.contains('aster--page-view')).toBe(true);

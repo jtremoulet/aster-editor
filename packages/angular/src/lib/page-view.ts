@@ -1,12 +1,14 @@
 import { getActivePageView } from '@aster-editor/core';
-import type { AsterEditor, DocumentLayout, PageViewOptions } from '@aster-editor/core';
+import type { AsterEditor, DocumentLayout, PageViewOptions, Unsubscribe } from '@aster-editor/core';
 import { pageViewApiOf } from '@aster-editor/ui';
 
 /**
- * Vue page du composant. Le core expose `setPageView` / `getLayout` hors contrat
- * (`api/editor.ts` ne les déclare pas encore) : on passe par `pageViewApiOf` de `ui`, qui
- * les détecte à l'exécution, et par `getActivePageView` du core pour relire les options
- * en vigueur (le dialogue « Mise en page » de la toolbar peut les avoir changées).
+ * Vue page du composant. `setPageView` / `getLayout` sont entrés au contrat en L45b, mais
+ * optionnels (un double de test peut ne pas les porter) : on passe encore par
+ * `pageViewApiOf` de `ui`, qui les détecte à l'exécution (simplification reportée, L45
+ * point 8), et par `getActivePageView` du core pour relire les options en vigueur (le
+ * dialogue « Mise en page » de la toolbar peut les avoir changées). Les changements sont
+ * suivis via l'événement `pageViewChange` du contrat (`onPageViewChange`).
  */
 
 /** Valeur de l'input `pageView` du composant, identique à `AsterUiOptions.pageView`. */
@@ -42,20 +44,36 @@ export function setPageView(editor: AsterEditor, options: PageViewInput): void {
 }
 
 /**
- * Mise en page de la vue page active, `null` si elle est inactive ou si le core ne l'expose
- * pas. L'activité est lue via `getActivePageView` : pendant la notification de retrait
- * (`setPageView` retire l'ancienne vue avant de poser la nouvelle), l'ancienne mise en page
- * est encore lisible par `getLayout` mais la vue n'est plus active, et doit être ignorée.
+ * Mise en page de la vue page active au montage, `null` si elle est inactive ou si le core
+ * ne l'expose pas : celle des options actives (même référence que `pageView.layout`), sinon
+ * celle que le core a résolue (`{}` pour une vue posée sans mise en page), que le composant
+ * adopte comme base du dialogue « Mise en page ».
  */
 export function readPageViewLayout(editor: AsterEditor): DocumentLayout | null {
   const active = getActivePageView(editor.contentElement);
   if (!active) {
     return null;
   }
-  // Pendant la notification d'activation, `getLayout` ne connaît pas encore la nouvelle vue
-  // (le core l'affecte au retour de `applyPageView`) : les options actives, elles, sont déjà
-  // posées et portent la même référence de mise en page.
   return active.layout ?? pageViewApiOf(editor)?.getLayout() ?? null;
+}
+
+/**
+ * Suit les changements de vue page par l'événement `pageViewChange` du contrat (L45b), et
+ * non plus par l'événement DOM `aster:page-view-change`, qui reste aux intégrateurs vanilla.
+ * `handler` reçoit la mise en page à adopter : celle des **options** de la vue active, pas
+ * `payload.layout` — une vue posée sans mise en page (`setPageView(true)`, input `pageView`
+ * sans `layout`) ne pousse pas de `{}` au composant, exactement comme la relecture sur
+ * l'événement DOM (où `getLayout` ne connaissait pas encore la nouvelle vue) ; seule une
+ * mise en page explicitement donnée (dialogue, input) est adoptée. `null` quand la vue est
+ * retirée, ce que le composant ignore aussi.
+ */
+export function onPageViewChange(
+  editor: AsterEditor,
+  handler: (layout: DocumentLayout | null) => void,
+): Unsubscribe {
+  return editor.on('pageViewChange', ({ active }) => {
+    handler(active ? (getActivePageView(editor.contentElement)?.layout ?? null) : null);
+  });
 }
 
 /**

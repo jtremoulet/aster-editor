@@ -9,7 +9,7 @@ export interface ImageAttributeUpdate {
   alt?: string | null;
   title?: string | null;
   width?: number | null;
-  height?: null;
+  height?: number | null;
   align?: 'left' | 'center' | 'right' | null;
 }
 
@@ -19,6 +19,11 @@ export interface ImageAttributeUpdate {
  * négative efface `width` (retour à la taille naturelle) et `height` avec elle ;
  * un alignement inconnu est ignoré. Le contrat (`width?: number`) ne prévoit pas
  * `null` : c'est ce qui permet à l'UI de revenir à la largeur automatique.
+ *
+ * `height` (L45b) : une largeur seule efface la hauteur, l'image garde son ratio
+ * (`height: auto` en CSS) ; une hauteur positive est écrite telle quelle, après la
+ * largeur, et casse le ratio — c'est ce que le dialogue envoie quand son verrou de
+ * proportions est levé ; `0` ou négative efface la hauteur seule.
  */
 export function toImageAttributes(
   args: StandardCommandArgs['image.setAttributes'] | undefined,
@@ -36,6 +41,9 @@ export function toImageAttributes(
   if (typeof args.width === 'number' && Number.isFinite(args.width)) {
     update.width = args.width > 0 ? Math.round(args.width) : null;
     update.height = null;
+  }
+  if (typeof args.height === 'number' && Number.isFinite(args.height)) {
+    update.height = args.height > 0 ? Math.round(args.height) : null;
   }
   if (args.align !== undefined) {
     update.align = isImageAlignment(args.align) ? args.align : null;

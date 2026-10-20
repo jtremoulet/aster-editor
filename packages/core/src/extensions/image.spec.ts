@@ -8,6 +8,7 @@ import {
   IMAGE_SELECTED_CLASS,
   clampImageWidth,
   isImageAlignment,
+  parseImageHeight,
   parseImageWidth,
   type ImageEditEventDetail,
 } from './image';
@@ -84,6 +85,21 @@ describe('helpers purs', () => {
     expect(parseImageWidth(img)).toBeNull();
   });
 
+  it('parseImageHeight lit l’attribut height en entier positif, jamais le style', () => {
+    const img = document.createElement('img');
+    expect(parseImageHeight(img)).toBeNull();
+    img.setAttribute('style', 'height: 120px');
+    expect(parseImageHeight(img)).toBeNull();
+    img.setAttribute('height', '200');
+    expect(parseImageHeight(img)).toBe(200);
+    img.setAttribute('height', '12.7');
+    expect(parseImageHeight(img)).toBe(12);
+    img.setAttribute('height', 'abc');
+    expect(parseImageHeight(img)).toBeNull();
+    img.setAttribute('height', '0');
+    expect(parseImageHeight(img)).toBeNull();
+  });
+
   it('clampImageWidth borne entre le minimum et la largeur du conteneur', () => {
     expect(clampImageWidth(10, 800)).toBe(IMAGE_MIN_WIDTH);
     expect(clampImageWidth(900, 800)).toBe(800);
@@ -137,6 +153,32 @@ describe('extension Image', () => {
       expect(img?.hasAttribute('width')).toBe(false);
       expect(img?.style.width).toBe('');
       expect(img?.hasAttribute('title')).toBe(false);
+    });
+
+    it('applique height en attribut et en style inline, et le retire avec une largeur seule (L45b)', () => {
+      const img = figure(mounted).querySelector('img');
+      mounted.editor.tiptap.commands.setNodeSelection(imagePos(mounted));
+      mounted.editor.commands.run('image.setAttributes', { width: 200, height: 80 });
+      expect(img?.getAttribute('height')).toBe('80');
+      // La feuille `ui` pose `height: auto` : seul le style inline l'emporte.
+      expect(img?.style.height).toBe('80px');
+      expect(img?.style.width).toBe('200px');
+      mounted.editor.commands.run('image.setAttributes', { width: 100 });
+      expect(img?.hasAttribute('height')).toBe(false);
+      expect(img?.style.height).toBe('');
+      expect(img?.style.width).toBe('100px');
+    });
+
+    it('le drag lève la hauteur inline dès le mousedown et l’efface au relâchement', () => {
+      const img = figure(mounted).querySelector('img');
+      mounted.editor.tiptap.commands.setNodeSelection(imagePos(mounted));
+      mounted.editor.commands.run('image.setAttributes', { width: 200, height: 80 });
+      handle(mounted).dispatchEvent(mouse('mousedown', 0));
+      expect(img?.style.height).toBe('');
+      document.dispatchEvent(mouse('mouseup', 50));
+      expect(imageAttrs(mounted)['width']).toBe(250);
+      expect(imageAttrs(mounted)['height']).toBeNull();
+      expect(img?.hasAttribute('height')).toBe(false);
     });
 
     it('pose aster-image--selected quand le nœud est sélectionné, et le retire ensuite', () => {
@@ -255,6 +297,15 @@ describe('extension Image', () => {
     it('accepte style="width: Npx" en entrée et le sérialise en attribut width', () => {
       mounted.editor.setHTML(`<img src="${SRC}" style="width: 180px"><p>fin</p>`);
       expect(mounted.editor.getHTML()).toBe(`<img src="${SRC}" width="180"><p>fin</p>`);
+    });
+
+    it('sérialise height en entier et ignore une hauteur invalide (L45b)', () => {
+      const html = `<img src="${SRC}" width="240" height="120"><p>fin</p>`;
+      mounted.editor.setHTML(html);
+      expect(mounted.editor.getHTML()).toBe(html);
+      expect(figure(mounted).querySelector('img')?.style.height).toBe('120px');
+      mounted.editor.setHTML(`<img src="${SRC}" height="abc"><p>fin</p>`);
+      expect(mounted.editor.getHTML()).toBe(`<img src="${SRC}"><p>fin</p>`);
     });
 
     it('ignore un data-align inconnu et une largeur invalide', () => {

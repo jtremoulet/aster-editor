@@ -60,16 +60,56 @@ export function parseImageWidth(element: HTMLElement): number | null {
   return null;
 }
 
+/**
+ * Lit la hauteur d'un `<img>` : l'attribut `height` seul, en entier positif (L45b).
+ * Contrairement à la largeur, `style="height"` n'est pas lu : une hauteur en style vient
+ * avec une largeur en style, et la largeur seule suffit, l'image gardant son ratio. Tiptap
+ * lisait déjà l'attribut, mais en texte : on le normalise comme `width` pour que le
+ * NodeView et le dialogue manipulent un nombre.
+ */
+export function parseImageHeight(element: HTMLElement): number | null {
+  const attribute = element.getAttribute('height');
+  if (!attribute) {
+    return null;
+  }
+  const parsed = Number.parseInt(attribute, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 /** Borne une largeur entre le minimum et la largeur du conteneur (illimitée si inconnue). */
 export function clampImageWidth(width: number, containerWidth: number): number {
   const max = containerWidth > 0 ? containerWidth : Number.POSITIVE_INFINITY;
   return Math.round(Math.min(Math.max(width, IMAGE_MIN_WIDTH), max));
 }
 
+/** Dimension d'un nœud image telle que stockée, `null` si automatique. */
+function dimensionOf(node: ProseMirrorNode, name: 'width' | 'height'): number | null {
+  const value: unknown = node.attrs[name];
+  return typeof value === 'number' && value > 0 ? value : null;
+}
+
 /** Largeur d'un nœud image telle que stockée, `null` si automatique. */
 function widthOf(node: ProseMirrorNode): number | null {
-  const value: unknown = node.attrs['width'];
-  return typeof value === 'number' && value > 0 ? value : null;
+  return dimensionOf(node, 'width');
+}
+
+/**
+ * Reflète une dimension du nœud sur l'`<img>` : attribut (sortie HTML, mesure avant
+ * chargement) et style en pixels, car la feuille `ui` pose `height: auto` sur l'image et
+ * seul le style inline l'emporte sur elle.
+ */
+function syncDimension(
+  img: HTMLImageElement,
+  name: 'width' | 'height',
+  value: number | null,
+): void {
+  if (value !== null) {
+    img.setAttribute(name, String(value));
+    img.style.setProperty(name, `${value}px`);
+  } else {
+    img.removeAttribute(name);
+    img.style.removeProperty(name);
+  }
 }
 
 /** Copie un attribut texte du nœud vers l'élément, en le retirant s'il est vide. */
@@ -163,14 +203,9 @@ export class ImageNodeView implements NodeView {
     syncAttribute(this.img, 'src', attrs['src']);
     syncAttribute(this.img, 'alt', attrs['alt']);
     syncAttribute(this.img, 'title', attrs['title']);
-    const width = widthOf(this.node);
-    if (width !== null) {
-      this.img.setAttribute('width', String(width));
-      this.img.style.width = `${width}px`;
-    } else {
-      this.img.removeAttribute('width');
-      this.img.style.removeProperty('width');
-    }
+    syncDimension(this.img, 'width', widthOf(this.node));
+    // Hauteur explicite (L45b, `image.setAttributes.height`) ; absente, le ratio suit la largeur.
+    syncDimension(this.img, 'height', dimensionOf(this.node, 'height'));
     const align: unknown = attrs['align'];
     if (isImageAlignment(align)) {
       this.dom.setAttribute('data-align', align);
@@ -191,6 +226,9 @@ export class ImageNodeView implements NodeView {
     this.dragStartWidth =
       widthOf(this.node) ?? (measured > 0 ? measured : IMAGE_DEFAULT_DRAG_WIDTH);
     this.dom.classList.add(`${IMAGE_CLASS}--resizing`);
+    // Le drag ne gouverne que la largeur et efface la hauteur au relâchement : la hauteur
+    // inline est levée tout de suite pour que l'aperçu suive déjà le ratio de l'image.
+    this.img.style.removeProperty('height');
     document.addEventListener('mousemove', this.onDocumentMouseMove);
     document.addEventListener('mouseup', this.onDocumentMouseUp);
   };
@@ -265,9 +303,10 @@ export const renderImageNodeView: NodeViewRenderer = (props) => new ImageNodeVie
 
 /**
  * Extension Image d'Aster : celle de Tiptap plus un attribut `align` (`data-align`),
- * une largeur numérique lue depuis `width` ou `style="width"`, et un NodeView avec
- * poignée de redimensionnement. Le HTML produit reste un `<img>` nu : `getHTML()`
- * passe par `renderHTML`, pas par le NodeView, donc la sortie est stable.
+ * une largeur numérique lue depuis `width` ou `style="width"`, une hauteur numérique lue
+ * depuis `height` (L45b), et un NodeView avec poignée de redimensionnement. Le HTML
+ * produit reste un `<img>` nu : `getHTML()` passe par `renderHTML`, pas par le NodeView,
+ * donc la sortie est stable.
  *
  * La politique de liens s'applique au parsing (`setHTML`, collage) : un `<img>` dont
  * la source n'est pas autorisée (`javascript:`, `data:text/html`…) n'est pas reconnu
@@ -293,6 +332,14 @@ export function createImageExtension(policy: ResolvedLinkPolicy = DEFAULT_LINK_P
           renderHTML: (attributes: Record<string, unknown>) => {
             const value = attributes['width'];
             return typeof value === 'number' && value > 0 ? { width: String(value) } : {};
+          },
+        },
+        height: {
+          default: null,
+          parseHTML: parseImageHeight,
+          renderHTML: (attributes: Record<string, unknown>) => {
+            const value = attributes['height'];
+            return typeof value === 'number' && value > 0 ? { height: String(value) } : {};
           },
         },
         align: {

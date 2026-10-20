@@ -165,7 +165,7 @@ export class AsterEditorImpl implements AsterEditor {
     queueMicrotask(() => this.emit('ready', { editor: this }));
   }
 
-  // --- Vue page (hors contrat `AsterEditor`, proposée en session 3) -------
+  // --- Vue page (contrat `AsterEditor` depuis L45b, après proposition en session 3) ---
 
   /**
    * Active, remplace ou désactive la vue page : classe `aster--page-view` et variables
@@ -173,14 +173,23 @@ export class AsterEditorImpl implements AsterEditor {
    * vaut `{}` (A4 portrait, marges 25,4 mm), `false` retire tout. Indépendante de la
    * lecture seule. Si la nouvelle mise en page lève (entrée hostile), la vue précédente
    * est remontée à l'identique avant de relayer l'erreur : l'appelant retrouve l'état
-   * d'avant l'appel, jamais un éditeur sans vue page (R41-05). Hors contrat : à proposer
-   * dans `api/editor.ts`.
+   * d'avant l'appel, jamais un éditeur sans vue page (R41-05).
+   *
+   * `pageViewChange` (contrat) est émis une fois `this.pageView` à jour : un abonné qui
+   * relit `getLayout()` voit la nouvelle mise en page, là où l'événement DOM
+   * `aster:page-view-change` (émis par `applyPageView` et `remove`, conservé pour les
+   * plugins du core et les intégrateurs vanilla) part avant l'affectation. Pas d'émission
+   * si rien n'a changé (`false` sans vue active) ni si la vue précédente a été remontée
+   * après une erreur : l'état observable est celui d'avant l'appel.
    */
   setPageView(options: boolean | PageViewOptions): void {
     const previous = this.pageView;
     previous?.remove();
     this.pageView = null;
     if (options === false || this.destroyed) {
+      if (previous) {
+        this.emitPageViewChange();
+      }
       return;
     }
     const resolved: PageViewOptions = options === true ? {} : options;
@@ -192,9 +201,10 @@ export class AsterEditorImpl implements AsterEditor {
       }
       throw error;
     }
+    this.emitPageViewChange();
   }
 
-  /** Mise en page de la vue page active, `null` si elle est inactive. Hors contrat. */
+  /** Mise en page de la vue page active (`options.layout`, ou `{}` pour `true`), `null` si elle est inactive. */
   getLayout(): DocumentLayout | null {
     return this.pageView?.layout ?? null;
   }
@@ -202,12 +212,20 @@ export class AsterEditorImpl implements AsterEditor {
   /**
    * Mise en page de la section `section` (numéro 1-based, celui de `data-section-break`
    * et de `getSections`) dans la vue page active : `layout.sections[section - 1]`, sinon
-   * les champs de premier niveau (`resolveSectionLayout`). `null` hors vue page. Hors
-   * contrat (session 4).
+   * les champs de premier niveau (`resolveSectionLayout`). `null` hors vue page.
    */
   getSectionLayout(section: number): SectionLayout | null {
     const layout = this.getLayout();
     return layout ? resolveSectionLayout(layout, section) : null;
+  }
+
+  /** `pageViewChange` avec l'état courant : `active` et `layout` sont relus, pas recopiés des options. */
+  private emitPageViewChange(): void {
+    this.emit('pageViewChange', {
+      editor: this,
+      active: this.pageView !== null,
+      layout: this.getLayout(),
+    });
   }
 
   // --- Contenu -------------------------------------------------------------
