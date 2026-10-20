@@ -6,6 +6,13 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-20
+
+### Fixed
+
+- **word** : l'import `.docx` conserve les paragraphes vides (lignes laissées par Entrée) : un aller-retour export → import perdait chaque saut de ligne de l'auteur. mammoth ne les ignore plus et la passe `stripEmptyParagraphs` ne s'applique qu'avec la nouvelle option `emptyParagraphs: 'drop'` de `DocxImportOptions`, qui retrouve l'ancien nettoyage des lignes vides de Word. Conséquence visible : un document vide importe en `<p></p>` (un `.docx` a toujours au moins un paragraphe) au lieu d'une chaîne vide.
+- **core** : test de non-régression sur la conservation des paragraphes vides par `setHTML(getHTML())`.
+
 ## [0.4.2] - 2026-10-19
 
 ### Fixed

@@ -13,7 +13,7 @@ describe('normalizeLists', () => {
     const doc = parseFragment(
       '<ol><li><h2>Titre</h2></li><li><p>a</p><p> </p></li><li><ol><li>b</li></ol></li></ol>',
     );
-    runPostprocess(doc, { options: { footnotes: true }, warnings: [] });
+    runPostprocess(doc, { options: { footnotes: true, emptyParagraphs: 'drop' }, warnings: [] });
     expect(doc.body.innerHTML).toBe(
       '<ol><li><h2>Titre</h2></li><li><p>a</p></li><li><p></p><ol><li><p>b</p></li></ol></li></ol>',
     );

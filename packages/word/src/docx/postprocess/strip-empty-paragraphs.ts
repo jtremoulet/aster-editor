@@ -24,8 +24,14 @@ function isRequiredBlock(p: Element): boolean {
 /**
  * Supprime les `<p>` vides, y compris dans les cellules et les `<li>` tant qu'il y
  * reste un autre bloc (W-13). Word en produit beaucoup pour espacer visuellement.
+ * Ne s'applique qu'en `emptyParagraphs: 'drop'` : par défaut (`keep`) les lignes vides
+ * de l'auteur sont des `<p></p>` que l'éditeur conserve, sinon un aller-retour
+ * export → import perdait chaque saut de ligne.
  */
-export const stripEmptyParagraphs: PostprocessPass = (doc) => {
+export const stripEmptyParagraphs: PostprocessPass = (doc, ctx) => {
+  if (ctx.options.emptyParagraphs === 'keep') {
+    return;
+  }
   for (const p of Array.from(doc.querySelectorAll('p'))) {
     if (isEmptyBlock(p) && !isRequiredBlock(p)) {
       p.parentNode?.removeChild(p);

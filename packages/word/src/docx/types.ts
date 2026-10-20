@@ -74,6 +74,13 @@ export interface DocxImportOptions {
   parse?: HtmlParser;
   /** Détection des variables (`{{nom}}`, champs de fusion, contrôles de contenu). Tout actif par défaut. */
   variables?: DocxVariableOptions;
+  /**
+   * Sort des paragraphes vides du document (lignes laissées par Entrée). `keep` par défaut :
+   * ils deviennent des `<p></p>`, ce qui rend l'aller-retour export → import fidèle aux
+   * sauts de ligne de l'auteur. `drop` retrouve l'ancien comportement (mammoth les ignore),
+   * utile pour nettoyer un document Word qui espace ses blocs avec des lignes vides.
+   */
+  emptyParagraphs?: 'keep' | 'drop';
 }
 
 /**

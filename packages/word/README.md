@@ -21,13 +21,14 @@ Convertit un `.docx` en HTML prêt pour `editor.setHTML` ou `editor.insertHTML`.
 
 ### Options (`DocxImportOptions`)
 
-| Champ       | Type                  | Défaut            | Rôle                                                                                                                                                        |
-| ----------- | --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `upload`    | `UploadHandler`       | —                 | Hook `(file: File) => Promise<string>` appelé pour chaque image embarquée. Sans hook : data URL base64.                                                     |
-| `footnotes` | `boolean`             | `true`            | Conserver les notes de bas de page et de fin en liste finale. `false` les supprime avec un avertissement.                                                   |
-| `styleMap`  | `readonly string[]`   | `[]`              | Règles mammoth additionnelles (`p[style-name='X'] => h2:fresh`), ajoutées **après** celles d'Aster, qui restent prioritaires. Lignes vides et `#` ignorées. |
-| `parse`     | `HtmlParser`          | `new DOMParser()` | Parseur HTML injectable (`{ parseFromString(html, 'text/html'): Document }`) pour SSR ou tests.                                                             |
-| `variables` | `DocxVariableOptions` | tout actif        | `{ detect?, pattern? }` : sources de variables reconnues et motif alternatif à `{{nom}}`. Voir [Variables](#variables).                                     |
+| Champ             | Type                  | Défaut            | Rôle                                                                                                                                                        |
+| ----------------- | --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `upload`          | `UploadHandler`       | —                 | Hook `(file: File) => Promise<string>` appelé pour chaque image embarquée. Sans hook : data URL base64.                                                     |
+| `footnotes`       | `boolean`             | `true`            | Conserver les notes de bas de page et de fin en liste finale. `false` les supprime avec un avertissement.                                                   |
+| `styleMap`        | `readonly string[]`   | `[]`              | Règles mammoth additionnelles (`p[style-name='X'] => h2:fresh`), ajoutées **après** celles d'Aster, qui restent prioritaires. Lignes vides et `#` ignorées. |
+| `emptyParagraphs` | `'keep'               | 'drop'`           | `'keep'`                                                                                                                                                    | Sort des paragraphes vides (lignes laissées par Entrée). `keep` les rend en `<p></p>`, fidèle aux sauts de ligne de l'auteur ; `drop` les supprime comme avant 0.4.3, pour nettoyer un Word qui espace ses blocs avec des lignes vides. |
+| `parse`           | `HtmlParser`          | `new DOMParser()` | Parseur HTML injectable (`{ parseFromString(html, 'text/html'): Document }`) pour SSR ou tests.                                                             |
+| `variables`       | `DocxVariableOptions` | tout actif        | `{ detect?, pattern? }` : sources de variables reconnues et motif alternatif à `{{nom}}`. Voir [Variables](#variables).                                     |
 
 ### Résultat (`DocxImportResult`)
 
