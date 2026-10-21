@@ -16,9 +16,8 @@ function isAcceptableImageUrl(value: string): boolean {
 type ImageAlign = NonNullable<StandardCommandArgs['image.setAttributes']['align']>;
 
 /**
- * Arguments d'édition : le contrat (`width`) plus `height`, que le core ignore tant que
- * L23 ne l'expose pas (`toImageAttributes` ne lit que les clés connues) et appliquera
- * ensuite sans changement côté UI.
+ * Arguments d'édition : le contrat (`width`, et `height` depuis la session 4, L45b : le core
+ * l'applique comme hauteur explicite ; `0` ou absente = hauteur automatique).
  */
 type ImageEditArgs = StandardCommandArgs['image.setAttributes'] & { height?: number };
 
@@ -138,8 +137,8 @@ function field(
  *   au double-clic) : mêmes champs sans l'URL, plus la hauteur et un verrou de
  *   proportions (coché par défaut : modifier l'un des deux champs recalcule l'autre selon
  *   le ratio de l'image). OK → `image.setAttributes({ alt, title, width, align })`, avec
- *   `height` seulement si le verrou est levé et une hauteur saisie (le core l'ignore tant
- *   que L23 ne l'expose pas). Une largeur vide vaut `0`, que le core interprète comme
+ *   `height` seulement si le verrou est levé et une hauteur saisie (appliquée par le core
+ *   depuis la session 4). Une largeur vide vaut `0`, que le core interprète comme
  *   « largeur automatique ».
  */
 export function createImageDialog(editor: AsterEditor): ToolbarWidget {

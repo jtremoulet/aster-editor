@@ -59,9 +59,9 @@ const MARGIN_FIELDS: readonly {
 ];
 
 /**
- * Méthodes de vue page de l'éditeur, **hors contrat** : annoncées par L23 sur `AsterEditor`
- * interne (`setPageView`, `getLayout`), absentes de `api/`. Le widget les détecte à
- * l'exécution et se désactive si le core ne les expose pas.
+ * Méthodes de vue page de l'éditeur, au contrat depuis la session 4 (L45b) mais
+ * **optionnelles** sur `AsterEditor` (`setPageView?`, `getLayout?`) : le widget les détecte
+ * à l'exécution et se désactive si l'éditeur fourni ne les expose pas (mock, double).
  */
 export interface PageViewApi {
   setPageView(options: PageViewOptions | false): void;
