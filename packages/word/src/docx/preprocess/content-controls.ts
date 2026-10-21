@@ -1,4 +1,4 @@
-import { toVariableName } from './names';
+import { toVariableName } from './names.js';
 import {
   allNamed,
   childNamed,
@@ -9,7 +9,7 @@ import {
   wordAttribute,
   type CollectedVariable,
   type PartCollector,
-} from './xml-utils';
+} from './xml-utils.js';
 
 /**
  * Contrôles de contenu Word (`w:sdt`) → runs `{{nom}}`. Le `w:tag` donne le nom, le
@@ -18,10 +18,14 @@ import {
  */
 
 /**
- * Propriétés `w:sdtPr` qui désignent un contrôle structurel, jamais une variable :
+ * Propriétés `w:sdtPr` qui désignent un contrôle structurel ou lié, jamais une variable :
  * table des matières et blocs de construction (`docPartObj`), groupes, images,
  * bibliographie, sections répétées, case à cocher (`w14:checkbox`, dont le symbole
- * coché / décoché est du texte, pas une valeur).
+ * coché / décoché est du texte, pas une valeur), et contrôle **lié à une donnée du
+ * document** (`w:dataBinding`, session 5 / retour POC n° 1) : c'est la forme des
+ * « Propriétés du document » de Word (Titre, Auteur, Société… en en-tête, `w:alias`
+ * localisé « Titre ») et des liaisons XML personnalisées, que Word remplit lui-même
+ * depuis `docProps/core.xml` ou un `customXml`. Il rend son contenu, jamais `{{Titre}}`.
  */
 const STRUCTURAL_SDT: ReadonlySet<string> = new Set([
   'docPartObj',
@@ -34,6 +38,7 @@ const STRUCTURAL_SDT: ReadonlySet<string> = new Set([
   'repeatingSection',
   'repeatingSectionItem',
   'checkbox',
+  'dataBinding',
 ]);
 
 /**

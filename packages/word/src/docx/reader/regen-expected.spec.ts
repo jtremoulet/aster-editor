@@ -1,12 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
+import { importDocx } from '../import-docx.js';
 
 /**
  * Régénère les attendus stylés `fixtures/docx/expected/*.html` depuis le chemin par défaut
  * (`styled` depuis la 0.6, L46) : 01-06 et 08-10 (la 07, fixture de charge, n'a pas
- * d'attendu) puis 11-19. Les attendus du chemin `semantic` (mammoth) vivent dans
+ * d'attendu) puis 11-20. Les attendus du chemin `semantic` (mammoth) vivent dans
  * `expected/semantic/` et ne sont pas régénérés ici : ils figent le comportement 0.4.x.
  * Inactif par défaut : `ASTER_REGEN=1 npx vitest run src/docx/reader/regen-expected.spec.ts`,
  * puis relire le diff git avant de figer. À utiliser quand une décision de sérialisation change.
@@ -31,6 +31,7 @@ const NAMES = [
   '17-objets-perdus',
   '18-sections-triple',
   '19-tabulations-bordures',
+  '20-champs-en-tete',
 ];
 
 describe.skipIf(!process.env.ASTER_REGEN)('régénération des attendus du lecteur stylé', () => {

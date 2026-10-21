@@ -202,6 +202,22 @@ describe('transformVariablesXml : contrôles de contenu', () => {
     expect(transform(body).body).toBeNull();
   });
 
+  it('laisse intact un contrôle lié à une donnée du document (w:dataBinding : propriété « Titre » de Word, L53)', () => {
+    // Forme exacte d'Insertion → QuickPart → Propriété du document → Titre (Word en français) :
+    // alias localisé, tag vide, liaison vers `dc:title`, espace réservé affiché.
+    const bound =
+      '<w:alias w:val="Titre"/><w:tag w:val=""/><w:id w:val="2"/>' +
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'http://purl.org/dc/elements/1.1/\'" w:xpath="/ns0:title[1]" w:storeItemID="{X}"/>' +
+      '<w:text/><w:showingPlcHdr/>';
+    const body = `<w:p>${run('Titre : ')}${sdt(bound, run('[Titre]'))}</w:p>`;
+    const { body: out, variables } = transform(body);
+    expect(out).toBeNull();
+    expect([...variables]).toEqual([]);
+    // Même avec un tag, la liaison l'emporte : Word remplit ce contrôle, pas l'intégrateur.
+    const tagged = `<w:p>${sdt(bound.replace('w:val=""', 'w:val="titre"'), run('x'))}</w:p>`;
+    expect(transform(tagged).body).toBeNull();
+  });
+
   it('transforme un contrôle de bloc en un paragraphe unique qui garde le w:pPr', () => {
     const body = sdt(
       '<w:tag w:val="adresse"/>',

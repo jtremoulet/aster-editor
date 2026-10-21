@@ -7,10 +7,11 @@ import type {
   SectionLayout,
   SectionStart,
 } from '@aster-editor/core';
-import type { DocxImportWarning } from '../types';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
-import type { DocxPackage, StyleResolver } from './types';
-import { numericAttribute, twipsToMm } from './units';
+import type { DocxImportWarning } from '../types.js';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import type { DocxPackage, StyleResolver } from './types.js';
+import { defaultParagraphOf } from './styles.js';
+import { numericAttribute, twipsToMm } from './units.js';
 
 /**
  * Mise en page d'une section (`w:sectPr`) vers le `DocumentLayout` du contrat : format
@@ -171,8 +172,9 @@ export function readSectionProperties(
 
 /**
  * Lit la mise en page de la section : `page` (format, orientation, marges), `columns`
- * (`w:cols w:num` de 2 à 45), `defaultFont` (résolveur de styles) et `lang` quand l'appelant
- * la fournit (voir `readDocumentLang`). `sectPr` absent → seule la police par défaut. Les
+ * (`w:cols w:num` de 2 à 45), `defaultFont` et `defaultParagraph` (résolveur de styles :
+ * `docDefaults` puis style `Normal`, session 5) et `lang` quand l'appelant la fournit (voir
+ * `readDocumentLang`). `sectPr` absent → seuls les défauts de police et de paragraphe. Les
  * valeurs hors bornes sont ignorées et signalées dans `warnings` quand il est fourni. Le
  * type de saut (`start`) reste dans `layout.sections`, pas au premier niveau.
  */
@@ -190,6 +192,8 @@ export function readSectionLayout(
   }
   const font = styles.defaultFont();
   if (font.family || font.sizePt) layout.defaultFont = font;
+  const paragraph = defaultParagraphOf(styles);
+  if (Object.keys(paragraph).length > 0) layout.defaultParagraph = paragraph;
   if (lang) layout.lang = lang;
   return layout;
 }

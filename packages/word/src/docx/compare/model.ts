@@ -1,14 +1,16 @@
 import type { CellVerticalAlign } from '@aster-editor/core';
-import { childNamed, childrenNamed, textOf, wordAttribute } from '../preprocess/xml-utils';
-import { readDocumentLang } from '../reader/sections';
-import { conditionalFormatsOf } from '../reader/styles';
+import type { DefaultParagraph } from '@aster-editor/core';
+import { childNamed, childrenNamed, textOf, wordAttribute } from '../preprocess/xml-utils.js';
+import { readDocumentLang } from '../reader/sections.js';
+import { conditionalFormatsOf } from '../reader/styles.js';
+import { defaultParagraphOf } from '../reader/styles.js';
 import {
   applyConditionalFormats,
   conditionalTypesOf,
   readBandSizes,
   readTableLook,
   type TableLook,
-} from '../reader/table-conditional';
+} from '../reader/table-conditional.js';
 import type {
   DocxPackage,
   NumberingResolver,
@@ -16,23 +18,23 @@ import type {
   ResolvedRunProps,
   StyleResolver,
   TableStyleProps,
-} from '../reader/types';
+} from '../reader/types.js';
 import {
   numericAttribute,
   readBorders,
   shadingColor,
   twipsToPt,
   type BorderMap,
-} from '../reader/units';
+} from '../reader/units.js';
 import {
   effectiveCellBorders,
   effectiveTableBorders,
   nonEmptyBorders,
   type CellEdges,
   type EffectiveBorders,
-} from './model-borders';
-import { isBlankParagraph, readParagraphs } from './model-paragraph';
-import { readSections } from './model-sections';
+} from './model-borders.js';
+import { isBlankParagraph, readParagraphs } from './model-paragraph.js';
+import { readSections } from './model-sections.js';
 
 /**
  * Modèle comparable d'un document Word : blocs du corps (paragraphes et tableaux, `w:sdt`
@@ -152,6 +154,12 @@ export interface DocumentModel {
   readonly blocks: readonly BlockModel[];
   readonly sections: readonly SectionModel[];
   readonly lang?: string;
+  /**
+   * Défauts de paragraphe du document (`docDefaults` puis style `Normal`, comme le
+   * lecteur les lit en `layout.defaultParagraph`, session 5) ; absent quand tout vaut le
+   * défaut de Word.
+   */
+  readonly defaultParagraph?: DefaultParagraph;
 }
 
 /** Contexte de lecture d'une partie : paquet, chemin de la partie, résolveurs, textes des notes. */
@@ -419,5 +427,11 @@ export async function readDocumentModel(
   };
   const sections = await readSections(body, ctx, readBlocks);
   const lang = await readDocumentLang(pkg);
-  return { blocks: readBlocks(body, ctx), sections, ...(lang ? { lang } : {}) };
+  const defaultParagraph = defaultParagraphOf(styles);
+  return {
+    blocks: readBlocks(body, ctx),
+    sections,
+    ...(lang ? { lang } : {}),
+    ...(Object.keys(defaultParagraph).length > 0 ? { defaultParagraph } : {}),
+  };
 }

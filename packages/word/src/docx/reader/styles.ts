@@ -1,4 +1,5 @@
-import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
+import type { DefaultParagraph } from '@aster-editor/core';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
 import {
   applyParagraphProperties,
   applyRunProperties,
@@ -9,7 +10,7 @@ import {
   mergeRunDelta,
   type MutableParagraph,
   type MutableRun,
-} from './properties';
+} from './properties.js';
 import {
   headingLevelOfName,
   readStyle,
@@ -17,9 +18,9 @@ import {
   readThemeFonts,
   type StyleDefinition,
   type StyleType,
-} from './styles-part';
-import { resolveTableStyle, type DocxTableStyleProps } from './styles-table';
-import type { ConditionalFormats } from './table-conditional';
+} from './styles-part.js';
+import { resolveTableStyle, type DocxTableStyleProps } from './styles-table.js';
+import type { ConditionalFormats } from './table-conditional.js';
 import type {
   DocxPackage,
   HeadingLevel,
@@ -27,7 +28,7 @@ import type {
   ResolvedRunProps,
   StyleResolver,
   TableStyleProps,
-} from './types';
+} from './types.js';
 
 /**
  * Résolution des styles Word : `docDefaults` → chaîne `basedOn` (garde anti-cycle) →
@@ -38,7 +39,7 @@ import type {
  * (`styles-table.ts`) sont des modules de celui-ci (découpage L45).
  */
 
-export type { DocxTableStyleProps } from './styles-table';
+export type { DocxTableStyleProps } from './styles-table.js';
 
 /** Défauts du document (`w:docDefaults`), sans aucun style appliqué. */
 export interface DocDefaults {
@@ -49,6 +50,44 @@ export interface DocDefaults {
 /** Résolveur d'Aster : le contrat plus les défauts du document. */
 export interface DocxStyleResolver extends StyleResolver {
   docDefaults(): DocDefaults;
+  /**
+   * Défauts de paragraphe du document (session 5, retour POC n° 2) : `docDefaults` puis
+   * style de paragraphe par défaut (`Normal`) résolu, ramenés au contrat
+   * `DocumentLayout.defaultParagraph`. Vide quand tout vaut le défaut de Word.
+   */
+  defaultParagraph(): DefaultParagraph;
+}
+
+/**
+ * Accumulateur de paragraphe résolu → `DefaultParagraph` du contrat : interligne multiple
+ * (`w:lineRule="auto"`) ou exact / minimal (`lineHeightPt`, qui l'emporte), espacements
+ * avant et après en points. Rien n'est écrit pour le défaut de Word (interligne simple,
+ * 0 pt) : un objet vide signifie « les défauts d'Aster ».
+ */
+function toDefaultParagraph(paragraph: MutableParagraph): DefaultParagraph {
+  const out: { -readonly [K in keyof DefaultParagraph]: DefaultParagraph[K] } = {};
+  if (paragraph.lineHeightPt !== undefined) out.lineHeightPt = paragraph.lineHeightPt;
+  else if (paragraph.lineHeight !== undefined && paragraph.lineHeight !== 1) {
+    out.lineHeight = paragraph.lineHeight;
+  }
+  if (paragraph.spacingBeforePt !== undefined && paragraph.spacingBeforePt !== 0) {
+    out.spacingBeforePt = paragraph.spacingBeforePt;
+  }
+  if (paragraph.spacingAfterPt !== undefined && paragraph.spacingAfterPt !== 0) {
+    out.spacingAfterPt = paragraph.spacingAfterPt;
+  }
+  return out;
+}
+
+/**
+ * Défauts de paragraphe d'un résolveur quelconque : ceux d'Aster s'il les expose, sinon
+ * un objet vide (résolveur tiers ou stub, qui n'en connaît pas).
+ */
+export function defaultParagraphOf(styles: StyleResolver): DefaultParagraph {
+  if ('defaultParagraph' in styles && typeof styles.defaultParagraph === 'function') {
+    return (styles as DocxStyleResolver).defaultParagraph();
+  }
+  return {};
 }
 
 /** Formats conditionnels d'un style de tableau, `undefined` pour un style tiers ou sans `w:tblStylePr`. */
@@ -345,6 +384,10 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
 
     docDefaults() {
       return docDefaults;
+    },
+
+    defaultParagraph() {
+      return toDefaultParagraph(resolveParagraphStyle(undefined).paragraph);
     },
   };
 }

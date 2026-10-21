@@ -26,7 +26,7 @@
     "check": "npm run lint && npm run typecheck && npm run test",
     "demo": "ng serve demo",
     "demo:build": "ng build demo",
-    "fixtures": "node scripts/generate-fixtures.ts && node scripts/generate-fixtures-extra.ts && node scripts/generate-fixtures-variables.ts && node scripts/generate-fixtures-layout.ts && node scripts/generate-fixtures-sections.ts",
+    "fixtures": "node scripts/generate-fixtures.ts && node scripts/generate-fixtures-extra.ts && node scripts/generate-fixtures-variables.ts && node scripts/generate-fixtures-layout.ts && node scripts/generate-fixtures-sections.ts && node scripts/generate-fixtures-fields.ts",
     "playground": "node scripts/vanilla-playground.mjs",
     "e2e": "playwright test -c e2e/playwright.config.ts",
     "e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",

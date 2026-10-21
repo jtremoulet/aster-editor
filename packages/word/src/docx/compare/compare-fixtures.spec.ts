@@ -19,6 +19,7 @@ const LAYOUT_FIXTURES = [
   '17-objets-perdus.docx',
   '18-sections-triple.docx',
   '19-tabulations-bordures.docx',
+  '20-champs-en-tete.docx',
 ];
 
 /** Cible de l'aller-retour dans le gabarit (critère d'acceptation de la session 3). */
@@ -48,6 +49,9 @@ const ROUNDTRIP_MIN_TEXT_RATIO = 0.7;
  *   (`writer/table-look.ts`) : le tableau suit à nouveau son style dans Word. Avant L49,
  *   `table.conditional` ×1 : sans `w:tblLook`, Word appliquait `0x04A0` et activait
  *   `firstColumn` en plus de `firstRow`.
+ * - `20-champs-en-tete` (1, L53) : rien. Les champs `TITLE` / `DOCPROPERTY` / `AUTHOR` /
+ *   `DATE` / `PAGE`, le contrôle lié et le `MERGEFIELD` de l'en-tête ressortent à l'octet
+ *   (`word/header1.xml` identique), le corps réécrit leurs résultats en texte.
  */
 const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
   '11-styles-inline.docx': [],
@@ -58,6 +62,7 @@ const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
   '16-sections.docx': [],
   '18-sections-triple.docx': [],
   '19-tabulations-bordures.docx': [],
+  '20-champs-en-tete.docx': [],
 };
 
 /**
@@ -191,8 +196,10 @@ describe('compareDocx sur les fixtures de mise en page', () => {
       const report = await compareDocx(original, await emptyBody(original));
       // Preuve du relecteur : 11 → 0,364 ; 12, 13, 14 → 0,308 ; 17 → 0,364 (15 → 0,25, 16 → 0,167) :
       // les groupes `package-part`, `section` et `header-footer` restent à 1 sans aucun texte.
+      // La 20 (L53) monte à 0,462 : son en-tête de cinq paragraphes, intact, pèse tout le
+      // groupe `header-footer` — même preuve, le score seul ne dit pas que le corps est vide.
       expect(report.score).toBeGreaterThan(0.15);
-      expect(report.score).toBeLessThan(0.4);
+      expect(report.score).toBeLessThan(name === '20-champs-en-tete.docx' ? 0.5 : 0.4);
       if (name === '13-styles-nommes.docx') expect(report.score).toBeGreaterThanOrEqual(0.3);
       // La fixture 18 garde un paragraphe vide porteur de w:sectPr : le <w:p/> du corps vidé
       // s'aligne dessus (1/22), le reste du texte est perdu.

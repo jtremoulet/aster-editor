@@ -1,20 +1,20 @@
-import { importDocx, invalidDocx } from '../import-docx';
-import { createNumberingResolver } from '../reader/lists';
-import { defaultXmlParse, openPackage, relsPathOf } from '../reader/package';
-import { createStyleResolver } from '../reader/styles';
-import type { DocxPackage, NumberingResolver, StyleResolver } from '../reader/types';
-import type { DocxInput, DocxLostObject } from '../types';
+import { importDocx, invalidDocx } from '../import-docx.js';
+import { createNumberingResolver } from '../reader/lists.js';
+import { defaultXmlParse, openPackage, relsPathOf } from '../reader/package.js';
+import { createStyleResolver } from '../reader/styles.js';
+import type { DocxPackage, NumberingResolver, StyleResolver } from '../reader/types.js';
+import type { DocxInput, DocxLostObject } from '../types.js';
 import {
   compareBlocks,
   headerFooterSummary,
   sameFields,
   type CompareContext,
-} from './compare-blocks';
-import { readDocumentModel, type DocumentModel, type HeaderFooterType } from './model';
-import { compareParts, listParts } from './parts';
-import { computeScore, Tally } from './tally';
-import type { CompareDocx, CompareDocxOptions, FidelityReport } from './types';
-import { ABSENT, fmt } from './values';
+} from './compare-blocks.js';
+import { readDocumentModel, type DocumentModel, type HeaderFooterType } from './model.js';
+import { compareParts, listParts } from './parts.js';
+import { computeScore, Tally } from './tally.js';
+import type { CompareDocx, CompareDocxOptions, FidelityReport } from './types.js';
+import { ABSENT, fmt } from './values.js';
 
 /**
  * `compareDocx(original, result, options)` : ouvre les deux paquets, compare les parties
@@ -84,6 +84,16 @@ function compareSections(a: DocumentModel, b: DocumentModel, ctx: CompareContext
   const { tally } = ctx;
   if (a.lang !== undefined || b.lang !== undefined) {
     tally.record('section', 'section.lang', 'document', fmt(a.lang), fmt(b.lang));
+  }
+  // Défauts de paragraphe (session 5) : une propriété du document, rangée avec la section.
+  if (a.defaultParagraph !== undefined || b.defaultParagraph !== undefined) {
+    tally.record(
+      'section',
+      'section.defaultParagraph',
+      'document',
+      fmt(a.defaultParagraph),
+      fmt(b.defaultParagraph),
+    );
   }
   tally.record(
     'section',
