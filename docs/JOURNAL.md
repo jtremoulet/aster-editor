@@ -544,7 +544,7 @@
 - **F53** (18 min, 386k tokens, 138 outils) intégré (`bf45cb0`) : base de retranchement = docDefaults puis `Normal` avec défaut Word écrit explicitement (attendu 13 régénéré : plus de `line-height: 1.15` sur les `Normal`, export neuf 3 `w:spacing` directs au lieu de 8), greffe alignée (`reconcileParagraph`, `sameLineHeight` / `sameSpacing`), `dataBinding` structurel seulement sans `w:tag` ou vers les propriétés du document, bornes des docDefaults, `atLeast` non transporté, codemod sans commentaires et `--check` strict, smoke « dist sans spécificateur sans extension ». Word 1 160. Scores inchangés (11-16, 18-20 à 1 ; 17 à 0,972 ; client 0,995). `build` des trois paquets vide `dist` (orchestrateur).
 - **L55** (docs) lancé à 23:00 ; changelog 0.7.0 inséré, version 0.7.0 posée, `check` + `build` + `e2e` + `smoke` en cours.
 
-### 21/10 23:35 — Gel 0.7.0, merge sur main, L55 intégré
+### 21/10 23:27 — Gel 0.7.0, merge sur main, L55 intégré
 
 - Gel : `npm run check` vert (2 461 tests), build, e2e 65/65 au second run (le premier avait un `ERR_NO_BUFFER_SPACE` transitoire sous charge), smoke install avec l'étape Node ESM et le `grep` des `dist`. Un test Angular (L54) rouge après F52 : la spec posait `innerHTML` sans événement `input` ; corrigé par l'orchestrateur. Version 0.7.0, changelog, `BILAN_SESSION5.md`, REX (`f8ee851`).
 - « Go merge » de Joris : PR #5 `develop → main` mergée (`a4096b8`), `develop` réaligné. Joris attend L55 pour `npm run release` (les READMEs des paquets sont emballés dans les tarballs).
