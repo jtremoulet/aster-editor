@@ -203,8 +203,9 @@ function describeLost(lost: DocxLostObject): string {
       </div>
 
       <div [hidden]="tab() !== 'chips'">
+        <!-- Toolbar « full » : le dialogue « Mise en page » (en-têtes et pieds par section, L54) n'est pas dans « standard ». -->
         <aster-editor
-          toolbar="standard"
+          toolbar="full"
           placeholder="Le modèle importé apparaîtra ici…"
           [variableValues]="values()"
           [pageView]="pageView()"
@@ -228,7 +229,9 @@ function describeLost(lost: DocxLostObject): string {
           <h2>En-tête / Pied</h2>
           <p class="demo-panel__hint">
             Modifie l'en-tête et le pied par défaut : la vue page les reflète, l'export neuf les
-            réécrit, l'export dans le gabarit ne régénère que la partie modifiée.
+            réécrit, l'export dans le gabarit ne régénère que la partie modifiée. Le dialogue « Mise
+            en page » de la barre d'outils édite aussi, section par section, l'en-tête et le pied de
+            la section du curseur (première page, pages paires).
           </p>
           <div class="demo-header-footer__grid">
             <label class="demo-field">
@@ -596,9 +599,11 @@ export class TemplatePage {
       this.draft.set({});
       // L'hôte de la vue page affiche l'en-tête de la première section et le pied de la
       // dernière (`layout.footers` = dernière section par contrat) : le panneau édite ceux-là.
+      // Page 1 : l'en-tête `first` quand la section 1 a une première page différente.
       const first = result.layout.sections?.[0];
+      const page1 = first?.titlePage ? first.headers?.first : undefined;
       this.headerControl.setValue(
-        first?.headers?.default?.html ?? result.layout.headers?.default?.html ?? '',
+        page1?.html ?? first?.headers?.default?.html ?? result.layout.headers?.default?.html ?? '',
       );
       this.footerControl.setValue(result.layout.footers?.default?.html ?? '');
       // Un import sans variable n'émet pas `variablesChanged` : on relit l'état à la main.
@@ -695,9 +700,12 @@ export class TemplatePage {
     }
     const index = kind === 'headers' ? 0 : sections.length - 1;
     const target = sections[index];
+    // En-tête : le type affiché sur la page 1 (`first` si première page différente).
+    const type =
+      kind === 'headers' && target?.titlePage && target.headers?.first ? 'first' : 'default';
     const next = sections.map((section, i) =>
       i === index && target
-        ? { ...target, [kind]: { ...target[kind], default: { html } } }
+        ? { ...target, [kind]: { ...target[kind], [type]: { html } } }
         : section,
     );
     const top = kind === 'footers' ? { footers: { ...base.footers, default: { html } } } : {};

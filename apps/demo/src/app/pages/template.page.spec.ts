@@ -231,8 +231,12 @@ describe('TemplatePage', () => {
       fixture.detectChanges();
       expect(host.querySelector('.demo-header-footer')).not.toBeNull();
     });
+    // L54 : le libellé du panneau renvoie au dialogue « Mise en page » (section du curseur).
+    expect(host.querySelector('.demo-header-footer .demo-panel__hint')?.textContent).toContain(
+      'dialogue « Mise en page »',
+    );
 
-    // La vue page par section (L44) : l'hôte porte la section 1 (A4, en-tête « Rapport »),
+    // La vue page par section (L44, L52) : l'hôte porte la section 1 (A4, page 1 = en-tête `first`),
     // le saut de section porte la section 2 (Letter paysage) ; le résumé suit `layout.page`
     // (dernière section). Le pied de l'hôte est celui de la dernière section.
     const sheet = main.editor()?.element;
@@ -240,7 +244,7 @@ describe('TemplatePage', () => {
     expect(sheet?.querySelector('hr[data-section-break]')?.getAttribute('style') ?? '').toContain(
       '279.4mm',
     );
-    expect(sheet?.querySelector('.aster-page-header')?.textContent).toContain('Rapport');
+    expect(sheet?.querySelector('.aster-page-header')?.textContent).toContain('Première page');
     expect(sheet?.querySelector('.aster-page-footer')?.textContent).toContain(
       'Section 2 — pied par défaut',
     );
@@ -249,7 +253,7 @@ describe('TemplatePage', () => {
     // Le panneau « En-tête / Pied » est initialisé depuis ce que l'hôte affiche : en-tête de
     // la première section, pied de la dernière.
     const [, header, footer] = editors(fixture);
-    expect(header?.getHTML()).toContain('Rapport');
+    expect(header?.getHTML()).toContain('Première page');
     expect(footer?.getHTML()).toContain('Section 2 — pied par défaut');
 
     // Modifier l'en-tête se répercute sur la vue page de l'éditeur principal (section 1) ;
@@ -257,7 +261,8 @@ describe('TemplatePage', () => {
     header?.editor()?.setHTML('<p>Nouvel en-tête</p>', true);
     fixture.detectChanges();
     expect(sheet?.querySelector('.aster-page-header')?.textContent).toBe('Nouvel en-tête');
-    expect(main.layout()?.sections?.[0]?.headers?.default?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(main.layout()?.sections?.[0]?.headers?.first?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(main.layout()?.sections?.[0]?.headers?.default?.html).toContain('Rapport');
     expect(main.layout()?.headers?.default?.html).toContain('Section 2 — en-tête par défaut');
     expect(main.layout()?.footers?.default?.html).toContain('Section 2 — pied par défaut');
     expect(main.layout()?.page?.size).toBe('Letter');
@@ -280,14 +285,14 @@ describe('TemplatePage', () => {
     const options = exportSpy.mock.calls[0]?.[0];
     expect(options?.template).toBe(main.importedTemplate());
     expect(options?.variables?.mode).toBe('fields');
-    expect(options?.layout?.sections?.[0]?.headers?.default?.html).toBe('<p>Nouvel en-tête</p>');
+    expect(options?.layout?.sections?.[0]?.headers?.first?.html).toBe('<p>Nouvel en-tête</p>');
     expect(options?.layout?.footers?.default?.html).toBe('<p>Nouveau pied</p>');
 
     // Les exports existants restent des exports neufs (pas de gabarit).
     buttonByText(host, 'Télécharger modèle').click();
     await vi.waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
     expect(exportSpy.mock.calls[1]?.[0]?.template).toBeUndefined();
-    expect(exportSpy.mock.calls[1]?.[0]?.layout?.sections?.[0]?.headers?.default?.html).toBe(
+    expect(exportSpy.mock.calls[1]?.[0]?.layout?.sections?.[0]?.headers?.first?.html).toBe(
       '<p>Nouvel en-tête</p>',
     );
     vi.unstubAllGlobals();
