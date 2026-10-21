@@ -63,6 +63,22 @@ export interface DefaultFont {
 }
 
 /**
+ * Défauts de paragraphe du document (`docDefaults` de `styles.xml` puis style `Normal`
+ * résolu), session 5 (retour POC n° 2) : ce que prend tout paragraphe qui ne porte pas sa
+ * propre valeur. Le lecteur n'écrit sur un paragraphe que ce qui diffère de ces défauts ;
+ * la vue page les applique aux blocs sans valeur propre (variables
+ * `--aster-page-default-line-height`, `--aster-page-default-spacing-before`,
+ * `--aster-page-default-spacing-after`) ; l'export neuf les écrit dans `docDefaults`.
+ * Mêmes règles que `ParagraphLayoutAttrs` : `lineHeightPt` l'emporte sur `lineHeight`.
+ */
+export interface DefaultParagraph {
+  readonly lineHeight?: number;
+  readonly lineHeightPt?: number;
+  readonly spacingBeforePt?: number;
+  readonly spacingAfterPt?: number;
+}
+
+/**
  * Mise en page d'un document : ce que l'import `.docx` lit dans la dernière section et
  * ce que l'export réécrit (export neuf) ou conserve (export dans le gabarit). Tous les
  * champs sont optionnels : un objet vide = les défauts d'Aster (A4 portrait, 25,4 mm).
@@ -72,6 +88,7 @@ export interface DocumentLayout {
   /** Nombre de colonnes de texte, 1 par défaut. Conservé, non affiché par la vue page. */
   readonly columns?: number;
   readonly defaultFont?: DefaultFont;
+  readonly defaultParagraph?: DefaultParagraph;
   /** Langue BCP 47 du document, ex. `fr-FR`. */
   readonly lang?: string;
   readonly headers?: HeaderFooterSet;

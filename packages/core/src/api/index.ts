@@ -26,6 +26,7 @@ export type {
   CellVerticalAlign,
   DecorationStyle,
   DefaultFont,
+  DefaultParagraph,
   DocumentLayout,
   HeaderFooterContent,
   HeaderFooterSet,
