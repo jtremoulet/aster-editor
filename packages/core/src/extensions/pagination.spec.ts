@@ -524,6 +524,39 @@ describe('pagination (plugin)', () => {
     expect(label()).toBe('Page 2 sur 2');
   });
 
+  it('L50 : un redessin relit d’abord la sélection du DOM (clic pas encore lu par ProseMirror), sans change ni historique', () => {
+    const { editor } = mount({ content: paragraphs(6), pageView: { layout: SMALL_PAGE } });
+    paginateNow(editor);
+    expect(gaps(editor)).toHaveLength(2);
+    const { view } = editor.tiptap;
+    view.dom.focus();
+    expect(document.activeElement).toBe(view.dom);
+    // Un clic dans le 4e paragraphe : le navigateur pose la sélection dans le DOM, ProseMirror
+    // ne la relit qu'au `selectionchange` asynchrone (jamais émis par jsdom : la situation
+    // « entre les deux » est exactement celle du test).
+    const text = view.dom.querySelectorAll('p')[3]?.firstChild;
+    if (!text) {
+      throw new Error('paragraphe attendu');
+    }
+    document.getSelection()?.collapse(text, 2);
+    const clicked = view.posAtDOM(text, 2);
+    expect(view.state.selection.from).not.toBe(clicked);
+    const change = vi.fn();
+    editor.on('change', change);
+    const undoable = editor.commands.canRun('undo');
+
+    // Redessin synchrone (changement de locale) : avant L50, `updateState` réécrivait
+    // l'ancienne sélection dans le DOM et le clic était perdu.
+    editor.i18n.setLocale('en');
+    expect(view.state.selection.from).toBe(clicked);
+    expect(document.getSelection()?.anchorNode).toBe(text);
+    expect(document.getSelection()?.anchorOffset).toBe(2);
+    expect(gaps(editor)).toHaveLength(2);
+    expect(change).not.toHaveBeenCalled();
+    expect(editor.commands.canRun('undo')).toBe(undoable);
+    document.getSelection()?.removeAllRanges();
+  });
+
   it('les coupures survivent à une frappe (mappées, elles suivent leur bloc) et à un plugin ajouté', () => {
     const { editor } = mount({ content: paragraphs(6), pageView: { layout: SMALL_PAGE } });
     paginateNow(editor);
@@ -911,6 +944,43 @@ describe('pagination (plugin)', () => {
       impl(editor).setPageView({ layout: THREE });
       expect(element.querySelector(`.${PAGE_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 3</p>');
       expect(element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('130mm');
+    });
+
+    it('L50 : le pied de l’hôte et --aster-page-width-max suivent insertBreak, removeBreak et undo sans setPageView', () => {
+      const { editor, element } = mount({
+        content: '<p>a</p><p>b</p><hr data-section-break="1"><p>c</p><p>d</p>',
+        pageView: { layout: THREE },
+      });
+      const footer = (): string | undefined =>
+        element.querySelector(`.${PAGE_FOOTER_CLASS}`)?.innerHTML;
+      const widthMax = (): string => element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE);
+      expect(footer()).toBe('<p>Pied 2</p>');
+      expect(widthMax()).toBe('120mm');
+
+      // Curseur dans « d », un saut de plus : le corps ouvre la section 3.
+      editor.tiptap.commands.setTextSelection(editor.tiptap.state.doc.content.size - 1);
+      expect(editor.commands.run('section.insertBreak')).toBe(true);
+      expect(footer()).toBe('<p>Pied 3</p>');
+      expect(widthMax()).toBe('130mm');
+
+      // Retrait du saut 1 : il reste un saut, le corps finit en section 2.
+      expect(editor.commands.run('section.removeBreak', { section: 1 })).toBe(true);
+      expect(footer()).toBe('<p>Pied 2</p>');
+      expect(widthMax()).toBe('120mm');
+
+      // undo rétablit le saut : section 3 à nouveau. Puis plus aucun saut : section 1.
+      expect(editor.commands.run('undo')).toBe(true);
+      expect(footer()).toBe('<p>Pied 3</p>');
+      expect(widthMax()).toBe('130mm');
+      editor.setHTML('<p>seul</p>');
+      expect(footer()).toBe('<p>Pied 1</p>');
+      expect(widthMax()).toBe('100mm');
+
+      // Après le retrait de la vue page, l'écouteur est parti : un saut ajouté ne touche plus l'hôte.
+      impl(editor).setPageView(false);
+      editor.setHTML('<p>a</p><hr data-section-break="1"><p>b</p>');
+      expect(element.querySelector(`.${PAGE_FOOTER_CLASS}`)).toBeNull();
+      expect(widthMax()).toBe('');
     });
 
     it('helpers : previousPageSection, gapCssVariables et pageHeightTotalMm', () => {

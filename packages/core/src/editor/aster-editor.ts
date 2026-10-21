@@ -1,5 +1,5 @@
 import { Editor, type FocusPosition } from '@tiptap/core';
-import { history } from '@tiptap/pm/history';
+import { closeHistory, history } from '@tiptap/pm/history';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorProps } from '@tiptap/pm/view';
 import type {
@@ -292,6 +292,16 @@ export class AsterEditorImpl implements AsterEditor {
    * La méta `SET_CONTENT_META` signale aux plugins un chargement complet (le saut de
    * section garde alors la numérotation reçue), ce qu'un collage de tout le document ne
    * doit pas obtenir (R41-02).
+   *
+   * Avec `emit`, le remplacement reste annulable mais ferme son groupe d'historique
+   * (L50) : `prosemirror-history` regroupe toute édition qui suit dans les 500 ms
+   * (`newGroupDelay`) et adjacente au pas précédent, or un remplacement complet est
+   * adjacent à tout. Sans fermeture, `setHTML(a)` puis une édition immédiate et `undo`
+   * revenaient au document d'avant `setHTML`. `closeHistory` posé sur la transaction de
+   * remplacement elle-même ne suffirait pas : il ne ferme que le groupe **précédent**
+   * (il remet le compteur à zéro avant d'ajouter la transaction). On dispatche donc une
+   * transaction sans pas juste après : ni `change` (document inchangé) ni entrée
+   * d'historique, seul le compteur de groupe est remis à zéro.
    */
   private replaceContent(content: string | AsterDocument, emit: boolean): void {
     this.assertAlive();
@@ -306,7 +316,9 @@ export class AsterEditorImpl implements AsterEditor {
         return true;
       })
       .run();
-    if (!emit) {
+    if (emit) {
+      this.tiptap.view.dispatch(closeHistory(this.tiptap.state.tr));
+    } else {
       this.clearHistory();
     }
   }

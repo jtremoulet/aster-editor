@@ -232,6 +232,34 @@ describe('createEditor', () => {
       expect(mounted.editor.getHTML()).toBe('<p>Bonjour</p>');
     });
 
+    it('L50 : setHTML(html, true) ferme son groupe d’historique, une édition immédiate s’annule seule', () => {
+      const change = vi.fn();
+      mounted.editor.on('change', change);
+      mounted.editor.setHTML('<p>Chargé</p>');
+      expect(change).toHaveBeenCalledTimes(1);
+      // Édition dans les 500 ms (`newGroupDelay`) : avant L50, elle rejoignait le groupe du
+      // chargement et `undo` revenait au document initial.
+      mounted.editor.tiptap.commands.insertContentAt(1, 'x');
+      expect(mounted.editor.getHTML()).toBe('<p>xChargé</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Chargé</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Bonjour</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(false);
+      expect(mounted.editor.commands.run('redo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Chargé</p>');
+    });
+
+    it('L50 : setJSON(doc, true) ferme aussi son groupe', () => {
+      mounted.editor.setJSON({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'J' }] }],
+      });
+      mounted.editor.tiptap.commands.insertContentAt(1, 'x');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>J</p>');
+    });
+
     it('émet selectionChange sur un simple déplacement de sélection, sans change', () => {
       const change = vi.fn();
       const selection = vi.fn();

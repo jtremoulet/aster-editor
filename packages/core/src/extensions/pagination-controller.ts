@@ -174,6 +174,39 @@ function buildDecorations(
   return DecorationSet.create(doc, decorations);
 }
 
+/** Ce que le contrôleur attend de l'observateur DOM interne de prosemirror-view. */
+interface DomObserverLike {
+  flush(): void;
+}
+
+/** Vrai si la valeur ressemble à `DOMObserver` de prosemirror-view (une méthode `flush`). */
+function isDomObserverLike(value: unknown): value is DomObserverLike {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { flush?: unknown }).flush === 'function'
+  );
+}
+
+/**
+ * Relit tout de suite la sélection (et les mutations) du DOM dans l'état ProseMirror,
+ * comme ProseMirror le fait lui-même avant de traiter un `mousedown` ou une touche.
+ *
+ * Pourquoi (L50) : après un clic, le navigateur pose la sélection dans le DOM et
+ * ProseMirror ne la relit qu'à l'événement `selectionchange`, asynchrone. Si un redessin
+ * (`view.updateState`) survient entre les deux, ProseMirror réécrit dans le DOM la
+ * sélection de l'état, encore à l'ancienne position : le clic est perdu, et une frappe ou
+ * une commande qui suit part de l'ancienne position (preuve L47 : clic + `End` + `Tab`
+ * insérait en fin de document). `domObserver` n'est pas dans les types publics de
+ * prosemirror-view, mais existe depuis sa 1.0 ; sans lui, on redessine comme avant.
+ */
+function flushDomObserver(view: EditorView): void {
+  const observer: unknown = (view as unknown as { domObserver?: unknown }).domObserver;
+  if (isDomObserverLike(observer)) {
+    observer.flush();
+  }
+}
+
 /** Contrôleur par vue ProseMirror, pour `getPaginationResult` et `paginateNow`. */
 const CONTROLLERS = new WeakMap<EditorView, PaginationController>();
 
@@ -397,9 +430,18 @@ export class PaginationController {
     }
   }
 
-  /** Redessine sans transaction : génération avancée, même état, le jeu est reconstruit à la lecture. */
+  /**
+   * Redessine sans transaction : génération avancée, même état, le jeu est reconstruit à
+   * la lecture. La sélection du DOM est relue avant (`flushDomObserver`, L50) : si elle a
+   * bougé (clic pas encore lu), ProseMirror dispatche d'abord la transaction de sélection
+   * (sans pas : ni historique ni `change`), puis le redessin réapplique un état à jour.
+   */
   private redraw(): void {
     if (this.destroyed || this.view.isDestroyed || this.aster?.isDestroyed()) {
+      return;
+    }
+    flushDomObserver(this.view);
+    if (this.destroyed || this.view.isDestroyed) {
       return;
     }
     this.generation += 1;

@@ -11,6 +11,7 @@ import type { AsterEditor, DocumentLayout, SectionBreakAttrs } from '../api';
 import {
   PAGE_VIEW_CHANGE_EVENT,
   PAGE_VIEW_CSS_VARIABLES,
+  SECTION_BREAKS_CHANGE_EVENT,
   getActivePageView,
   pageViewCssValues,
   resolvePageMetrics,
@@ -33,11 +34,12 @@ export const SECTION_START_ATTRIBUTE = 'data-section-start';
 /**
  * Événement DOM (sans bulle) émis sur `view.dom` par le plugin quand la suite des sauts
  * de premier niveau change (insertion, suppression, remplacement) : chaque NodeView
- * recalcule alors son rang (R44-01). Émis après la mise à jour complète de la vue, quand
- * les positions sont exactes ; pendant `update()`, ProseMirror peut encore porter des
- * nœuds périmés avant le saut.
+ * recalcule alors son rang (R44-01), et la vue page rafraîchit le pied de l'hôte (L50).
+ * Émis après la mise à jour complète de la vue, quand les positions sont exactes ;
+ * pendant `update()`, ProseMirror peut encore porter des nœuds périmés avant le saut.
+ * Défini dans `page-view.ts` (qui l'écoute) pour éviter un cycle d'imports.
  */
-export const SECTION_BREAKS_CHANGE_EVENT = 'aster:section-breaks-change';
+export { SECTION_BREAKS_CHANGE_EVENT } from './page-view';
 
 /**
  * Numéro de section maximal (R41-06), même ordre de grandeur que `MAX_PAGE_MM`. Au-delà,

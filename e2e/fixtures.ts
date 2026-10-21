@@ -103,10 +103,13 @@ export async function getText(page: Page): Promise<string> {
 }
 
 /**
- * Texte du bloc qui contient la sélection de l'**état** de l'éditeur du playground. Après
- * un clic, ProseMirror relit la sélection du DOM de façon asynchrone (`selectionchange`),
- * et la vue page redessine ses coupures dans un `requestAnimationFrame` : à combiner avec
- * `expect.poll` avant une commande ou une frappe qui dépend du curseur.
+ * Texte du bloc qui contient la sélection de l'**état** de l'éditeur du playground (celle
+ * que les commandes lisent). Après un clic, ProseMirror relit la sélection du DOM à
+ * l'événement `selectionchange`, que Chromium dispatche à la mise à jour du rendu (comme
+ * `requestAnimationFrame`) : une commande lancée par `page.evaluate` ou une touche envoyée
+ * dans la même frame que le clic lirait encore l'ancienne position. Un clic d'utilisateur
+ * ou de Playwright (qui attend des frames de stabilité) n'est pas concerné ; le redessin
+ * de la pagination qui réécrivait l'ancienne sélection dans le DOM est corrigé (L50).
  */
 export async function selectionBlockText(page: Page): Promise<string> {
   return page.evaluate(() => {
@@ -117,9 +120,10 @@ export async function selectionBlockText(page: Page): Promise<string> {
 }
 
 /**
- * Clique dans un bloc du playground et attend que la sélection de l'état y soit bien
- * arrivée (voir `selectionBlockText`), pour que la commande ou la frappe suivante parte
- * du bon endroit.
+ * Clique dans un bloc du playground et attend que la sélection de l'état y soit arrivée
+ * (voir `selectionBlockText`) : nécessaire seulement avant une commande lancée par
+ * `page.evaluate` (`runCommand`) ou une touche envoyée sans autre action Playwright entre
+ * les deux, jamais avant un clic de toolbar.
  */
 export async function clickInto(page: Page, block: Locator): Promise<void> {
   const text = (await block.textContent()) ?? '';

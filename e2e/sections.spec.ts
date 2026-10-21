@@ -130,7 +130,7 @@ test.describe('Sections — playground', () => {
     await expect.poll(() => inlineCssVariable(breaks.nth(0), '--aster-page-width')).toBe('279.4mm');
 
     // Curseur dans la section 2 : le dialogue affiche sa page (Letter paysage).
-    await clickInto(page, paragraph(page, 'Section 2, paragraphe 1'));
+    await paragraph(page, 'Section 2, paragraphe 1').click();
     await toolbarTrigger(page, 'Mise en page').click();
     const dialog = page.locator('.aster-page-layout');
     await expect(dialog).toBeVisible();
@@ -157,7 +157,7 @@ test.describe('Sections — playground', () => {
     await expect(editorHost(page).locator('.aster-page-header')).toHaveText('Section 1');
 
     // Rouvrir depuis la section 3 : « Section 3 sur 3 », A4 portrait, inchangée.
-    await clickInto(page, paragraph(page, 'Section 3, paragraphe 1'));
+    await paragraph(page, 'Section 3, paragraphe 1').click();
     await toolbarTrigger(page, 'Mise en page').click();
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('.aster-page-layout__section')).toHaveText('Section 3 sur 3');
@@ -181,15 +181,17 @@ test.describe('Sections — playground', () => {
     expect(first).not.toContain('data-section-start');
     expect(first).not.toContain('--aster-page');
     expect(first).not.toContain('aster-page-gap');
-    // Chargement hors historique (`emit: false`) : le `undo` plus bas n'annule que le saut,
-    // sans se grouper avec ce chargement ni avec l'import (`newGroupDelay` de 500 ms).
-    await setHtml(page, first, false);
+    // Chargement dans l'historique (`emit` par défaut) : `setHTML` ferme son groupe (L50),
+    // le `undo` plus bas n'annule que le saut, sans se grouper avec ce chargement.
+    await setHtml(page, first);
     expect(await getHtml(page)).toBe(first);
     await expect(breaks).toHaveCount(2);
     await expect(breaks.nth(1)).toHaveAttribute('data-section-break', '2');
 
     // Un saut au milieu de la section 1 : trois sauts 1, 2, 3 dans l'ordre du document,
-    // et chaque NodeView suit la section positionnelle qu'il ouvre désormais.
+    // et chaque NodeView suit la section positionnelle qu'il ouvre désormais. La commande
+    // part de `page.evaluate` dans la même frame que le clic : on attend que l'état ait
+    // relu la sélection du DOM (`clickInto`, voir `selectionBlockText`).
     await clickInto(page, paragraph(page, 'Section 1, paragraphe 2'));
     expect(await runCommand(page, 'section.insertBreak')).toBe(true);
     await expect(breaks).toHaveCount(3);

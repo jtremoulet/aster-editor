@@ -257,6 +257,15 @@ export function pageViewCssValues(metrics: PageMetrics): readonly string[] {
  */
 export const PAGE_VIEW_CHANGE_EVENT = 'aster:page-view-change';
 
+/**
+ * Événement DOM (sans bulle) émis sur `contentElement` par le plugin `sectionBreak` quand
+ * la suite des sauts de premier niveau change (insertion, suppression, remplacement).
+ * Défini ici (et réexporté par `section-break.ts`, qui importe déjà ce module) pour que
+ * la vue page l'écoute sans cycle d'imports : le pied de l'hôte et
+ * `--aster-page-width-max` suivent la dernière section du corps (L50).
+ */
+export const SECTION_BREAKS_CHANGE_EVENT = 'aster:section-breaks-change';
+
 /** Options de la vue page active, par conteneur de contenu (`view.dom`). */
 const ACTIVE_PAGE_VIEWS = new WeakMap<HTMLElement, PageViewOptions>();
 
@@ -268,6 +277,48 @@ export function getActivePageView(contentElement: HTMLElement): PageViewOptions 
 /** Signale un changement de vue page aux plugins qui écoutent `contentElement`. */
 function notifyPageViewChange(contentElement: HTMLElement): void {
   contentElement.dispatchEvent(new CustomEvent(PAGE_VIEW_CHANGE_EVENT));
+}
+
+/** Ce que l'hôte affiche de la dernière section du corps : pied (assaini) et largeur max. */
+interface LastSectionState {
+  readonly footerHtml: string;
+  readonly widthMaxMm: number | null;
+}
+
+/**
+ * Pied et largeur max de l'hôte pour la dernière section **du corps** (R44-05 :
+ * `bodySectionCount`, sauts de premier niveau lus dans `contentElement` + 1, borné par les
+ * sections déclarées). Calcul pur, relancé à chaque changement de la suite des sauts (L50).
+ */
+function lastSectionState(
+  layout: DocumentLayout,
+  contentElement: Element,
+  showHeadersFooters: boolean,
+): LastSectionState {
+  const lastSection = bodySectionCount(layout, contentElement);
+  const last = resolveSectionLayout(layout, lastSection);
+  return {
+    footerHtml: showHeadersFooters
+      ? sanitizeHeaderFooterHtml(last.footers?.default?.html ?? '')
+      : '',
+    widthMaxMm: maxSectionWidthMm(layout, lastSection),
+  };
+}
+
+/** Pose sur l'hôte et le pied ce que `lastSectionState` a calculé ; sans sections, aucune largeur max. */
+function applyLastSection(
+  host: HTMLElement,
+  footer: HTMLElement | null,
+  state: LastSectionState,
+): void {
+  if (state.widthMaxMm === null) {
+    host.style.removeProperty(PAGE_WIDTH_MAX_CSS_VARIABLE);
+  } else {
+    host.style.setProperty(PAGE_WIDTH_MAX_CSS_VARIABLE, formatMm(state.widthMaxMm));
+  }
+  if (footer && footer.innerHTML !== state.footerHtml) {
+    footer.innerHTML = state.footerHtml;
+  }
 }
 
 /** Vue page montée : conteneurs et retrait. */
@@ -290,10 +341,12 @@ export interface PageViewHandle {
  * Sections (session 4) : avec `layout.sections`, l'hôte porte les variables et l'en-tête
  * de la **section 1** (`resolveSectionLayout`), pas ceux du premier niveau (copie de la
  * dernière section), et le pied de la dernière section que le corps ouvre
- * (`bodySectionCount`, lu dans `contentElement` au moment de l'appel : le dialogue
- * « Mise en page » rappelle `setPageView` à chaque application). Chaque `sectionBreak`
- * porte ensuite, sur son `hr`, les variables de la section qui le suit ; les en-têtes
- * des sections suivantes sont du ressort de la pagination (L44).
+ * (`bodySectionCount`, lu dans `contentElement` à l'appel puis à chaque
+ * `aster:section-breaks-change`, L50 : `section.insertBreak` / `removeBreak`, collage ou
+ * `undo` qui change la suite des sauts rafraîchissent le pied et
+ * `--aster-page-width-max` sans rappeler `setPageView`). Chaque `sectionBreak` porte
+ * ensuite, sur son `hr`, les variables de la section qui le suit ; les en-têtes des
+ * sections suivantes sont du ressort de la pagination (L44).
  */
 export function applyPageView(
   host: HTMLElement,
@@ -312,21 +365,12 @@ export function applyPageView(
   // Le pied en bas de la feuille est celui de la dernière section **du corps** (R44-05 :
   // sauts de premier niveau + 1, borné par les sections déclarées ; la pagination affiche
   // les pieds intermédiaires sur chaque coupure de section) ; l'en-tête, celui de la première.
-  const lastSection = bodySectionCount(layout, contentElement);
-  const last = resolveSectionLayout(layout, lastSection);
-  const footerHtml = showHeadersFooters
-    ? sanitizeHeaderFooterHtml(last.footers?.default?.html ?? '')
-    : '';
-  const widthMaxMm = maxSectionWidthMm(layout, lastSection);
+  const last = lastSectionState(layout, contentElement, showHeadersFooters);
 
   host.classList.add(PAGE_VIEW_CLASS);
   PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
     host.style.setProperty(name, values[index] ?? '');
   });
-  // Sections (L44) : la feuille prend la largeur de la plus large section.
-  if (widthMaxMm !== null) {
-    host.style.setProperty(PAGE_WIDTH_MAX_CSS_VARIABLE, formatMm(widthMaxMm));
-  }
 
   let header: HTMLElement | null = null;
   let footer: HTMLElement | null = null;
@@ -339,12 +383,19 @@ export function applyPageView(
     footer = document.createElement('div');
     footer.className = PAGE_FOOTER_CLASS;
     footer.setAttribute('contenteditable', 'false');
-    footer.innerHTML = footerHtml;
     if (parent) {
       parent.insertBefore(header, contentElement);
       parent.insertBefore(footer, contentElement.nextSibling);
     }
   }
+  // Sections (L44) : la feuille prend la largeur de la plus large section ; pied de la dernière.
+  applyLastSection(host, footer, last);
+
+  // La suite des sauts change (L50) : la dernière section du corps aussi, peut-être.
+  const onSectionBreaksChange = (): void => {
+    applyLastSection(host, footer, lastSectionState(layout, contentElement, showHeadersFooters));
+  };
+  contentElement.addEventListener(SECTION_BREAKS_CHANGE_EVENT, onSectionBreaksChange);
 
   // Pagination (L30) : les options sont lisibles par le plugin avant qu'il soit prévenu.
   ACTIVE_PAGE_VIEWS.set(contentElement, options);
@@ -361,6 +412,7 @@ export function applyPageView(
         return;
       }
       removed = true;
+      contentElement.removeEventListener(SECTION_BREAKS_CHANGE_EVENT, onSectionBreaksChange);
       // Le plugin de pagination retire d'abord ses propres variables et décorations.
       ACTIVE_PAGE_VIEWS.delete(contentElement);
       notifyPageViewChange(contentElement);
