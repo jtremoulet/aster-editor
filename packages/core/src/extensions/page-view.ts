@@ -4,12 +4,35 @@ import type {
   PageSizeName,
   PageViewOptions,
   SectionLayout,
-} from '../api';
-import { sanitizeHeaderFooterHtml } from './header-footer-sanitize';
-import { roundLayoutNumber } from './layout-css';
+} from '../api/index.js';
+import { roundLayoutNumber } from './layout-css.js';
+import {
+  PAGE_DEFAULTS_CLASS,
+  PAGE_DEFAULT_CSS_VARIABLES,
+  hasDefaultSpacing,
+  pageDefaultsCssValues,
+  type PageDefaultsCssValues,
+} from './page-view-defaults.js';
+import { FIRST_PAGE, headerFooterHtmlFor, type HeaderFooterPage } from './page-view-variants.js';
+
+// Défauts du document (L52) et variantes first / even des en-têtes : modules dédiés.
+export {
+  PAGE_DEFAULTS_CLASS,
+  PAGE_DEFAULT_CSS_VARIABLES,
+  hasDefaultSpacing,
+  pageDefaultsCssValues,
+  type PageDefaultCssVariable,
+  type PageDefaultsCssValues,
+} from './page-view-defaults.js';
+export {
+  FIRST_PAGE,
+  headerFooterHtmlFor,
+  isContinuousSection,
+  type HeaderFooterPage,
+} from './page-view-variants.js';
 
 // Sanitiseur des en-têtes et pieds : extrait en F30 (R30-13), même API qu'avant.
-export { MAX_SANITIZE_DEPTH, sanitizeHeaderFooterHtml } from './header-footer-sanitize';
+export { MAX_SANITIZE_DEPTH, sanitizeHeaderFooterHtml } from './header-footer-sanitize.js';
 
 /** Classe posée sur l'hôte de l'éditeur quand la vue page est active. */
 export const PAGE_VIEW_CLASS = 'aster--page-view';
@@ -286,23 +309,72 @@ interface LastSectionState {
 }
 
 /**
+ * Dernière page connue de la pagination, par conteneur de contenu (L52) : le pied de
+ * l'hôte habille le bas de la **dernière** page, dont la variante (`first` / `even`)
+ * dépend de son numéro et de sa place dans sa section. Absente (pagination inactive, pas
+ * encore mesurée) : page 1 si le corps n'a qu'une section, sinon une page quelconque de
+ * la dernière section (variante `default`).
+ */
+const LAST_PAGES = new WeakMap<HTMLElement, HeaderFooterPage>();
+
+/** Événement DOM (sans bulle) émis sur `contentElement` par `setHostLastPage` pour rafraîchir le pied. */
+const HOST_LAST_PAGE_EVENT = 'aster:page-view-last-page';
+
+/**
+ * Déclare la dernière page du document (numéro, première de sa section ?) pour que le
+ * pied de l'hôte prenne la bonne variante ; `null` oublie la pagination. Appelé par le
+ * contrôleur de pagination après chaque mesure, sans dépendance de ce module vers lui.
+ */
+export function setHostLastPage(contentElement: HTMLElement, page: HeaderFooterPage | null): void {
+  const previous = LAST_PAGES.get(contentElement);
+  if (page === null) {
+    LAST_PAGES.delete(contentElement);
+  } else {
+    LAST_PAGES.set(contentElement, page);
+  }
+  if (
+    (previous?.pageNumber ?? null) === (page?.pageNumber ?? null) &&
+    (previous?.firstOfSection ?? null) === (page?.firstOfSection ?? null)
+  ) {
+    return;
+  }
+  contentElement.dispatchEvent(new CustomEvent(HOST_LAST_PAGE_EVENT));
+}
+
+/** Page que le pied de l'hôte habille : celle de la pagination, sinon la présomption ci-dessus. */
+function hostLastPage(contentElement: HTMLElement, lastSection: number): HeaderFooterPage {
+  return LAST_PAGES.get(contentElement) ?? { pageNumber: 1, firstOfSection: lastSection === 1 };
+}
+
+/**
  * Pied et largeur max de l'hôte pour la dernière section **du corps** (R44-05 :
  * `bodySectionCount`, sauts de premier niveau lus dans `contentElement` + 1, borné par les
- * sections déclarées). Calcul pur, relancé à chaque changement de la suite des sauts (L50).
+ * sections déclarées). Calcul pur, relancé à chaque changement de la suite des sauts (L50)
+ * et de la dernière page connue (L52 : variante `first` / `even` du pied).
  */
 function lastSectionState(
   layout: DocumentLayout,
-  contentElement: Element,
+  contentElement: HTMLElement,
   showHeadersFooters: boolean,
 ): LastSectionState {
   const lastSection = bodySectionCount(layout, contentElement);
   const last = resolveSectionLayout(layout, lastSection);
   return {
     footerHtml: showHeadersFooters
-      ? sanitizeHeaderFooterHtml(last.footers?.default?.html ?? '')
+      ? headerFooterHtmlFor(last, 'footers', hostLastPage(contentElement, lastSection))
       : '',
     widthMaxMm: maxSectionWidthMm(layout, lastSection),
   };
+}
+
+/** Pose (ou retire) les variables de défauts du document et la classe d'espacement (L52). */
+function applyPageDefaults(host: HTMLElement, values: PageDefaultsCssValues): void {
+  for (const name of PAGE_DEFAULT_CSS_VARIABLES) {
+    const value = values[name];
+    if (value === undefined) host.style.removeProperty(name);
+    else host.style.setProperty(name, value);
+  }
+  host.classList.toggle(PAGE_DEFAULTS_CLASS, hasDefaultSpacing(values));
 }
 
 /** Pose sur l'hôte et le pied ce que `lastSectionState` a calculé ; sans sections, aucune largeur max. */
@@ -359,18 +431,21 @@ export function applyPageView(
   const first = resolveSectionLayout(layout, 1);
   const showHeadersFooters = options.showHeadersFooters !== false;
   const values = pageViewCssValues(resolvePageMetrics(first));
-  const headerHtml = showHeadersFooters
-    ? sanitizeHeaderFooterHtml(first.headers?.default?.html ?? '')
-    : '';
+  // L'en-tête de l'hôte habille la page 1, première de la section 1 : `first` si la
+  // section est `titlePage` (L52), `default` sinon.
+  const headerHtml = showHeadersFooters ? headerFooterHtmlFor(first, 'headers', FIRST_PAGE) : '';
   // Le pied en bas de la feuille est celui de la dernière section **du corps** (R44-05 :
   // sauts de premier niveau + 1, borné par les sections déclarées ; la pagination affiche
-  // les pieds intermédiaires sur chaque coupure de section) ; l'en-tête, celui de la première.
+  // les pieds intermédiaires sur chaque coupure) ; l'en-tête, celui de la première.
   const last = lastSectionState(layout, contentElement, showHeadersFooters);
+  const defaults = pageDefaultsCssValues(layout);
 
   host.classList.add(PAGE_VIEW_CLASS);
   PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
     host.style.setProperty(name, values[index] ?? '');
   });
+  // Défauts de paragraphe et police du document (L52), appliqués en repli par `page.css`.
+  applyPageDefaults(host, defaults);
 
   let header: HTMLElement | null = null;
   let footer: HTMLElement | null = null;
@@ -391,11 +466,13 @@ export function applyPageView(
   // Sections (L44) : la feuille prend la largeur de la plus large section ; pied de la dernière.
   applyLastSection(host, footer, last);
 
-  // La suite des sauts change (L50) : la dernière section du corps aussi, peut-être.
+  // La suite des sauts change (L50) : la dernière section du corps aussi, peut-être. La
+  // dernière page change (L52, pagination) : la variante du pied aussi.
   const onSectionBreaksChange = (): void => {
     applyLastSection(host, footer, lastSectionState(layout, contentElement, showHeadersFooters));
   };
   contentElement.addEventListener(SECTION_BREAKS_CHANGE_EVENT, onSectionBreaksChange);
+  contentElement.addEventListener(HOST_LAST_PAGE_EVENT, onSectionBreaksChange);
 
   // Pagination (L30) : les options sont lisibles par le plugin avant qu'il soit prévenu.
   ACTIVE_PAGE_VIEWS.set(contentElement, options);
@@ -413,11 +490,13 @@ export function applyPageView(
       }
       removed = true;
       contentElement.removeEventListener(SECTION_BREAKS_CHANGE_EVENT, onSectionBreaksChange);
+      contentElement.removeEventListener(HOST_LAST_PAGE_EVENT, onSectionBreaksChange);
       // Le plugin de pagination retire d'abord ses propres variables et décorations.
       ACTIVE_PAGE_VIEWS.delete(contentElement);
       notifyPageViewChange(contentElement);
       host.classList.remove(PAGE_VIEW_CLASS);
-      for (const name of PAGE_VIEW_CSS_VARIABLES) {
+      host.classList.remove(PAGE_DEFAULTS_CLASS);
+      for (const name of [...PAGE_VIEW_CSS_VARIABLES, ...PAGE_DEFAULT_CSS_VARIABLES]) {
         host.style.removeProperty(name);
       }
       host.style.removeProperty(PAGE_WIDTH_MAX_CSS_VARIABLE);

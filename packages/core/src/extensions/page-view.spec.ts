@@ -1,21 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsterEditor, DocumentLayout, PageViewOptions } from '../api/index.js';
+import type { AsterEditor, DocumentLayout, PageViewOptions, SectionLayout } from '../api/index.js';
 import { AsterEditorImpl } from '../editor/aster-editor.js';
 import * as sanitizeModule from './header-footer-sanitize.js';
 import {
+  FIRST_PAGE,
   MAX_PAGE_MM,
   MAX_SANITIZE_DEPTH,
+  PAGE_DEFAULTS_CLASS,
+  PAGE_DEFAULT_CSS_VARIABLES,
   PAGE_FOOTER_CLASS,
   PAGE_HEADER_CLASS,
   PAGE_VIEW_CLASS,
   PAGE_VIEW_CSS_VARIABLES,
   PAGE_WIDTH_MAX_CSS_VARIABLE,
   bodySectionCount,
+  headerFooterHtmlFor,
+  isContinuousSection,
   maxSectionWidthMm,
+  pageDefaultsCssValues,
   pageViewCssValues,
   resolvePageMetrics,
   resolveSectionLayout,
   sanitizeHeaderFooterHtml,
+  setHostLastPage,
 } from './page-view.js';
 import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
@@ -401,6 +408,122 @@ describe('vue page', () => {
       } finally {
         warn.mockRestore();
       }
+    });
+
+    it('L52 (retour n° 3) : l’en-tête de l’hôte est `first` sur une section 1 titlePage, le pied suit la dernière page connue', () => {
+      const layout: DocumentLayout = {
+        titlePage: true,
+        headers: { default: { html: '<p>Tête</p>' }, first: { html: '<p>Première</p>' } },
+        footers: {
+          default: { html: '<p>Pied</p>' },
+          first: { html: '<p>Pied première</p>' },
+          even: { html: '<p>Pied pair</p>' },
+        },
+      };
+      mounted = mountEditor({ pageView: { layout } });
+      const header = mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`);
+      const footer = mounted.element.querySelector(`.${PAGE_FOOTER_CLASS}`);
+      expect(header?.innerHTML).toBe('<p>Première</p>');
+      // Sans pagination connue, une seule section : la feuille est la page 1, première.
+      expect(footer?.innerHTML).toBe('<p>Pied première</p>');
+      const content = mounted.editor.contentElement;
+      setHostLastPage(content, { pageNumber: 2, firstOfSection: false });
+      expect(footer?.innerHTML).toBe('<p>Pied pair</p>');
+      setHostLastPage(content, { pageNumber: 3, firstOfSection: false });
+      expect(footer?.innerHTML).toBe('<p>Pied</p>');
+      setHostLastPage(content, null);
+      expect(footer?.innerHTML).toBe('<p>Pied première</p>');
+      // `titlePage` sans `first` : repli sur `default` (écart assumé avec Word, qui laisse vide).
+      impl(mounted.editor).setPageView({
+        layout: { titlePage: true, headers: { default: { html: '<p>Tête</p>' } } },
+      });
+      expect(mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête</p>');
+      // Sans `titlePage`, `first` est ignoré.
+      impl(mounted.editor).setPageView({ layout: { ...layout, titlePage: false } });
+      expect(mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête</p>');
+    });
+
+    it('L52 : headerFooterHtmlFor choisit first / even / default et assainit', () => {
+      const section: SectionLayout = {
+        titlePage: true,
+        headers: {
+          default: { html: '<p>D<script>x()</script></p>' },
+          first: { html: '<p>F</p>' },
+          even: { html: '<p>E</p>' },
+        },
+      };
+      expect(headerFooterHtmlFor(section, 'headers', FIRST_PAGE)).toBe('<p>F</p>');
+      expect(
+        headerFooterHtmlFor(section, 'headers', { pageNumber: 2, firstOfSection: false }),
+      ).toBe('<p>E</p>');
+      expect(
+        headerFooterHtmlFor(section, 'headers', { pageNumber: 3, firstOfSection: false }),
+      ).toBe('<p>D</p>');
+      // Page paire **et** première de sa section : `first` l'emporte.
+      expect(headerFooterHtmlFor(section, 'headers', { pageNumber: 2, firstOfSection: true })).toBe(
+        '<p>F</p>',
+      );
+      expect(headerFooterHtmlFor(section, 'footers', FIRST_PAGE)).toBe('');
+      expect(headerFooterHtmlFor({}, 'headers', FIRST_PAGE)).toBe('');
+      // `titlePage` sans `first` : `default` (repli), `even` sur une page paire.
+      const noFirst: SectionLayout = {
+        titlePage: true,
+        headers: { default: { html: '<p>D</p>' }, even: { html: '<p>E</p>' } },
+      };
+      expect(headerFooterHtmlFor(noFirst, 'headers', FIRST_PAGE)).toBe('<p>D</p>');
+      expect(headerFooterHtmlFor(noFirst, 'headers', { pageNumber: 2, firstOfSection: true })).toBe(
+        '<p>E</p>',
+      );
+      expect(isContinuousSection({ sections: [{}, { start: 'continuous' }] }, 2)).toBe(true);
+      expect(isContinuousSection({ sections: [{}, { start: 'nextPage' }] }, 2)).toBe(false);
+      expect(isContinuousSection({}, 1)).toBe(false);
+    });
+
+    it('L52 (retour n° 2) : defaultParagraph et defaultFont posent les variables de défauts, retirées avec la vue', () => {
+      const layout: DocumentLayout = {
+        defaultFont: { family: 'Times New Roman', sizePt: 11 },
+        defaultParagraph: { lineHeight: 1.15, spacingAfterPt: 8 },
+      };
+      mounted = mountEditor({ pageView: { layout } });
+      const host = mounted.element;
+      expect(host.style.getPropertyValue('--aster-page-font-family')).toBe('"Times New Roman"');
+      expect(host.style.getPropertyValue('--aster-page-font-size')).toBe('11pt');
+      expect(host.style.getPropertyValue('--aster-page-default-line-height')).toBe('1.15');
+      expect(host.style.getPropertyValue('--aster-page-default-spacing-before')).toBe('');
+      expect(host.style.getPropertyValue('--aster-page-default-spacing-after')).toBe('8pt');
+      expect(host.classList.contains(PAGE_DEFAULTS_CLASS)).toBe(true);
+      // Les huit variables de page restent celles d'avant, dans l'ordre.
+      expect(cssVariables(host)).toHaveLength(8);
+      // `lineHeightPt` l'emporte ; sans espacement, pas de classe ; valeurs absurdes ignorées.
+      impl(mounted.editor).setPageView({
+        layout: {
+          defaultFont: { family: '', sizePt: -2 },
+          defaultParagraph: { lineHeight: 1.5, lineHeightPt: 14, spacingBeforePt: Number.NaN },
+        },
+      });
+      expect(host.style.getPropertyValue('--aster-page-font-family')).toBe('');
+      expect(host.style.getPropertyValue('--aster-page-font-size')).toBe('');
+      expect(host.style.getPropertyValue('--aster-page-default-line-height')).toBe('14pt');
+      expect(host.style.getPropertyValue('--aster-page-default-spacing-after')).toBe('');
+      expect(host.classList.contains(PAGE_DEFAULTS_CLASS)).toBe(false);
+      // Nom de police hostile : guillemets, parenthèses et point-virgule retirés.
+      expect(
+        pageDefaultsCssValues({ defaultFont: { family: 'Arial"; color: red; url(x)' } }),
+      ).toEqual({ '--aster-page-font-family': '"Arial color: red urlx"' });
+      expect(pageDefaultsCssValues(undefined)).toEqual({});
+      expect(
+        pageDefaultsCssValues({ defaultParagraph: { spacingBeforePt: 0, spacingAfterPt: 6.004 } }),
+      ).toEqual({
+        '--aster-page-default-spacing-before': '0pt',
+        '--aster-page-default-spacing-after': '6pt',
+      });
+      // Retrait : plus de variable, plus de classe, `style` nettoyé.
+      impl(mounted.editor).setPageView(false);
+      for (const name of PAGE_DEFAULT_CSS_VARIABLES) {
+        expect(host.style.getPropertyValue(name)).toBe('');
+      }
+      expect(host.classList.contains(PAGE_DEFAULTS_CLASS)).toBe(false);
+      expect(host.getAttribute('style')).toBeNull();
     });
 
     it('showHeadersFooters: false ne crée aucun conteneur', () => {

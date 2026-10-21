@@ -112,11 +112,13 @@ test.describe('Sections — playground', () => {
     );
     const sectionHeader = opening.locator('.aster-page-gap__header');
     await expect(sectionHeader).toBeVisible();
-    await expect(sectionHeader).toHaveText('Section 2');
+    // Page 2, paire : la section 2 distingue pages paires et impaires (L52, variante `even`).
+    await expect(sectionHeader).toHaveText('Section 2 paire');
     await expect.poll(() => inlineCssVariable(opening, '--aster-page-width')).toBe('279.4mm');
 
-    // En-tête de l'hôte = section 1, pied de l'hôte = dernière section du corps.
-    await expect(root.locator('.aster-page-header')).toHaveText('Section 1');
+    // En-tête de l'hôte = page 1 de la section 1, `titlePage` : sa variante `first` (L52) ;
+    // pied de l'hôte = dernière section du corps.
+    await expect(root.locator('.aster-page-header')).toHaveText('Première page');
     await expect(root.locator('.aster-page-footer')).toHaveText('Pied 3');
     await screenshot(page, `sections-import-${test.info().project.name}`);
   });
@@ -154,7 +156,8 @@ test.describe('Sections — playground', () => {
     await expect(sectionGaps(page).first().locator('.aster-page-gap__section')).toHaveText(
       'Section 2 · A4 portrait',
     );
-    await expect(editorHost(page).locator('.aster-page-header')).toHaveText('Section 1');
+    // Section 1 `titlePage` : l'hôte (page 1) garde l'en-tête `first` (L52).
+    await expect(editorHost(page).locator('.aster-page-header')).toHaveText('Première page');
 
     // Rouvrir depuis la section 3 : « Section 3 sur 3 », A4 portrait, inchangée.
     await paragraph(page, 'Section 3, paragraphe 1').click();
@@ -333,8 +336,9 @@ test.describe('Sections — démo', () => {
     await expect(gaps.first().locator('.aster-page-gap__section')).toHaveText(
       'Section 2 · Letter paysage',
     );
-    await expect(gaps.first().locator('.aster-page-gap__header')).toHaveText('Section 2');
-    await expect(main.locator('.aster-page-header')).toHaveText('Section 1');
+    // Page 2, paire → variante `even` ; page 1 de la section 1 `titlePage` → `first` (L52).
+    await expect(gaps.first().locator('.aster-page-gap__header')).toHaveText('Section 2 paire');
+    await expect(main.locator('.aster-page-header')).toHaveText('Première page');
     await expect(main.locator('.aster-page-footer')).toHaveText('Pied 3');
     await expect(page.locator('.demo-error')).toHaveCount(0);
     await screenshot(page, 'sections-demo-template');

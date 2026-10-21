@@ -14,10 +14,12 @@ import { fr } from '../i18n/fr.js';
 import { mountEditor, type MountedEditor } from '../testing/mount.js';
 import {
   PAGE_FOOTER_CLASS,
+  PAGE_HEADER_CLASS,
   PAGE_VIEW_CLASS,
   PAGE_WIDTH_MAX_CSS_VARIABLE,
   getActivePageView,
 } from './page-view.js';
+import { gapPages, lastPageOf } from './pagination-sections.js';
 import {
   PAGE_COUNT_ATTRIBUTE,
   PAGE_COUNT_CSS_VARIABLE,
@@ -714,7 +716,11 @@ describe('pagination (plugin)', () => {
       expect(header?.innerHTML).toBe('<p>Tête 2</p>');
       expect(header?.getAttribute('contenteditable')).toBe('false');
       expect(opening?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)?.innerHTML).toBe('<p>Pied 1</p>');
-      expect(posed[1]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)).toBeNull();
+      // L52 (retour n° 3) : les coupures suivantes portent aussi l'en-tête de la section 2
+      // (et pas de pied : la section 2 n'en a pas), seul le libellé reste à l'ouverture.
+      expect(posed[1]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
+      expect(posed[1]?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)).toBeNull();
+      expect(posed[2]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
       expect(posed[1]?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)).toBeNull();
       // Variables de la coupure : marge basse de la section qui se termine, le reste de
       // celle qui commence ; jamais les marges horizontales (la feuille garde celles de l'hôte).
@@ -987,6 +993,165 @@ describe('pagination (plugin)', () => {
       editor.setHTML('<p>a</p><hr data-section-break="1"><p>b</p>');
       expect(element.querySelector(`.${PAGE_FOOTER_CLASS}`)).toBeNull();
       expect(widthMax()).toBe('');
+    });
+
+    it('L52 (retour n° 3) : chaque coupure porte le pied de la page qui se termine et l’en-tête de celle qui commence, first / even selon la page', () => {
+      const layout: DocumentLayout = {
+        ...SMALL_PAGE,
+        titlePage: true,
+        headers: {
+          default: { html: '<p>Tête</p>' },
+          first: { html: '<p>Première</p>' },
+          even: { html: '<p>Tête paire</p>' },
+        },
+        footers: {
+          default: { html: '<p>Pied</p>' },
+          first: { html: '<p>Pied première</p>' },
+          even: { html: '<p>Pied pair</p>' },
+        },
+      };
+      // Deux blocs par page : six blocs → trois pages, quatre après un ajout.
+      const { editor, element } = mount({ content: paragraphs(6), pageView: { layout } });
+      expect(paginateNow(editor).pageCount).toBe(3);
+      const posed = gaps(editor);
+      expect(posed).toHaveLength(2);
+      const header = (gap: HTMLElement | undefined): string | undefined =>
+        gap?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML;
+      const footer = (gap: HTMLElement | undefined): string | undefined =>
+        gap?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)?.innerHTML;
+      // Hôte : page 1, première de la section 1 → `first`.
+      expect(element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>Première</p>');
+      // Coupure 1 : la page 1 (première) se termine, la page 2 (paire) commence.
+      expect(footer(posed[0])).toBe('<p>Pied première</p>');
+      expect(header(posed[0])).toBe('<p>Tête paire</p>');
+      // Coupure 2 : la page 2 (paire) se termine, la page 3 (quelconque) commence.
+      expect(footer(posed[1])).toBe('<p>Pied pair</p>');
+      expect(header(posed[1])).toBe('<p>Tête</p>');
+      // Sans section : ni classe d'ouverture, ni libellé, ni `data-section`.
+      expect(posed.some((gap) => gap.classList.contains(PAGE_GAP_SECTION_CLASS))).toBe(false);
+      expect(posed[0]?.querySelector(`.${PAGE_GAP_SECTION_LABEL_CLASS}`)).toBeNull();
+      expect(posed[0]?.hasAttribute(PAGE_SECTION_ATTRIBUTE)).toBe(false);
+      // Pied de l'hôte : dernière page, la 3 (impaire, pas la première) → `default`.
+      const hostFooter = element.querySelector(`.${PAGE_FOOTER_CLASS}`);
+      expect(hostFooter?.innerHTML).toBe('<p>Pied</p>');
+      // Une page de plus : la dernière devient la 4, paire → `even` sur le pied de l'hôte.
+      editor.setHTML(paragraphs(8), false);
+      expect(paginateNow(editor).pageCount).toBe(4);
+      expect(hostFooter?.innerHTML).toBe('<p>Pied pair</p>');
+      // Lecture seule, en-têtes et pieds assainis comme ceux de l'hôte.
+      expect(
+        gaps(editor)[0]
+          ?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)
+          ?.getAttribute('contenteditable'),
+      ).toBe('false');
+      // Retrait de la vue page : plus rien.
+      impl(editor).setPageView(false);
+      expect(gaps(editor)).toEqual([]);
+    });
+
+    it('L52 : titlePage sans first retombe sur default ; une section continuous n’a pas de première page propre', () => {
+      const sections: DocumentLayout = {
+        page: SECTION_2_PAGE,
+        sections: [
+          {
+            page: SMALL_PAGE.page,
+            titlePage: true,
+            headers: { default: { html: '<p>Tête 1</p>' } },
+            footers: {
+              default: { html: '<p>Pied 1</p>' },
+              first: { html: '<p>Pied 1 première</p>' },
+            },
+          },
+          {
+            page: SECTION_2_PAGE,
+            titlePage: true,
+            headers: {
+              default: { html: '<p>Tête 2</p>' },
+              first: { html: '<p>Tête 2 première</p>' },
+            },
+          },
+        ],
+      };
+      const { editor, element } = mount({
+        content: TWO_SECTIONS,
+        extensions: [SimulatedSectionBreak],
+        pageView: { layout: sections },
+      });
+      paginateNow(editor);
+      // Hôte : page 1 de la section 1, `titlePage` sans `first` → `default` (repli assumé).
+      expect(element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 1</p>');
+      const posed = gaps(editor);
+      expect(posed).toHaveLength(3);
+      // Coupure 1 : page 1 (première de la section 1) se termine → pied `first` ; page 2 ouvre la section 2 → en-tête `first`.
+      expect(posed[0]?.querySelector(`.${PAGE_GAP_FOOTER_CLASS}`)?.innerHTML).toBe(
+        '<p>Pied 1 première</p>',
+      );
+      expect(posed[0]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe(
+        '<p>Tête 2 première</p>',
+      );
+      // Coupures suivantes : pages 3 et 4 de la section 2 → `default`.
+      expect(posed[1]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
+      expect(posed[2]?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
+
+      // Section 2 `continuous` : sa première page est partagée, la coupure qui porte son
+      // numéro n'en est pas la première page → `default`, même avec `titlePage`.
+      const continuous: DocumentLayout = {
+        ...sections,
+        sections: [
+          sections.sections?.[0] ?? {},
+          { ...sections.sections?.[1], start: 'continuous' },
+        ],
+      };
+      impl(editor).setPageView({ layout: continuous });
+      setHeights([40, 40, 4, 40, 40, 40]);
+      paginateNow(editor);
+      const first = gaps(editor)[0];
+      expect(first?.classList.contains(PAGE_GAP_SECTION_CLASS)).toBe(true);
+      expect(first?.querySelector(`.${PAGE_GAP_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête 2</p>');
+    });
+
+    it('L52 : lastPageOf et gapPages décrivent les pages des coupures', () => {
+      const layout: DocumentLayout = { sections: [{}, { start: 'continuous' }, {}] };
+      const result = paginate(
+        [40, 40, 40, 40, 40, 40],
+        [
+          { start: 0, pageHeight: 100 },
+          { start: 2, pageHeight: 50 },
+          { start: 4, pageHeight: 50 },
+        ],
+        [4],
+      );
+      expect(result.gaps.map((gap) => [gap.page, gap.section])).toEqual([
+        [2, 2],
+        [3, 2],
+        [4, 3],
+        [5, 3],
+      ]);
+      const pages = result.gaps.map((gap, position) =>
+        gapPages(gap, previousPageSection(result.gaps, position), result, layout),
+      );
+      // Page 1 : première de la section 1 ; la section 2 (continuous) n'ouvre jamais de première page.
+      expect(pages[0]).toEqual({
+        closing: { pageNumber: 1, firstOfSection: true },
+        opening: { pageNumber: 2, firstOfSection: false },
+      });
+      expect(pages[1]).toEqual({
+        closing: { pageNumber: 2, firstOfSection: false },
+        opening: { pageNumber: 3, firstOfSection: false },
+      });
+      // La section 3 s'ouvre sur une nouvelle page : page 4 première, page 5 non.
+      expect(pages[2]?.opening).toEqual({ pageNumber: 4, firstOfSection: true });
+      expect(pages[3]).toEqual({
+        closing: { pageNumber: 4, firstOfSection: true },
+        opening: { pageNumber: 5, firstOfSection: false },
+      });
+      expect(lastPageOf(result, layout)).toEqual({ pageNumber: 5, firstOfSection: false });
+      expect(lastPageOf(EMPTY_PAGINATION, layout)).toEqual({ pageNumber: 1, firstOfSection: true });
+      // Coupure étrangère au résultat : pages quelconques de leur section.
+      expect(gapPages({ index: 9, page: 9, fill: 0 }, 1, result, layout)).toEqual({
+        closing: { pageNumber: 8, firstOfSection: false },
+        opening: { pageNumber: 9, firstOfSection: false },
+      });
     });
 
     it('helpers : previousPageSection, gapCssVariables et pageHeightTotalMm', () => {

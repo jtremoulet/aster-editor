@@ -4,17 +4,21 @@ import type {
   PageDimensions,
   PageSizeName,
   PageViewOptions,
-} from '../api';
-import { sanitizeHeaderFooterHtml } from './header-footer-sanitize';
-import { roundLayoutNumber } from './layout-css';
-import { PAGE_SIZES_MM, resolveSectionLayout } from './page-view';
+} from '../api/index.js';
+import { roundLayoutNumber } from './layout-css.js';
+import { PAGE_SIZES_MM, resolveSectionLayout } from './page-view.js';
 import {
   MM_TO_PX,
   cssLengthToPx,
   type PageGap,
   type PaginationResult,
   type SectionCssVariables,
-} from './pagination-layout';
+} from './pagination-layout.js';
+import {
+  headerFooterHtmlFor,
+  isContinuousSection,
+  type HeaderFooterPage,
+} from './page-view-variants.js';
 
 /**
  * Rendu des sections dans les coupures de page (session 4, L44). Le contrôleur pose un
@@ -29,10 +33,13 @@ import {
  *   Les marges gauche et droite ne sont **pas** posées : la coupure s'aligne sur la feuille,
  *   qui garde les marges horizontales de la section 1 (approximation documentée, une
  *   seule feuille sans changement de largeur en cours de document) ;
- * - sur la première coupure d'une section (classe `aster-page-gap--section`) : le libellé
- *   « Section n · Format orientation » (`pageView.section`), l'en-tête `default` de la
- *   section qui commence et le pied `default` de celle qui se termine, assainis, en lecture
- *   seule, retirés avec `showHeadersFooters: false`.
+ * - sur **chaque** coupure (session 5, L52, retour POC n° 3) : le pied de la page qui se
+ *   termine (section `previous`) et l'en-tête de la page qui commence (section `section`),
+ *   assainis, en lecture seule, retirés avec `showHeadersFooters: false` ; la variante
+ *   suit la page (`headerFooterHtmlFor` : `first` sur la première page d'une section
+ *   `titlePage`, `even` sur les pages paires quand il existe, `default` sinon) ;
+ * - sur la première coupure d'une section seulement (classe `aster-page-gap--section`) :
+ *   le libellé « Section n · Format orientation » (`pageView.section`).
  */
 
 /** Attribut du widget : numéro (1-based) de la section de la page qui commence après la coupure. */
@@ -147,9 +154,50 @@ export function gapCssVariables(
   return variables;
 }
 
-/** HTML assaini d'un en-tête ou pied `default` d'une section, `''` s'il n'y en a pas. */
-function sectionHtml(layout: DocumentLayout, section: number, kind: 'headers' | 'footers'): string {
-  return sanitizeHeaderFooterHtml(resolveSectionLayout(layout, section)[kind]?.default?.html ?? '');
+/** Les deux pages d'une coupure : celle qui se termine au-dessus, celle qui commence en dessous. */
+export interface GapPages {
+  readonly closing: HeaderFooterPage;
+  readonly opening: HeaderFooterPage;
+}
+
+/**
+ * Pages de la coupure `gap` (page `gap.page - 1` qui se termine, `gap.page` qui commence),
+ * avec leur place dans leur section : la page qui commence est la première de la sienne
+ * quand la section change à cette coupure et ne s'ouvre pas en `continuous` ; la page qui
+ * se termine l'est quand elle est la page 1 ou que la coupure d'avant a ouvert sa section.
+ * La position de `gap` est retrouvée dans `result.gaps` (même objet) ; coupure inconnue :
+ * pages quelconques de leur section.
+ */
+export function gapPages(
+  gap: PageGap,
+  previous: number,
+  result: PaginationResult,
+  layout: DocumentLayout,
+): GapPages {
+  const section = gap.section ?? previous;
+  const position = result.gaps.indexOf(gap);
+  const opensSection = (at: number): boolean => {
+    const target = result.gaps[at];
+    if (!target || target.section === undefined) return false;
+    const before = previousPageSection(result.gaps, at);
+    return target.section !== before && !isContinuousSection(layout, target.section);
+  };
+  const openingFirst = position >= 0 ? opensSection(position) : false;
+  const closingFirst = position === 0 || (position > 0 && opensSection(position - 1));
+  return {
+    closing: { pageNumber: gap.page - 1, firstOfSection: closingFirst },
+    opening: { pageNumber: gap.page, firstOfSection: openingFirst && section !== previous },
+  };
+}
+
+/** HTML assaini de l'en-tête ou du pied d'une section pour une page, `''` s'il n'y en a pas. */
+function sectionHtml(
+  layout: DocumentLayout,
+  section: number,
+  kind: 'headers' | 'footers',
+  page: HeaderFooterPage,
+): string {
+  return headerFooterHtmlFor(resolveSectionLayout(layout, section), kind, page);
 }
 
 /** Conteneur en lecture seule d'un en-tête ou d'un pied dans une coupure, `null` si vide. */
@@ -165,10 +213,43 @@ function renderHeaderFooter(className: string, html: string): HTMLElement | null
 }
 
 /**
- * Enrichit le DOM d'une coupure avec sa section (voir l'en-tête du module). `previous` est
- * la section de la page qui se termine ; la coupure « ouvre » une section quand elle
- * diffère de `gap.section` (première coupure de la section, forcée ou, pour une section
- * `continuous`, première coupure par débordement). Sans `gap.section`, rien n'est posé.
+ * En-tête et pied d'une coupure (L52) : pied de la page qui se termine (section
+ * `previous`), en-tête de la page qui commence (section `section`), chacun dans la
+ * variante de sa page. Sans section (`gap.section` absent), le document n'a qu'une section :
+ * c'est celle de l'hôte, section 1, sur toutes les pages.
+ */
+function appendHeaderFooter(
+  element: HTMLElement,
+  gap: PageGap,
+  previous: number,
+  result: PaginationResult,
+  options: PageViewOptions,
+): void {
+  if (options.showHeadersFooters === false) {
+    return;
+  }
+  const layout: DocumentLayout = options.layout ?? {};
+  const section = gap.section ?? previous;
+  const pages = gapPages(gap, previous, result, layout);
+  const footer = renderHeaderFooter(
+    PAGE_GAP_FOOTER_CLASS,
+    sectionHtml(layout, previous, 'footers', pages.closing),
+  );
+  if (footer) element.prepend(footer);
+  const header = renderHeaderFooter(
+    PAGE_GAP_HEADER_CLASS,
+    sectionHtml(layout, section, 'headers', pages.opening),
+  );
+  if (header) element.append(header);
+}
+
+/**
+ * Enrichit le DOM d'une coupure (voir l'en-tête du module) : pied et en-tête sur chaque
+ * coupure (L52), puis, avec des sections, `data-section`, les variables de la section et,
+ * quand la section change à cette coupure (première coupure de la section, forcée ou,
+ * pour une section `continuous`, première coupure par débordement), la classe
+ * `aster-page-gap--section` et le libellé. `previous` est la section de la page qui se
+ * termine.
  */
 export function decorateGapSection(
   element: HTMLElement,
@@ -178,6 +259,7 @@ export function decorateGapSection(
   options: PageViewOptions,
   aster: AsterEditor | null,
 ): void {
+  appendHeaderFooter(element, gap, previous, result, options);
   const section = gap.section;
   const sections = result.sections;
   if (section === undefined || !sections) {
@@ -191,19 +273,6 @@ export function decorateGapSection(
     return;
   }
   element.classList.add(PAGE_GAP_SECTION_CLASS);
-  const layout: DocumentLayout = options.layout ?? {};
-  if (options.showHeadersFooters !== false) {
-    const footer = renderHeaderFooter(
-      PAGE_GAP_FOOTER_CLASS,
-      sectionHtml(layout, previous, 'footers'),
-    );
-    if (footer) element.prepend(footer);
-    const header = renderHeaderFooter(
-      PAGE_GAP_HEADER_CLASS,
-      sectionHtml(layout, section, 'headers'),
-    );
-    if (header) element.append(header);
-  }
   const label = document.createElement('span');
   label.className = PAGE_GAP_SECTION_LABEL_CLASS;
   label.textContent = sectionLabel(aster, sections[section - 1], section);
@@ -211,10 +280,10 @@ export function decorateGapSection(
 }
 
 /**
- * Signature courte de ce qui change le rendu d'une coupure de section (variables de ses
- * deux sections, en-têtes et pieds concernés) : entre dans la clé de la décoration, pour
- * que ProseMirror recrée le DOM quand la mise en page d'une section change et le
- * réutilise sinon. Chaîne vide sans section.
+ * Signature courte de ce qui change le rendu d'une coupure (variables de ses deux
+ * sections, en-tête et pied de ses deux pages) : entre dans la clé de la décoration, pour
+ * que ProseMirror recrée le DOM quand la mise en page ou un en-tête change et le
+ * réutilise sinon. Sans section, seuls l'en-tête et le pied (L52) comptent.
  */
 export function sectionSignature(
   gap: PageGap,
@@ -222,18 +291,17 @@ export function sectionSignature(
   result: PaginationResult,
   options: PageViewOptions,
 ): string {
-  const section = gap.section;
-  const sections = result.sections;
-  if (section === undefined || !sections) {
-    return '';
-  }
   const layout: DocumentLayout = options.layout ?? {};
+  const section = gap.section ?? previous;
+  const sections = result.sections;
+  const showHeadersFooters = options.showHeadersFooters !== false;
+  const pages = gapPages(gap, previous, result, layout);
   const parts = [
-    JSON.stringify(sections[previous - 1] ?? null),
-    JSON.stringify(sections[section - 1] ?? null),
-    String(options.showHeadersFooters !== false),
-    section === previous ? '' : sectionHtml(layout, previous, 'footers'),
-    section === previous ? '' : sectionHtml(layout, section, 'headers'),
+    sections ? JSON.stringify(sections[previous - 1] ?? null) : '',
+    sections ? JSON.stringify(sections[section - 1] ?? null) : '',
+    String(showHeadersFooters),
+    showHeadersFooters ? sectionHtml(layout, previous, 'footers', pages.closing) : '',
+    showHeadersFooters ? sectionHtml(layout, section, 'headers', pages.opening) : '',
   ];
   // djb2 : un entier court suffit, la clé n'a pas besoin d'être cryptographique.
   let hash = 5381;
@@ -241,6 +309,20 @@ export function sectionSignature(
     hash = (hash * 33) ^ character.charCodeAt(0);
   }
   return `${section}-${previous}-${(hash >>> 0).toString(36)}`;
+}
+
+/**
+ * Dernière page d'une pagination pour le pied de l'hôte (L52) : son numéro est le nombre
+ * de pages ; elle est la première de sa section quand le document tient sur une page ou
+ * que la dernière coupure ouvre une section (hors `continuous`).
+ */
+export function lastPageOf(result: PaginationResult, layout: DocumentLayout): HeaderFooterPage {
+  const last = result.gaps[result.gaps.length - 1];
+  if (!last) {
+    return { pageNumber: 1, firstOfSection: true };
+  }
+  const previous = previousPageSection(result.gaps, result.gaps.length - 1);
+  return gapPages(last, previous, result, layout).opening;
 }
 
 /**

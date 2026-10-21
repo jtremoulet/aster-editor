@@ -1,27 +1,29 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
-import type { AsterEditor, PageViewOptions, Unsubscribe } from '../api';
+import type { AsterEditor, PageViewOptions, Unsubscribe } from '../api/index.js';
 import {
   PAGE_FOOTER_CLASS,
   PAGE_VIEW_CHANGE_EVENT,
   PAGE_VIEW_CLASS,
   getActivePageView,
-} from './page-view';
+  setHostLastPage,
+} from './page-view.js';
 import {
   EMPTY_PAGINATION,
   samePagination,
   type PageGap,
   type PaginationResult,
-} from './pagination-layout';
-import { PAGE_GAP_CLASS, measurePagination } from './pagination-measure';
+} from './pagination-layout.js';
+import { PAGE_GAP_CLASS, measurePagination } from './pagination-measure.js';
 import {
   PAGE_HEIGHT_TOTAL_CSS_VARIABLE,
   decorateGapSection,
+  lastPageOf,
   pageHeightTotalMm,
   previousPageSection,
   sectionSignature,
-} from './pagination-sections';
+} from './pagination-sections.js';
 
 /**
  * Contrôleur de la pagination approximative (session 3, L30, extrait de `pagination.ts`
@@ -111,9 +113,10 @@ interface GapSectionContext {
 }
 
 /**
- * DOM d'une coupure : `div.aster-page-gap[data-page-number][data-page-count]` et son
- * libellé ; avec des sections, `data-section`, les variables de la section et, sur la
- * première coupure d'une section, son en-tête, le pied de la précédente et un libellé.
+ * DOM d'une coupure : `div.aster-page-gap[data-page-number][data-page-count]`, son
+ * libellé, le pied de la page qui se termine et l'en-tête de celle qui commence (L52) ;
+ * avec des sections, `data-section`, les variables de la section et, sur la première
+ * coupure d'une section, un libellé.
  */
 function renderGap(
   gap: PageGap,
@@ -384,7 +387,8 @@ export class PaginationController {
 
   /**
    * Phase d'écriture : variables sur l'hôte (nombre de pages ; avec des sections, somme
-   * des hauteurs de pages, L44) et attribut du pied affiché.
+   * des hauteurs de pages, L44), attribut du pied affiché et dernière page connue (L52 :
+   * la vue page en déduit la variante `first` / `even` du pied de l'hôte).
    */
   private writePageCount(result: PaginationResult): void {
     const count = result.pageCount;
@@ -396,6 +400,7 @@ export class PaginationController {
       this.host?.style.setProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE, `${totalMm}mm`);
     }
     this.footer()?.setAttribute(PAGE_COUNT_ATTRIBUTE, String(count));
+    setHostLastPage(this.view.dom, lastPageOf(result, this.options?.layout ?? {}));
   }
 
   /** Pied affiché posé par la vue page : frère de `view.dom`. */
@@ -423,6 +428,7 @@ export class PaginationController {
       }
     }
     this.footer()?.removeAttribute(PAGE_COUNT_ATTRIBUTE);
+    setHostLastPage(this.view.dom, null);
     const hadGaps = this.result.gaps.length > 0;
     this.result = EMPTY_PAGINATION;
     if (hadGaps) {

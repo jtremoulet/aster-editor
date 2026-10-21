@@ -446,6 +446,25 @@
   display: none;
 }
 
+/* Alignement de l'image : radios en ligne, comme `.aster-dialog__radios` (retour POC n° 6, L52). */
+.aster-image-dialog__radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aster-space-3);
+}
+
+.aster-image-dialog__radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--aster-space-1);
+  cursor: pointer;
+}
+
+.aster-image-dialog__radio {
+  margin: 0;
+  accent-color: var(--aster-accent);
+}
+
 /* ---------- Contenu éditable --------------------------------------------- */
 
 .aster-content {

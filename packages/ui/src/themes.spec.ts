@@ -36,6 +36,12 @@ const RUNTIME_VARIABLES: ReadonlySet<string> = new Set([
   // hauteurs de pages (pagination).
   '--aster-page-width-max',
   '--aster-page-height-total',
+  // Défauts du document (L52) : police et paragraphe par défaut, posés par la vue page.
+  '--aster-page-font-family',
+  '--aster-page-font-size',
+  '--aster-page-default-line-height',
+  '--aster-page-default-spacing-before',
+  '--aster-page-default-spacing-after',
 ]);
 
 /** Variables de vue page que chaque thème doit déclarer (documentées dans `page.css`). */
@@ -153,6 +159,31 @@ describe('thèmes CSS', () => {
       );
       expect(missing, `variables absentes de ${theme}.css`).toEqual([]);
     }
+  });
+
+  it('L52 (retour n° 6) : les radios du dialogue d’image sont alignées comme .aster-dialog__radios', () => {
+    const base = readFileSync(join(THEMES_DIR, 'base.css'), 'utf8');
+    const radios = /\.aster-image-dialog__radios \{([^}]*)\}/.exec(base)?.[1] ?? '';
+    expect(radios).toContain('display: flex');
+    expect(radios).toContain('flex-wrap: wrap');
+    expect(radios).toContain('gap: var(--aster-space-3)');
+    const reference = /\.aster-dialog__radios \{([^}]*)\}/.exec(
+      readFileSync(join(THEMES_DIR, 'page.css'), 'utf8'),
+    )?.[1];
+    expect(radios.replace(/\s+/g, ' ').trim()).toBe((reference ?? '').replace(/\s+/g, ' ').trim());
+    const label = /\.aster-image-dialog__radio-label \{([^}]*)\}/.exec(base)?.[1] ?? '';
+    expect(label).toContain('display: inline-flex');
+    expect(label).toContain('align-items: center');
+  });
+
+  it('L52 (retour n° 5a) : le bandeau de recherche est dans le flux, jamais en position absolue, masqué à l’impression', () => {
+    const search = readFileSync(join(THEMES_DIR, 'search-source.css'), 'utf8');
+    const band = /\.aster-search-panel \{([^}]*)\}/.exec(search)?.[1] ?? '';
+    expect(band).toContain('display: flex');
+    expect(band).toContain('border-bottom: 1px solid var(--aster-border)');
+    expect(band).not.toContain('position:');
+    expect(search).toContain('.aster-search-panel[hidden] {\n  display: none;\n}');
+    expect(readFileSync(join(THEMES_DIR, 'print.css'), 'utf8')).toContain('.aster-search-panel,');
   });
 
   it('light et night déclarent exactement les mêmes variables', () => {
@@ -330,9 +361,9 @@ describe('thèmes CSS', () => {
       expect(page).toContain('.aster-page-layout__section');
     });
 
-    it('R44-04 : dans la coupure d’ouverture, libellé et numéro sont posés au-dessus de l’en-tête', () => {
+    it('R44-04 / L52 : dans toute coupure avec en-tête, libellé et numéro sont posés au-dessus de l’en-tête', () => {
       const rule =
-        /\.aster-page-gap--section:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__number \{([^}]*)\}/.exec(
+        /\.aster-page-gap:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__number \{([^}]*)\}/.exec(
           page,
         );
       expect(rule?.[1]?.replace(/\s+/g, ' ')).toContain(
@@ -341,8 +372,78 @@ describe('thèmes CSS', () => {
       expect(rule?.[1]).toContain('transform: none');
       // Même règle pour le libellé de section, dans le même bloc.
       expect(page).toMatch(
-        /\.aster-page-gap--section:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__section,/,
+        /\.aster-page-gap:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__section,/,
       );
+    });
+
+    it('L52 (retour n° 4) : bandes d’en-tête et de pied à une ligne au moins, hôte et coupures', () => {
+      // Marge haute proche de la distance d'en-tête (12,7 vs 12,49 mm) : la bande tombait à zéro.
+      // Règle propre (seul sélecteur), pas la règle partagée en-tête + pied.
+      const floor = (selector: string): string => {
+        const rule = new RegExp(`(?<!,\\n)^${escapeRegExp(selector)} \\{([^}]*)\\}`, 'm').exec(
+          page,
+        );
+        expect(rule, `${selector} absent`).not.toBeNull();
+        return (rule?.[1] ?? '').replace(/\s+/g, ' ');
+      };
+      expect(floor('.aster--page-view .aster-page-header')).toContain(
+        'max-height: max( calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm)), 1.4em )',
+      );
+      expect(floor('.aster--page-view .aster-page-footer')).toContain(
+        'max-height: max( calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)), 1.4em )',
+      );
+      expect(
+        floor('.aster--page-view .aster-content .ProseMirror .aster-page-gap__header'),
+      ).toContain(
+        'max-height: max( calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm)), 1.4em )',
+      );
+      expect(
+        floor('.aster--page-view .aster-content .ProseMirror .aster-page-gap__footer'),
+      ).toContain(
+        'max-height: max( calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)), 1.4em )',
+      );
+      // Le corps n'est pas poussé (approximation documentée dans la feuille).
+      expect(page).toContain('Pousser le corps demanderait de mesurer');
+    });
+
+    it('L52 (retour n° 2) : défauts du document appliqués en repli, en vue page seulement', () => {
+      const defaults = page.slice(page.indexOf('Défauts du document'));
+      const content = /\.aster--page-view \.aster-content \{([^}]*)\}/.exec(defaults)?.[1] ?? '';
+      expect(content).toContain(
+        'font-family: var(--aster-page-font-family, var(--aster-font-content))',
+      );
+      expect(content).toContain(
+        'font-size: var(--aster-page-font-size, var(--aster-font-size-content))',
+      );
+      expect(content).toContain(
+        'line-height: var(--aster-page-default-line-height, var(--aster-line-height))',
+      );
+      // En-têtes et pieds suivent la police du document.
+      const headerFooter =
+        /\.aster--page-view \.aster-page-header,\s*\.aster--page-view \.aster-page-footer \{([^}]*)\}/.exec(
+          page,
+        )?.[1] ?? '';
+      expect(headerFooter).toContain('var(--aster-page-font-family, var(--aster-font-content))');
+      // L'espacement ne s'applique qu'avec `aster--page-defaults`, jamais en `!important`.
+      const spacing =
+        /\.aster--page-defaults \.aster-content \.ProseMirror p,[^{]*\{([^}]*)\}/.exec(page)?.[1] ??
+        '';
+      expect(spacing).toContain('margin-top: var(--aster-page-default-spacing-before, 0)');
+      expect(spacing).toContain('margin-bottom: var(--aster-page-default-spacing-after, 0)');
+      expect(page).toContain(
+        '.aster--page-defaults .aster-content .ProseMirror > * + * {\n  margin-top: var(--aster-page-default-spacing-before, 0);',
+      );
+      expect(defaults.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('!important');
+      // Hors vue page, aucune règle ne consomme ces variables.
+      for (const file of ['base.css', 'search-source.css', 'images-tables.css']) {
+        expect(readFileSync(join(THEMES_DIR, file), 'utf8')).not.toContain('--aster-page-default');
+      }
+      // Cellules : marges de Word par défaut en vue page, l'inline `padding` du document prime.
+      const cells =
+        /\.aster--page-view \.aster-content \.ProseMirror td,\s*\.aster--page-view \.aster-content \.ProseMirror th \{([^}]*)\}/.exec(
+          page,
+        )?.[1] ?? '';
+      expect(cells).toContain('padding: 0 5.4pt');
     });
 
     it('session 4 : les points de suite d’une tabulation (data-leader) sont une bordure basse', () => {
