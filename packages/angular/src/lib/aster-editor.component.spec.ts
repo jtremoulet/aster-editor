@@ -854,6 +854,9 @@ describe('AsterEditorComponent', () => {
       expect(field?.getAttribute('contenteditable')).toBe('true');
       if (!dialog || !field) throw new Error('dialogue « Mise en page » attendu');
       field.innerHTML = '<p onclick="x()">En-tête du <b>dialogue</b></p>';
+      // Comme une saisie réelle : sans événement `input`, le champ n'est pas « modifié »
+      // et « Appliquer » conserve le jeu d'origine (F52, R52-02).
+      field.dispatchEvent(new Event('input', { bubbles: true }));
       Array.from(dialog.querySelectorAll<HTMLButtonElement>('.aster-dialog__button'))
         .find((button) => button.textContent === 'Appliquer')
         ?.click();

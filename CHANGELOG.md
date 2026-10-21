@@ -6,6 +6,32 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-21
+
+Réponse aux huit retours de l'intégrateur qui a mis la 0.6.0 en essai à la place de CKEditor : l'aperçu à l'écran se rapproche du document (en-têtes et pieds sur chaque page, défauts de paragraphe et police du document appliqués), les en-têtes et pieds s'éditent dans le dialogue « Mise en page », la recherche défile et ne recouvre plus le texte, les paquets s'importent en Node pur, et un contrôle de contenu lié aux propriétés du document n'est plus pris pour une variable. Session 5 : 4 lots, 2 revues adverses (15 findings, 0 bloquant, 5 majeurs, 14 corrigés avec test, 1 en attente du document du retour n° 1), 2 lots de correctifs.
+
+### Added
+
+- **core** : contrat `DocumentLayout.defaultParagraph` (interligne et espacements des `docDefaults`) ; en vue page, **en-tête et pied sur chaque coupure** (pied de la page qui se termine, en-tête de la page qui commence), variantes `first` (première page d'une section `titlePage`) et `even` (pages paires) calculées par la pagination, en-tête `first` sur l'hôte ; variables `--aster-page-font-family`, `--aster-page-font-size`, `--aster-page-default-line-height`, `--aster-page-default-spacing-before` / `-after` posées depuis `layout.defaultFont` et `layout.defaultParagraph` ; événement DOM `aster:page-view-last-page`.
+- **ui** : dialogue « Mise en page » : section **« En-tête et pied »** de la section courante (champs `default`, `first` si « Première page différente », `even` si « Pages paires différentes »), éditeur riche minimal sans Tiptap (`rich-field`), HTML assaini par le core, écrit dans `layout.sections[n]` avec recopie au premier niveau pour la dernière section ; bandeau de recherche **dans le flux** (il pousse le document au lieu de le recouvrir) ; classes `.aster--page-defaults`, règles de repli de police, interligne, espacements et marges de cellule (`0 5.4pt` sans `paddingPt`) en vue page ; 10 clés i18n.
+- **word** : `layout.defaultParagraph` lu depuis les `docDefaults` puis le style `Normal`, écrit dans les `docDefaults` de l'export neuf, comparé (`section.defaultParagraph`) ; fixture 20 (champs `TITLE`, `DOCPROPERTY`, `AUTHOR`, `DATE`, `PAGE`, contrôle de contenu lié, `MERGEFIELD`, `{{nom}}` en en-tête et dans le corps) à 1 dans le gabarit.
+- **outillage** : `scripts/add-js-extensions.mjs` (codemod et `--check` dans `npm run lint`), étape « import ESM en Node pur » dans `npm run smoke:install`, `scripts/generate-fixtures-fields.ts`.
+- **e2e** : `search.spec.ts` (bandeau, défilement dans quatre configurations), `headers-dialog.spec.ts` (édition d'un en-tête de section et export dans le gabarit).
+
+### Changed
+
+- **core, word, ui** : tous les imports relatifs portent l'extension `.js` : les paquets s'importent désormais en Node sans bundler (Vitest sans `server.deps.inline`, SSR). En 0.6.0 : `ERR_UNSUPPORTED_DIR_IMPORT` / `ERR_MODULE_NOT_FOUND`.
+- **core** : `searchPluginKey` est typé `PluginKey<SearchPluginState>` (était `DecorationSet`) ; sur une section `titlePage` sans en-tête `first`, la page 1 affiche `default` (Word la laisse vide : écart assumé pour qu'un `layout` imposé avec `headers.default` seul reste visible).
+- **ui** : dans le dialogue, un type d'en-tête masqué est conservé (`first` suit `titlePage` comme dans Word ; `even` n'est retiré que si « Pages paires différentes » était cochée à l'ouverture puis décochée) ; la valeur d'un champ est normalisée en point fixe (styles réduits aux propriétés typographiques et de boîte, `class` et `inherit` retirés) et un champ non modifié laisse son jeu strictement identique ; le widget `search` n'utilise plus `.aster-dropdown` (déclencheur `.aster-search-panel__trigger`, panneau `div.aster-search-panel[role=dialog]` inséré avant le contenu) ; bande d'en-tête et de pied jamais inférieure à une ligne (`max(…, 1.4em)`), l'en-tête peut empiéter sur la première ligne quand la marge haute égale la distance d'en-tête (Word pousse le corps, pas la vue page : documenté).
+- **word** : un contrôle de contenu `w:sdt` lié aux propriétés du document (`w:dataBinding` vers `coreProperties`, `extended-properties`, `customProperties`, ou sans `w:tag`) n'est plus une variable : Word le remplit, il rend son contenu ou son espace réservé en texte ; un contrôle lié à un XML personnalisé avec `w:tag` nommé reste une variable (contrat de la session 2), comme un contrôle non lié avec `w:alias` seul. Le lecteur retranche désormais interligne et espacements contre les `docDefaults` **puis** le style `Normal` (ce que transporte `defaultParagraph`) et écrit explicitement le défaut Word sur un paragraphe qui n'en a pas quand le document en a un ; `w:before` / `w:after` négatifs et `w:line` ≤ 0 ignorés, `lineRule` inconnu ignoré, `atLeast` non transporté dans `defaultParagraph` (par paragraphe, il reste lu comme un interligne exact : à distinguer au contrat).
+- **démo** : le panneau En-tête / Pied de la page Modèle édite l'en-tête affiché sur la page 1 (`first` quand la section 1 a une première page différente) ; toolbar `full` sur la page Modèle (le widget `pageLayout` n'est pas dans le preset `standard`).
+
+### Fixed
+
+- **core** : « suivant » / « précédent » de la recherche ne défilaient pas quand le focus était dans le champ du panneau (`scrollToSelection` de ProseMirror ignore un `focusNode` hors éditeur) : le plugin fait défiler la correspondance courante lui-même, au centre et seulement si elle n'est pas visible ; en-tête et pied visibles sur une seule page quand la marge haute approchait la distance d'en-tête ; en-tête et pied absents des coupures d'un document à une section.
+- **ui** : boutons radio collés dans le dialogue d'image.
+- **word** : un contrôle de contenu lié ressortait en variable `{{Titre}}` à l'import et dans l'en-tête résolu à l'export (retour POC n° 1).
+
 ## [0.6.0] - 2026-10-21
 
 Sections multiples conservées de bout en bout (import, vue page, export dans le gabarit), tabulations, bordures à espace et couleur exactes, alignement des tableaux, styles de tableau conditionnels à l'import ; le chemin stylé devient le défaut. Document client à **0,995** dans son gabarit (0,889 en 0.5.0), fixtures 11-16, 18 et 19 à 1. Session 4 : 16 lots d'agents, 4 revues adverses (33 findings, 31 corrigés, 2 reportés en décision), 4 lots de correctifs, e2e WebKit.

@@ -290,3 +290,39 @@ Total : ≈ 8 M tokens d'agents, 1 262 → 1 994 tests unitaires, 35 → 42 e2e,
 3. **Commiter par chemins explicites** et ne jamais laisser un agent manipuler l'index.
 4. **Suite de tests complète avant chaque push** (pas seulement le paquet livré), ou un worktree isolé pour les lots qui touchent le contrat.
 5. **Relire les briefs avec les fixtures ouvertes** : le contrat des tabulations manquait l'alignement, visible dans la fixture 19 dès L40.
+
+## 🌙 Session 5 — retours du POC intégrateur, 0.7.0 (21 octobre 2026, soirée)
+
+### 📊 Métriques par lot
+
+| Lot                              | Durée       | Tokens      | Outils   | Résultat                                                                      |
+| -------------------------------- | ----------- | ----------- | -------- | ----------------------------------------------------------------------------- |
+| Triage des huit retours          | 15 min      | —           | —        | 5 confirmés contre le code et le `dist`, 2 à reproduire, 1 évolution          |
+| L51 packaging ESM                | 10 min      | 124k        | 40       | 1 475 imports, smoke Node pur, échec prouvé sur la 0.6.0                      |
+| L52 vue page, recherche, défauts | 31 min      | 383k        | 185      | en-tête et pied par page, cause réelle du non-défilement, bandeau             |
+| L53 word défauts et champs       | 20 min      | 390k        | 149      | `defaultParagraph`, cause du retour n° 1 trouvée sans le document, fixture 20 |
+| L54 dialogue en-têtes            | 26 min      | 360k        | 122      | éditeur minimal sans Tiptap, `withSectionLayout`                              |
+| R52 / R53                        | 13 min      | 255k / 204k | 48 / 51  | 7 + 8 findings, 0 bloquant, tous prouvés                                      |
+| F52 / F53                        | 17 / 18 min | 218k / 386k | 76 / 138 | 14 findings corrigés avec test, régression R53-01 attrapée avant publication  |
+| L55 docs                         | **L55**     | —           | —        | **L55_RESULTAT**                                                              |
+
+### ✅ Ce qui a marché
+
+- **Trier avant de lancer** : quinze minutes de vérification contre le code et le `dist` publié ont requalifié deux retours (le défilement de la recherche était bien appelé, l'en-tête n'était pas « vidé ») et évité deux lots inutiles ; les deux « à reproduire » ont ensuite livré une cause réelle chacun, différente de l'hypothèse de l'intégrateur.
+- **Le codemod en premier, les autres lots avec la règle « nouveaux imports en `.js` »** : 360 fichiers réécrits pendant que trois lots éditaient les mêmes fichiers, zéro conflit ; l'orchestrateur a commité les fichiers « imports seulement » par un script qui lit le diff, les 15 fichiers mixtes sont partis avec leur lot.
+- **Les revues attrapent les régressions que les tests de lot ne voient pas** : R53-01 (espacements retranchés contre une base différente de celle transportée) ne cassait aucun test et aurait dégradé l'export neuf de tout style non basé sur `Normal` chez l'intégrateur.
+- **Une fixture plutôt qu'un document client** : la fixture 20 construite d'après les formes possibles du retour n° 1 a mis au jour le QuickPart « Propriété du document » (contrôle lié + alias localisé) sans attendre le `.docx`.
+
+### 🧱 Frictions nouvelles
+
+- **Décisions produit prises par les lots** (`even` retiré quand la case est décochée, `titlePage` sans `first` → `default`, `atLeast` non transporté) : justifiées, mais chacune aurait mérité une ligne dans le brief. Les trois sont listées dans le bilan et le changelog comme réversibles.
+- **Le smoke install ne testait que des bundlers** : le défaut d'extension `.js` a atteint deux versions publiées. Règle : chaque chemin de consommation documenté (bundler, Node pur, ngc) a sa marche dans le smoke.
+- **Test de performance rouge sous charge** quand trois suites tournent en même temps : le « meilleur de deux imports » ne suffit pas quand la machine est saturée ; relancé seul, il passe. À remplacer par une mesure relative (ratio contre un import de référence dans le même run).
+- **Ligne de commande Windows trop longue** pour `git add` de 350 fichiers : `--pathspec-from-file`.
+
+### 📐 Ce que la session 5 ajoute à la méthode
+
+1. **Triage vérifié avant tout lot** : chaque retour externe est reproduit ou requalifié contre le code et l'artefact publié, puis classé bug confirmé / à reproduire / évolution.
+2. **Un lot mécanique transverse (codemod) part en premier** avec une règle explicite pour les lots concurrents, et se relance en `--check` à la fin.
+3. **Le smoke couvre tous les modes de consommation** des paquets, pas seulement celui de la démo.
+4. **Les décisions produit prises par un lot sont relevées dans le bilan** comme réversibles, avec la proposition de contrat qui les rendrait inutiles.
