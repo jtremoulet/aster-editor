@@ -430,6 +430,8 @@ l'événement `pageViewChange` du contrat (session 4, L45b ; l'événement DOM
 `{}` dans `layout()` : seule une mise en page explicite (dialogue, input, import) est adoptée. La
 vue page survit à un remontage (`toolbar`). `config.pageView` est honoré, l'input dédié prime.
 
+**Session 5 (0.7.0) : rien de nouveau dans l'API du composant**, vérifié sur `packages/angular/src/lib/` (aucune ligne de code modifiée, seule la spec a gagné un scénario). Ce qui change à l'écran vient du core et de `ui` : l'en-tête et le pied apparaissent sur **chaque** page de la vue page avec la variante de la page (`first` sur la première page d'une section à première page différente, `even` sur les pages paires, `default` sinon), la bande d'en-tête garde une hauteur minimale d'une ligne, la police et les défauts de paragraphe du document (`layout().defaultFont` / `defaultParagraph`, lus par `importDocx`) s'appliquent aux blocs sans valeur propre, et le dialogue « Mise en page » (toolbar `full`) édite désormais les en-têtes et pieds de la section du curseur : ce qu'il applique passe par `setPageView` du core, donc par `pageViewChange`, donc par `layoutChanged` (`layout().headers.default.html` suit, assaini et normalisé ; spec « L54 »). Un en-tête saisi là est régénéré à l'export dans le gabarit comme un en-tête édité via `[layout]`.
+
 L'input `layout` impose une mise en page : il prime sur celle de l'import et sur celle du
 dialogue, se répercute sur la vue page active et sur `exportDocx`. Comme il masque ce que le
 dialogue pose ensuite, tiens-le à jour depuis `layoutChanged` (`[layout]="layout()"` +
@@ -468,9 +470,11 @@ pondéré entre 0 et 1, propriétés conservées / perdues par groupe (`text`, `
 `package-part`) avec jusqu'à cinq exemples, parties du paquet identiques ou non, objets perdus,
 notes. `null` sans gabarit importé. Un aller-retour sans modification vise un score ≥ 0,98 ;
 c'est le critère d'acceptation, pas une impression visuelle. Scores mesurés sur les fixtures et
-le document client dans [`fixtures/docx/README.md`](../../fixtures/docx/README.md) (session 4 :
-1 pour les fixtures 11 à 16, 18 et 19, 0,972 pour la 17 ; 0,995 pour le document
-client, dont les trois sections ressortent à l'octet).
+le document client dans [`fixtures/docx/README.md`](../../fixtures/docx/README.md) (session 5,
+après F53 : 1 pour les fixtures 11 à 16 et 18 à 20, 0,972 pour la 17 ; 0,995 pour le document
+client, dont les trois sections ressortent à l'octet ; la 20, champs Word et contrôle lié en
+en-tête, ressort avec `header1.xml` à l'octet). Depuis la session 5, le rapport compare aussi
+`section.defaultParagraph` (interligne et espacements par défaut du document).
 
 ### Limites
 
@@ -487,17 +491,27 @@ client, dont les trois sections ressortent à l'octet).
   pas affichées, la numérotation de page par section et les bordures de page ne sont pas lues.
 - Avec un gabarit, les options `page`, `pageSize`, `header`, `footer`, `defaultFont`, `lang`,
   `headingStyles` de l'export sont ignorées, ainsi que `layout.page`, `layout.columns`,
-  `layout.titlePage`, `layout.defaultFont` et `layout.lang` : le gabarit les porte (JSDoc de
+  `layout.titlePage`, `layout.defaultFont`, `layout.defaultParagraph` et `layout.lang` : le gabarit les porte (JSDoc de
   `template` dans `packages/word/src/export/types.ts`). `variables`, `toc`, `numberedHeadings`,
   `title`, `creator`, `layout.headers`, `layout.footers` et `layout.sections` s'appliquent.
-- Seuls les en-têtes et pieds `default` sont affichés par la vue page ; `first` et `even` sont
-  conservés dans le gabarit et dans `layout()`. Un en-tête ou pied édité via `[layout]` est
-  régénéré par l'export neuf et perd ce que celui-ci ne sait pas écrire (tableaux complexes,
-  images ancrées, champs autres que `PAGE` / `NUMPAGES` / fusion). Avec des sections, édite
-  `sections[0].headers` (l'en-tête que l'hôte affiche) et le pied de la dernière section
+- La vue page affiche, sur chaque page, l'en-tête et le pied de la variante de cette page
+  (`first` / `even` / `default`, session 5) ; une section à première page différente sans `first`
+  affiche `default` sur sa première page (Word la laisse vide : écart assumé). Un en-tête ou pied
+  édité via `[layout]` ou via le dialogue « Mise en page » est régénéré par l'export neuf et perd
+  ce que celui-ci ne sait pas écrire (tableaux complexes, images ancrées, champs autres que
+  `PAGE` / `NUMPAGES` / fusion ; les champs `TITLE` / `DOCPROPERTY`… d'un en-tête importé y sont
+  figés en texte, alors qu'un en-tête **non modifié** reste à l'octet, champs compris). Avec des
+  sections, édite `sections[0].headers` (l'en-tête que l'hôte affiche : son `first` si la
+  section 1 a une première page différente, sinon `default`) et le pied de la dernière section
   **recopié au premier niveau** (`layout.footers`, invariant du contrat) : éditer `layout.headers`
   seul n'a aucun effet visible, c'est l'en-tête de la dernière section. C'est ce que fait le
-  panneau En-tête / Pied de la page « Modèle » de la démo depuis la session 4.
+  panneau En-tête / Pied de la page « Modèle » de la démo (il édite `first` quand il existe,
+  arbitrage de la session 5) ; le dialogue « Mise en page » de la toolbar fait la même chose pour
+  n'importe quelle section, type par type.
+- La police et les défauts de paragraphe du document (`layout().defaultFont`,
+  `layout().defaultParagraph`, session 5) ne s'appliquent qu'en vue page, en repli des valeurs du
+  thème, aux blocs sans valeur propre ; hors vue page, le thème garde la main. Avec un gabarit,
+  `layout.defaultParagraph` est ignoré à l'export comme `layout.defaultFont`.
 - Le chemin `semantic` ne renseigne ni `layout()` (objet vide) ni `lostObjects()` ; le gabarit
   (`importedTemplate()`) est conservé sur les deux chemins.
 
@@ -518,16 +532,18 @@ riche, `/import` dépôt de `.docx` avec sélecteur `styled` / `semantic`, mise 
 avertissements (exemple `13-styles-nommes.docx`), `/readonly` rendu figé en thème `night`,
 `/template` modèle à variables (exemples `08-variables-braces.docx` et `16-sections.docx` servis
 depuis `public/samples/`, formulaire généré, aperçu puces / résolu, vue page, en-tête de la
-première section et pied de la dernière éditables, export dans les trois modes ou dans le
-gabarit, rapport de fidélité, objets non représentables). La touche Tab de la démo garde le
+première section (celui de la page 1 : `first` si elle a une première page différente) et pied de
+la dernière éditables, avec un renvoi vers le dialogue « Mise en page » de la toolbar pour les
+autres sections, export dans les trois modes ou dans le gabarit, rapport de fidélité, objets non
+représentables). La touche Tab de la démo garde le
 comportement `focus` du core (le formulaire de `/form` reste navigable au clavier) ; le playground
 vanilla, lui, monte l'éditeur avec `tabKey: 'insert'`.
 
 ## 🧪 Tests
 
 ```bash
-npx ng test aster-angular --watch=false   # 53 tests du composant et de provideAster (importFidelity, exportInTemplate, pageView, layout, pageViewChange, sections, compareWithTemplate compris)
-npx ng test demo --watch=false            # 30 tests des pages de la démo (Import : sélecteur styled / semantic ; Modèle : vue page, en-tête et pied par section, rapport de fidélité, objets perdus)
+npx ng test aster-angular --watch=false   # 54 tests du composant et de provideAster (importFidelity, exportInTemplate, pageView, layout, pageViewChange, sections, compareWithTemplate, en-tête saisi dans le dialogue « Mise en page » relayé par layoutChanged compris)
+npx ng test demo --watch=false            # 30 tests des pages de la démo (Import : sélecteur styled / semantic ; Modèle : vue page, en-tête de la page 1 et pied par section, rapport de fidélité, objets perdus)
 npm run e2e -- --project=demo             # 19 tests Playwright sur la démo, pages Modèle et sections comprises (ng serve lancé par Playwright)
 ```
 
