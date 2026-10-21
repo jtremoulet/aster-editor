@@ -8,8 +8,8 @@ import {
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
-import type { TabAlign, TabAttrs, TabLeader } from '../api';
-import { formatPt, isLayoutNumber, parsePt, roundLayoutNumber } from './layout-css';
+import type { TabAlign, TabAttrs, TabLeader } from '../api/index.js';
+import { formatPt, isLayoutNumber, parsePt, roundLayoutNumber } from './layout-css.js';
 
 /** Nom du nœud de tabulation. */
 export const TAB_NODE_NAME = 'tab';

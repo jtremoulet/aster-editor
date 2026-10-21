@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from './export-docx';
-import { parseFragment, roundTrip, toZipEntries } from './testing/sample';
+import { exportDocx } from './export-docx.js';
+import { parseFragment, roundTrip, toZipEntries } from './testing/sample.js';
 
 /** Entrées `numbering.xml` et `document.xml` d'un export. */
 async function numberingOf(html: string): Promise<{ numbering: string; document: string }> {

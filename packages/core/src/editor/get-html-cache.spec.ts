@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { normalizeOutputHtml } from '../html/normalize-output';
-import { mountEditor, selectRange, type MountedEditor } from '../testing/mount';
+import { normalizeOutputHtml } from '../html/normalize-output.js';
+import { mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
 
 // Espion sur le module entier : l'éditeur importe `normalizeOutputHtml` par liaison
 // vive, l'espion compte donc bien les appels faits depuis `getHTML()`.
-vi.mock(import('../html/normalize-output'), { spy: true });
+vi.mock(import('../html/normalize-output.js'), { spy: true });
 
 // Se termine par un paragraphe : sinon `TrailingNode` en ajouterait un à la première
 // transaction, ce qui est un vrai changement de document, pas un défaut du cache.

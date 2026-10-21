@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { untyped } from '../testing/untyped';
-import { importDocx } from './import-docx';
-import { normalizeHtml, parseFragment } from './testing/dom';
-import type { DocxInput } from './types';
+import { untyped } from '../testing/untyped.js';
+import { importDocx } from './import-docx.js';
+import { normalizeHtml, parseFragment } from './testing/dom.js';
+import type { DocxInput } from './types.js';
 
 /**
  * Tests de `importDocx` sur les fixtures 01-03. Sans option, l'import lit avec le lecteur

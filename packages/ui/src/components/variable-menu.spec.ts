@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AsterVariable } from '@aster-editor/core';
-import { createMockEditor, type MockEditor, type MockEditorOptions } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import {
+  createMockEditor,
+  type MockEditor,
+  type MockEditorOptions,
+} from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   allowsUnknownVariables,
   createVariableMenu,
   isAcceptableVariableName,
   placeholderText,
-} from './variable-menu';
+} from './variable-menu.js';
 
 const VARIABLES: readonly AsterVariable[] = [
   { name: 'client.name', label: 'Client name', description: 'Full name of the client' },

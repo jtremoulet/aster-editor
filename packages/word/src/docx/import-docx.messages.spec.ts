@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { importDocx } from './import-docx';
+import { importDocx } from './import-docx.js';
 
 /**
  * mammoth est mocké ici car les fixtures synthétiques ne déclenchent aucun message :

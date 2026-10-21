@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TAB_COMMAND_IDS } from '../commands/layout';
-import { en } from '../i18n/en';
-import { fr } from '../i18n/fr';
+import { TAB_COMMAND_IDS } from '../commands/layout.js';
+import { en } from '../i18n/en.js';
+import { fr } from '../i18n/fr.js';
 import {
   TAB_CLASS,
   TAB_STOP_CSS_VARIABLE,
@@ -12,14 +12,14 @@ import {
   sanitizeTabLeader,
   sanitizeTabStop,
   tabAttrs,
-} from './tab';
+} from './tab.js';
 import {
   bodyHtml,
   findNodePos,
   mountEditor,
   selectRange,
   type MountedEditor,
-} from '../testing/mount';
+} from '../testing/mount.js';
 
 const TAB = '<span data-tab=""></span>';
 const STOPPED = '<span data-tab="" data-stop="36pt"></span>';

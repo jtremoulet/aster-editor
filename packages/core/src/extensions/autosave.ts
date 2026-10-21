@@ -1,4 +1,4 @@
-import type { AsterEditor, Unsubscribe } from '../api';
+import type { AsterEditor, Unsubscribe } from '../api/index.js';
 
 /** Options de `createAutosave`. */
 export interface AutosaveOptions {

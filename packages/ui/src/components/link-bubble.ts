@@ -1,10 +1,10 @@
 import type { AsterEditor } from '@aster-editor/core';
 import type { ReferenceElement } from '@floating-ui/dom';
-import { clear, el } from '../utils/dom';
-import { isRecord, readString } from '../utils/guards';
-import { createBubble, selectionReference, type Bubble } from './bubble';
-import { createPlainButton, setDisabled } from './button';
-import { isAcceptableUrl } from './link-dialog';
+import { clear, el } from '../utils/dom.js';
+import { isRecord, readString } from '../utils/guards.js';
+import { createBubble, selectionReference, type Bubble } from './bubble.js';
+import { createPlainButton, setDisabled } from './button.js';
+import { isAcceptableUrl } from './link-dialog.js';
 
 /** Longueur maximale de l'URL affichée dans la bulle, en caractères. */
 export const LINK_BUBBLE_URL_MAX_LENGTH = 48;

@@ -1,6 +1,6 @@
 import type { Attrs, Mark, Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
-import type { AsterCommand, AsterEditor } from '../api';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
 
 /** Identifiants des commandes de reproduction de mise en forme, hors `STANDARD_COMMAND_IDS`. */
 export const FORMAT_PAINTER_COMMAND_IDS = ['formatPainter.copy', 'formatPainter.paste'] as const;

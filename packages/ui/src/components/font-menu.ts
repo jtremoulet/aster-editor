@@ -1,7 +1,7 @@
 import type { AsterEditor } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { isRecord, readString } from '../utils/guards';
-import { createDropdown, createMenuItem } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { isRecord, readString } from '../utils/guards.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
 
 /** Polices proposées par défaut : familles système sûres, sans chargement distant. */
 export const FONT_FAMILIES: readonly string[] = [

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { buildDocx, run as runXml, W_NS } from '../preprocess/minimal-docx';
-import { MAX_COLUMNS, convertTable } from './tables';
+import { importDocx } from '../import-docx.js';
+import { buildDocx, run as runXml, W_NS } from '../preprocess/minimal-docx.js';
+import { MAX_COLUMNS, convertTable } from './tables.js';
 import {
   buildPackage,
   createTestContext,
@@ -9,8 +9,8 @@ import {
   paragraphXml,
   renderBody,
   stubStyles,
-} from './testing-blocks';
-import type { ConverterContext, DocxPackage, TableStyleProps } from './types';
+} from './testing-blocks.js';
+import type { ConverterContext, DocxPackage, TableStyleProps } from './types.js';
 
 function cell(text: string, tcPr = ''): string {
   return `<w:tc>${tcPr ? `<w:tcPr>${tcPr}</w:tcPr>` : ''}${text === '' ? '<w:p/>' : paragraphXml(text)}</w:tc>`;

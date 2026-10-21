@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PasteContext, PasteTransformer } from '../api';
+import type { PasteContext, PasteTransformer } from '../api/index.js';
 
 // jsdom 30 ne définit pas `ClipboardEvent`, que `view.pasteHTML` instancie pour
 // simuler un collage. Un squelette sur `Event` suffit : nos props ne lisent que
@@ -11,8 +11,8 @@ if (typeof globalThis.ClipboardEvent === 'undefined') {
     },
   });
 }
-import { applyPasteTransformers } from './paste-pipeline';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { applyPasteTransformers } from './paste-pipeline.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 describe('pipeline de collage', () => {
   describe('applyPasteTransformers', () => {

@@ -1,10 +1,16 @@
-import { tabStopsOf } from '../reader/properties';
-import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
-import { alignSequences } from './align';
-import { MISSING, recordIfAny, type CompareContext } from './compare-context';
-import { compareTable } from './compare-tables';
-import type { BlockModel, FieldModel, HeaderFooterModel, ParagraphModel, RunModel } from './model';
-import { ABSENT, fmt } from './values';
+import { tabStopsOf } from '../reader/properties.js';
+import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types.js';
+import { alignSequences } from './align.js';
+import { MISSING, recordIfAny, type CompareContext } from './compare-context.js';
+import { compareTable } from './compare-tables.js';
+import type {
+  BlockModel,
+  FieldModel,
+  HeaderFooterModel,
+  ParagraphModel,
+  RunModel,
+} from './model.js';
+import { ABSENT, fmt } from './values.js';
 
 /**
  * Comparaison des blocs alignés : texte (avec l'équivalence `{{nom}}` / champ de fusion),
@@ -16,7 +22,7 @@ import { ABSENT, fmt } from './values';
  * vis-à-vis perd toutes ses propriétés.
  */
 
-export { MISSING, type CompareContext } from './compare-context';
+export { MISSING, type CompareContext } from './compare-context.js';
 
 type ParagraphFormatKey = Exclude<
   keyof ResolvedParagraphProps,

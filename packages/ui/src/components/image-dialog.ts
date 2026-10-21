@@ -1,10 +1,10 @@
 import type { AsterEditor, StandardCommandArgs } from '@aster-editor/core';
 import { IMAGE_ALIGNMENTS, IMAGE_EDIT_EVENT } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { isRecord, readNumberOrString, readString } from '../utils/guards';
-import { createPlainButton } from './button';
-import { createDropdown, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { isRecord, readNumberOrString, readString } from '../utils/guards.js';
+import { createPlainButton } from './button.js';
+import { createDropdown, type Dropdown } from './dropdown.js';
 
 /** Validation légère de l'URL d'image : non vide, pas de `javascript:`. */
 function isAcceptableImageUrl(value: string): boolean {

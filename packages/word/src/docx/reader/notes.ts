@@ -1,6 +1,6 @@
-import { childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { deriveContext } from './index';
-import type { ConverterContext, DocxPackage, NoteRegistry, ReaderOptions } from './types';
+import { childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { deriveContext } from './index.js';
+import type { ConverterContext, DocxPackage, NoteRegistry, ReaderOptions } from './types.js';
 
 /**
  * Notes de bas de page et de fin. Les parties `footnotes.xml` / `endnotes.xml` sont

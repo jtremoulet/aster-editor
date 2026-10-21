@@ -1,5 +1,5 @@
-import type { AsterCommand, AsterEditor, StandardCommandId } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand, AsterEditor, StandardCommandId } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 type Alignment = 'center' | 'right' | 'justify';
 

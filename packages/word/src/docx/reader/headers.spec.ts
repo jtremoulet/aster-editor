@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { readEffectiveHeadersFooters, readHeadersFooters } from './headers';
-import { buildPackage, createTestContext, fragment, paragraphXml, partXml } from './testing-blocks';
-import type { DocxPackage } from './types';
+import { readEffectiveHeadersFooters, readHeadersFooters } from './headers.js';
+import {
+  buildPackage,
+  createTestContext,
+  fragment,
+  paragraphXml,
+  partXml,
+} from './testing-blocks.js';
+import type { DocxPackage } from './types.js';
 
 async function sectionPackage(): Promise<DocxPackage> {
   return buildPackage('', {

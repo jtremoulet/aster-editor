@@ -1,5 +1,5 @@
-import type { AsterCommand, AsterEditor } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 /** Types de nœud d'item que `indent`/`outdent` savent manipuler. */
 const LIST_ITEM_TYPES = ['listItem', 'taskItem'] as const;

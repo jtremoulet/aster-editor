@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from '../../export/export-docx';
-import { importDocx } from '../import-docx';
-import { compareDocx } from './compare-docx';
-import type { FidelityReport } from './types';
+import { exportDocx } from '../../export/export-docx.js';
+import { importDocx } from '../import-docx.js';
+import { compareDocx } from './compare-docx.js';
+import type { FidelityReport } from './types.js';
 
 const DIR = join(import.meta.env.ASTER_FIXTURES, 'docx');
 const CLIENT = join(DIR, 'client', 'Modele_Demo_DER.docx');

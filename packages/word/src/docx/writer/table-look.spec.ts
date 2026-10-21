@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeHtml } from '../testing/dom';
+import { normalizeHtml } from '../testing/dom.js';
 import {
   checkIntegrity,
   exportInTemplate,
@@ -7,7 +7,7 @@ import {
   importStyled,
   textOf,
   topLevelBlocks,
-} from './testing';
+} from './testing.js';
 
 /**
  * L49 : `w:tblLook` de bout en bout dans le gabarit. La fixture 19 porte un tableau au

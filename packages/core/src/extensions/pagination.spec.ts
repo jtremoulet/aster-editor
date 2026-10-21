@@ -1,17 +1,23 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { DecorationSet, type Decoration } from '@tiptap/pm/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AsterEditor, AsterOptions, DocumentLayout, PageSetup, PageViewOptions } from '../api';
-import { AsterEditorImpl } from '../editor/aster-editor';
-import { en } from '../i18n/en';
-import { fr } from '../i18n/fr';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import type {
+  AsterEditor,
+  AsterOptions,
+  DocumentLayout,
+  PageSetup,
+  PageViewOptions,
+} from '../api/index.js';
+import { AsterEditorImpl } from '../editor/aster-editor.js';
+import { en } from '../i18n/en.js';
+import { fr } from '../i18n/fr.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 import {
   PAGE_FOOTER_CLASS,
   PAGE_VIEW_CLASS,
   PAGE_WIDTH_MAX_CSS_VARIABLE,
   getActivePageView,
-} from './page-view';
+} from './page-view.js';
 import {
   PAGE_COUNT_ATTRIBUTE,
   PAGE_COUNT_CSS_VARIABLE,
@@ -38,13 +44,13 @@ import {
   sectionLabel,
   usablePageHeightPx,
   type PaginatedPageViewOptions,
-} from './pagination';
+} from './pagination.js';
 import {
   EMPTY_PAGINATION,
   MM_TO_PX,
   paginate,
   type SectionCssVariables,
-} from './pagination-layout';
+} from './pagination-layout.js';
 
 /** Hauteur d'un bloc sans hauteur déclarée, en px. */
 const DEFAULT_BLOCK_HEIGHT = 40;

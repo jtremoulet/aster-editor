@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterOptions } from '@aster-editor/core';
 import type * as Core from '@aster-editor/core';
 import { createEditor } from '@aster-editor/core';
-import { createAster } from '../create-aster';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { createToolbar, registerUiTranslations } from '../toolbar/create-toolbar';
+import { createAster } from '../create-aster.js';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { createToolbar, registerUiTranslations } from '../toolbar/create-toolbar.js';
 import {
   SOURCE_TEXTAREA_CLASS,
   SOURCE_VIEW_CLASS,
@@ -14,7 +14,7 @@ import {
   getSourceView,
   releaseSourceView,
   retainSourceView,
-} from './source-view';
+} from './source-view.js';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();

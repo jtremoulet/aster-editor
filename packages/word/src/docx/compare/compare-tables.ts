@@ -4,9 +4,9 @@ import {
   recordWithin,
   WIDTH_TOLERANCE_PT,
   type CompareContext,
-} from './compare-context';
-import type { BlockModel, CellModel, TableModel } from './model';
-import { fmt } from './values';
+} from './compare-context.js';
+import type { BlockModel, CellModel, TableModel } from './model.js';
+import { fmt } from './values.js';
 
 /**
  * Comparaison d'un tableau et de ses cellules : dimensions, style, largeur, alignement

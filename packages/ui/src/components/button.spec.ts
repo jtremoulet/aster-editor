@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { createCommandButton, createPlainButton, resolveIcon, setDisabled } from './button';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { createCommandButton, createPlainButton, resolveIcon, setDisabled } from './button.js';
 
 describe('resolveIcon', () => {
   it('passe la surcharge par hasIcon et retombe sur la commande ou la convention', () => {

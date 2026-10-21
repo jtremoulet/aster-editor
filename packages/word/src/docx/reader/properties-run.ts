@@ -1,6 +1,6 @@
 import type { DecorationStyle } from '@aster-editor/core';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
-import type { ResolvedRunProps } from './types';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import type { ResolvedRunProps } from './types.js';
 import {
   bounded,
   boundedDistancePt,
@@ -12,7 +12,7 @@ import {
   onOff,
   twipsToPt,
   WORD_LIMITS,
-} from './units';
+} from './units.js';
 
 /**
  * Propriétés de run (`w:rPr`) : accumulateur, application d'un élément sur l'état hérité,

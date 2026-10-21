@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { Dropdown } from './dropdown';
-import { createHeadingMenu } from './heading-menu';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { Dropdown } from './dropdown.js';
+import { createHeadingMenu } from './heading-menu.js';
 
 describe('createHeadingMenu', () => {
   let editor: MockEditor;

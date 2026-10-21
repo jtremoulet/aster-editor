@@ -1,5 +1,5 @@
-import { parseColor } from './css-colors';
-import { parsePoints } from './css-lengths';
+import { parseColor } from './css-colors.js';
+import { parsePoints } from './css-lengths.js';
 
 /**
  * Bordures CSS (`border`, `border-<côté>`, propriétés longues, `padding-<côté>` pour

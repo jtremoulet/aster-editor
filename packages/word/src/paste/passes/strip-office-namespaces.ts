@@ -1,5 +1,5 @@
-import { selectAll, unwrap } from '../dom-utils';
-import type { PastePass } from '../types';
+import { selectAll, unwrap } from '../dom-utils.js';
+import type { PastePass } from '../types.js';
 
 /**
  * Balises sans contenu utile pour l'éditeur, qu'elles viennent du `<head>` ou du corps,

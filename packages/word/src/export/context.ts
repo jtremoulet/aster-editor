@@ -1,13 +1,13 @@
 import type { Paragraph } from 'docx';
-import type { NumberingResolver } from '../docx/reader/types';
-import type { DocxModule } from './docx-module';
-import type { HeadingNumbering, ListKind } from './styles';
+import type { NumberingResolver } from '../docx/reader/types.js';
+import type { DocxModule } from './docx-module.js';
+import type { HeadingNumbering, ListKind } from './styles.js';
 import type {
   DocxExportWarning,
   DocxExportWarningCode,
   DocxImageFetcher,
   DocxVariableMode,
-} from './types';
+} from './types.js';
 import type { VariableValues } from '@aster-editor/core';
 
 /**

@@ -1,5 +1,5 @@
 import type { AsterDocument, DocumentLayout, VariableValues } from '@aster-editor/core';
-import type { DocxInput, HtmlParser } from '../docx/types';
+import type { DocxInput, HtmlParser } from '../docx/types.js';
 
 /**
  * Codes stables des avertissements d'export :

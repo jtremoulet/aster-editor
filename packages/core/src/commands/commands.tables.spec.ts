@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 describe('commandes de table', () => {
   let mounted: MountedEditor;

@@ -1,7 +1,7 @@
 import type { AsterEditor, DecorationStyle } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { isRecord } from '../utils/guards';
-import { createDropdown, createMenuItem } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { isRecord } from '../utils/guards.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
 
 /** Styles de soulignement proposés, dans l'ordre du menu. */
 export const UNDERLINE_STYLES: readonly DecorationStyle[] = [

@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterOptions } from '@aster-editor/core';
 import type * as Core from '@aster-editor/core';
 import { createEditor } from '@aster-editor/core';
-import { createAster } from '../create-aster';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createWidget } from '../toolbar/widgets';
-import { createDropdown, createMenuItem } from './dropdown';
-import { createTableContextMenu } from './table-context-menu';
-import { createVariableDialog } from './variable-dialog';
-import { createVariableSuggestionPanel } from './variable-suggestion';
+import { createAster } from '../create-aster.js';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { createWidget } from '../toolbar/widgets.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
+import { createTableContextMenu } from './table-context-menu.js';
+import { createVariableDialog } from './variable-dialog.js';
+import { createVariableSuggestionPanel } from './variable-suggestion.js';
 import {
   FULLSCREEN_CLASS,
   OPEN_PANEL_SELECTORS,
@@ -17,7 +17,7 @@ import {
   createFullscreenButton,
   getFullscreen,
   registerOpenPanelSelector,
-} from './fullscreen';
+} from './fullscreen.js';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();

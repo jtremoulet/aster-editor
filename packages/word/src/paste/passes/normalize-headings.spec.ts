@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import { normalizeHeadings } from './normalize-headings';
+import { runPass } from '../../testing/html-compare.js';
+import { normalizeHeadings } from './normalize-headings.js';
 
 describe('normalizeHeadings', () => {
   it('convertit MsoTitle en h1 et MsoHeadingN en hN, plafonné à h6', () => {

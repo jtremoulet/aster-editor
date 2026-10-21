@@ -1,10 +1,10 @@
 import type { BlockBorder } from '@aster-editor/core';
-import { highlightName } from '../../export/css';
-import { paragraphBorderSpace } from '../../export/styles';
-import { childNamed } from '../preprocess/xml-utils';
-import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
-import { sameBorders, type ParagraphKey, type RunKey } from './style-strip';
-import { createSibling, ensureChild, insertOrdered, setWordAttr, wordElement } from './xml-io';
+import { highlightName } from '../../export/css.js';
+import { paragraphBorderSpace } from '../../export/styles.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types.js';
+import { sameBorders, type ParagraphKey, type RunKey } from './style-strip.js';
+import { createSibling, ensureChild, insertOrdered, setWordAttr, wordElement } from './xml-io.js';
 
 /**
  * Réconciliation du corps greffé avec les styles du gabarit. Le lecteur n'écrit dans le

@@ -1,5 +1,5 @@
-import type { AsterEditor } from './editor';
-import type { ParagraphLayoutAttrName, ParagraphLayoutAttrs } from './layout';
+import type { AsterEditor } from './editor.js';
+import type { ParagraphLayoutAttrName, ParagraphLayoutAttrs } from './layout.js';
 
 /**
  * Identifiants des commandes standard fournies par le core. La toolbar et le wrapper

@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PARAGRAPH_LAYOUT_ATTR_NAMES, type ParagraphLayoutAttrs } from '../api';
+import { PARAGRAPH_LAYOUT_ATTR_NAMES, type ParagraphLayoutAttrs } from '../api/index.js';
 import {
   normalizeParagraphLayoutValue,
   parseLineHeight,
   parseParagraphLayout,
   renderParagraphLayout,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
 import {
   bodyHtml,
   findNodePos,
   mountEditor,
   selectFirstBlock,
   type MountedEditor,
-} from '../testing/mount';
+} from '../testing/mount.js';
 
 /** Attributs du premier bloc du document. */
 function firstBlockAttrs(mounted: MountedEditor): Record<string, unknown> {

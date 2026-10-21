@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mountEditor, type MountedEditor } from '../testing/mount';
-import { getMarkdown, htmlToMarkdown, markdownToHtml, setMarkdown } from './index';
-import { escapeHtml, parseInline } from './markdown-to-html';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
+import { getMarkdown, htmlToMarkdown, markdownToHtml, setMarkdown } from './index.js';
+import { escapeHtml, parseInline } from './markdown-to-html.js';
 
 /**
  * Document complet pour l'aller-retour : chaque famille de nœud et de marque que

@@ -1,11 +1,11 @@
 import type { Document as DocxDocument, ISectionOptions } from 'docx';
-import type { NumberingResolver } from '../docx/reader/types';
-import { ROOT_SCOPE, convertChildren } from './blocks';
-import type { ExportContext, ListDefinition } from './context';
-import type { DocxModule } from './docx-module';
-import { buildFootnotes, collectFootnotes } from './footnotes';
-import { sanitizeXmlText } from './sanitize';
-import { buildSection, resolveSection, splitSections } from './sections';
+import type { NumberingResolver } from '../docx/reader/types.js';
+import { ROOT_SCOPE, convertChildren } from './blocks.js';
+import type { ExportContext, ListDefinition } from './context.js';
+import type { DocxModule } from './docx-module.js';
+import { buildFootnotes, collectFootnotes } from './footnotes.js';
+import { sanitizeXmlText } from './sanitize.js';
+import { buildSection, resolveSection, splitSections } from './sections.js';
 import {
   GENERATED_STYLE_IDS,
   STYLE_IDS,
@@ -15,10 +15,10 @@ import {
   buildParagraphStyles,
   resolveHeadingNumbering,
   resolvePageLayout,
-} from './styles';
-import { buildToc } from './toc';
-import type { DocxExportOptions, DocxExportWarning } from './types';
-import { resolveVariableSettings } from './variables';
+} from './styles.js';
+import { buildToc } from './toc.js';
+import type { DocxExportOptions, DocxExportWarning } from './types.js';
+import { resolveVariableSettings } from './variables.js';
 
 /** Résultat de la construction : le document `docx` prêt à empaqueter et ses avertissements. */
 export interface BuiltDocx {

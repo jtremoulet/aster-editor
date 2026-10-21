@@ -3,12 +3,12 @@ import type { Range } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import { Suggestion, exitSuggestion } from '@tiptap/suggestion';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
-import { getIcon } from '../icons';
-import { clear, el, setIcon } from '../utils/dom';
-import { isRecord } from '../utils/guards';
-import { formatShortcut } from '../utils/shortcut';
-import { createPlainButton, resolveIcon } from './button';
-import { clampToViewport } from './table-context-menu';
+import { getIcon } from '../icons/index.js';
+import { clear, el, setIcon } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
+import { formatShortcut } from '../utils/shortcut.js';
+import { createPlainButton, resolveIcon } from './button.js';
+import { clampToViewport } from './table-context-menu.js';
 
 /** Clé du plugin ProseMirror, pour `unregisterPlugin` et `exitSuggestion`. */
 export const SLASH_MENU_PLUGIN_KEY = new PluginKey('asterSlashMenu');

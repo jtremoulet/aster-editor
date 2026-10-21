@@ -1,10 +1,10 @@
 import type { HeaderFooterContent, HeaderFooterSet } from '@aster-editor/core';
-import { childNamed } from '../preprocess/xml-utils';
-import { wordAttribute } from '../preprocess/xml-utils';
-import { relationshipAttribute } from './images';
-import { deriveContext } from './index';
-import type { ConverterContext } from './types';
-import { booleanAttribute } from './units';
+import { childNamed } from '../preprocess/xml-utils.js';
+import { wordAttribute } from '../preprocess/xml-utils.js';
+import { relationshipAttribute } from './images.js';
+import { deriveContext } from './index.js';
+import type { ConverterContext } from './types.js';
+import { booleanAttribute } from './units.js';
 
 export interface HeadersFootersResult {
   readonly headers?: HeaderFooterSet;

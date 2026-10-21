@@ -1,7 +1,7 @@
 import type { AsterEditor } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { isRecord } from '../utils/guards';
-import { createDropdown, createMenuItem } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { isRecord } from '../utils/guards.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
 
 /** Casses proposées : `null` = normal (marque retirée), sinon valeur de `RunLayoutAttrs.caps`. */
 export type CapsValue = 'all' | 'small';

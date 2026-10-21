@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { buildDocx, documentXml, headerXml, run, W_NS } from './minimal-docx';
+import { buildDocx, documentXml, headerXml, run, W_NS } from './minimal-docx.js';
 import {
   collectBracesInXml,
   mergeFieldName,
@@ -10,7 +10,7 @@ import {
   type CollectedVariable,
   type PreprocessVariablesOptions,
   type XmlCodec,
-} from './variables';
+} from './variables.js';
 
 const BOTH: PreprocessVariablesOptions = { mergeFields: true, contentControls: true };
 const BOLD = '<w:rPr><w:b/></w:rPr>';

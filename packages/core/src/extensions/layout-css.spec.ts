@@ -18,7 +18,7 @@ import {
   roundLayoutNumber,
   sanitizeBorderSpace,
   sanitizeBorders,
-} from './layout-css';
+} from './layout-css.js';
 
 describe('layout-css', () => {
   it('formate les points avec au plus deux décimales', () => {

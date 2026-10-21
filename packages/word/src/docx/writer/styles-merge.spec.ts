@@ -1,12 +1,12 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import type { DocxExportWarning } from '../../export/types';
-import { W_NS } from '../preprocess/minimal-docx';
-import { allNamed, childNamed } from '../preprocess/xml-utils';
-import { openPackage } from '../reader/package';
-import { createStyleResolver } from '../reader/styles';
-import { createStyleMerger, type StyleMerger } from './styles-merge';
-import { PartStore, defaultXmlCodec, wordAttr } from './xml-io';
+import type { DocxExportWarning } from '../../export/types.js';
+import { W_NS } from '../preprocess/minimal-docx.js';
+import { allNamed, childNamed } from '../preprocess/xml-utils.js';
+import { openPackage } from '../reader/package.js';
+import { createStyleResolver } from '../reader/styles.js';
+import { createStyleMerger, type StyleMerger } from './styles-merge.js';
+import { PartStore, defaultXmlCodec, wordAttr } from './xml-io.js';
 
 const DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 

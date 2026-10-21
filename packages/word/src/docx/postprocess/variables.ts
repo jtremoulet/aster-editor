@@ -1,9 +1,9 @@
 import type { AsterVariable } from '@aster-editor/core';
-import { DEFAULT_VARIABLE_PATTERN } from '../preprocess/names';
-import type { CollectedVariable } from '../preprocess/variables';
-import { wrapVariablePlaceholders, type VariableMatcher } from '../../paste/passes/variables';
-import type { DocxVariableOptions, VariableDetection } from '../types';
-import type { PostprocessPass } from './types';
+import { DEFAULT_VARIABLE_PATTERN } from '../preprocess/names.js';
+import type { CollectedVariable } from '../preprocess/variables.js';
+import { wrapVariablePlaceholders, type VariableMatcher } from '../../paste/passes/variables.js';
+import type { DocxVariableOptions, VariableDetection } from '../types.js';
+import type { PostprocessPass } from './types.js';
 
 /**
  * Post-traitement des variables après mammoth : `{{nom}}` dans le HTML (saisi tel quel

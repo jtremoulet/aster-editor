@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { parseFragment, runPass } from '../testing/dom';
-import { normalizeLists } from './normalize-lists';
-import { runPostprocess } from './run-postprocess';
+import { parseFragment, runPass } from '../testing/dom.js';
+import { normalizeLists } from './normalize-lists.js';
+import { runPostprocess } from './run-postprocess.js';
 
 describe('normalizeLists', () => {
   it('n’insère pas de paragraphe vide devant un titre ou une citation en tête de li (W-13)', () => {

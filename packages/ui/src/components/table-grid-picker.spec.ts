@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { Dropdown } from './dropdown';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { Dropdown } from './dropdown.js';
 import {
   TABLE_GRID_COLS,
   TABLE_GRID_ROWS,
   createTableGridPicker,
   gridIndexFor,
-} from './table-grid-picker';
+} from './table-grid-picker.js';
 
 describe('gridIndexFor', () => {
   it('se déplace dans la ligne et entre les lignes, null au bord ou pour une autre touche', () => {

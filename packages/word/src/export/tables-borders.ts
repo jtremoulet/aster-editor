@@ -6,7 +6,7 @@ import type {
   ITableOptions,
   ITableWidthProperties,
 } from 'docx';
-import type { ExportContext } from './context';
+import type { ExportContext } from './context.js';
 import {
   CSS_BORDER_SIDES,
   parseBorders,
@@ -17,9 +17,9 @@ import {
   pointsToTwips,
   type CssBorder,
   type CssBorderSide,
-} from './css';
-import { NIL_BORDER, borderOptions } from './styles';
-import type { TableRowInfo } from './tables-grid';
+} from './css.js';
+import { NIL_BORDER, borderOptions } from './styles.js';
+import type { TableRowInfo } from './tables-grid.js';
 
 /**
  * Propriétés de tableau et de cellule du contrat (`TableLayoutAttrs`, `CellLayoutAttrs`) :

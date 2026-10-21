@@ -1,8 +1,8 @@
-import type { AsterCommand, StandardCommandArgs, UploadHandler } from '../api';
-import { isImageAlignment } from '../extensions/image';
-import { insertImageFile, isImageFile } from '../extensions/image-upload';
-import { isAllowedImageSrc, type ResolvedLinkPolicy } from '../extensions/link-safety';
-import { defineStandardCommand } from './define';
+import type { AsterCommand, StandardCommandArgs, UploadHandler } from '../api/index.js';
+import { isImageAlignment } from '../extensions/image.js';
+import { insertImageFile, isImageFile } from '../extensions/image-upload.js';
+import { isAllowedImageSrc, type ResolvedLinkPolicy } from '../extensions/link-safety.js';
+import { defineStandardCommand } from './define.js';
 
 /** Attributs effectivement écrits sur le nœud image par `image.setAttributes`. */
 export interface ImageAttributeUpdate {

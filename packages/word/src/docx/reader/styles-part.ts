@@ -1,7 +1,7 @@
-import { allNamed, childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import type { ThemeFonts } from './properties';
-import type { DocxPackage, HeadingLevel } from './types';
-import { fontName } from './units';
+import { allNamed, childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import type { ThemeFonts } from './properties.js';
+import type { DocxPackage, HeadingLevel } from './types.js';
+import { fontName } from './units.js';
 
 /**
  * Lecture de la partie `styles.xml` et du thème : définitions de styles (`w:style`),

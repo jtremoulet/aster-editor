@@ -1,6 +1,6 @@
 import type { AsterEditor, HeadingLevel } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { createDropdown, createMenuItem } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
 
 const LEVELS: readonly HeadingLevel[] = [1, 2, 3, 4, 5, 6];
 

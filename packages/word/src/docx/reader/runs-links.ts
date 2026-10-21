@@ -1,5 +1,5 @@
-import { wordAttribute } from '../preprocess/xml-utils';
-import type { ConverterContext } from './types';
+import { wordAttribute } from '../preprocess/xml-utils.js';
+import type { ConverterContext } from './types.js';
 
 /**
  * Liens du lecteur : cible d'une instruction `HYPERLINK`, `href` sûr, relation d'un

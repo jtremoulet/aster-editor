@@ -1,9 +1,9 @@
 import type { DocumentLayout } from '@aster-editor/core';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../docx/import-docx';
-import { exportDocx } from './export-docx';
-import { toDocumentXml, toZipEntries } from './testing/sample';
-import type { DocxExportWarning } from './types';
+import { importDocx } from '../docx/import-docx.js';
+import { exportDocx } from './export-docx.js';
+import { toDocumentXml, toZipEntries } from './testing/sample.js';
+import type { DocxExportWarning } from './types.js';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
 function count(haystack: string, needle: string): number {

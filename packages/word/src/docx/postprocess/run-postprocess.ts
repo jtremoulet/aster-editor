@@ -1,10 +1,10 @@
-import { footnotes } from './footnotes';
-import { normalizeImages } from './normalize-images';
-import { normalizeLists } from './normalize-lists';
-import { normalizeTables } from './normalize-tables';
-import { stripEmptyParagraphs } from './strip-empty-paragraphs';
-import type { PostprocessContext, PostprocessPass } from './types';
-import { unwrapCellParagraphs } from './unwrap-cell-paragraphs';
+import { footnotes } from './footnotes.js';
+import { normalizeImages } from './normalize-images.js';
+import { normalizeLists } from './normalize-lists.js';
+import { normalizeTables } from './normalize-tables.js';
+import { stripEmptyParagraphs } from './strip-empty-paragraphs.js';
+import type { PostprocessContext, PostprocessPass } from './types.js';
+import { unwrapCellParagraphs } from './unwrap-cell-paragraphs.js';
 
 /**
  * Passes dans l'ordre d'application. `footnotes` d'abord, car elle peut supprimer une

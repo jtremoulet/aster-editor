@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   BORDER_SIDES,
   BORDER_STYLES,
@@ -13,7 +13,7 @@ import {
   hasBordersOrShading,
   isBlockBorder,
   toHexColor,
-} from './paragraph-borders-dialog';
+} from './paragraph-borders-dialog.js';
 
 describe('paragraph-borders helpers', () => {
   it('isBlockBorder valide côté, style, épaisseur et couleur', () => {

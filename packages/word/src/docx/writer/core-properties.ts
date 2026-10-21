@@ -1,8 +1,8 @@
-import { sanitizeXmlText } from '../../export/sanitize';
-import type { DocxPackage } from '../reader/types';
-import { PART_CONTENT_TYPES } from './content-types';
-import { REL_TYPE, RelationshipTable } from './relationships';
-import type { PartStore } from './xml-io';
+import { sanitizeXmlText } from '../../export/sanitize.js';
+import type { DocxPackage } from '../reader/types.js';
+import { PART_CONTENT_TYPES } from './content-types.js';
+import { REL_TYPE, RelationshipTable } from './relationships.js';
+import type { PartStore } from './xml-io.js';
 
 /**
  * Propriétés du document (`docProps/core.xml`) dans le gabarit : `dc:title` et

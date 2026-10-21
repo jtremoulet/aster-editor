@@ -1,10 +1,10 @@
-import { getStyleProperty, isBlank, selectAll, unwrap } from '../dom-utils';
+import { getStyleProperty, isBlank, selectAll, unwrap } from '../dom-utils.js';
 import type {
   ListLevelDeclaration,
   ListLevelFormat,
   PastePass,
   ResolvedPasteOptions,
-} from '../types';
+} from '../types.js';
 
 /**
  * Déclaration `@list l0:level1 { … }` ou override d'instance `@list l0:level1 lfo2 { … }`

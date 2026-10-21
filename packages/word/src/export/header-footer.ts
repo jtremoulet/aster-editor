@@ -1,16 +1,16 @@
 import type { HeaderFooterSet } from '@aster-editor/core';
 import type { Footer, Header, Paragraph, Table } from 'docx';
-import type { HtmlParser } from '../docx/types';
-import { convertChildren, type BlockScope } from './blocks';
-import type { ExportContext } from './context';
-import type { ParagraphAlignment } from './css';
-import { parseFragment, resolveParser } from './dom';
+import type { HtmlParser } from '../docx/types.js';
+import { convertChildren, type BlockScope } from './blocks.js';
+import type { ExportContext } from './context.js';
+import type { ParagraphAlignment } from './css.js';
+import { parseFragment, resolveParser } from './dom.js';
 import type {
   DocxExportOptions,
   DocxFooterOptions,
   DocxHeaderAlign,
   DocxHeaderOptions,
-} from './types';
+} from './types.js';
 
 /** Échappe un texte brut pour le passer au convertisseur HTML. */
 function escapeHtml(text: string): string {

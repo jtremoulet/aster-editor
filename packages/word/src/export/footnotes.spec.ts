@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from './export-docx';
-import { parseFragment, roundTrip, toDocumentXml, toZipEntries } from './testing/sample';
+import { exportDocx } from './export-docx.js';
+import { parseFragment, roundTrip, toDocumentXml, toZipEntries } from './testing/sample.js';
 
 /** HTML tel que l'import le produit : appel `[1]` en exposant et liste finale de notes. */
 const IMPORTED =

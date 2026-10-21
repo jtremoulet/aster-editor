@@ -6,8 +6,8 @@ import {
   serializeStyle,
   unwrap,
   wrapChildren,
-} from '../dom-utils';
-import type { PastePass, ResolvedPasteOptions } from '../types';
+} from '../dom-utils.js';
+import type { PastePass, ResolvedPasteOptions } from '../types.js';
 
 /** Balises gérées par `normalizeTables`, que cette passe laisse intactes. */
 const TABLE_TAGS: ReadonlySet<string> = new Set([

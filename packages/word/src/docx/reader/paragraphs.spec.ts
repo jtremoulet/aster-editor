@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createEditor } from '@aster-editor/core';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { buildDocx, run as runXml } from '../preprocess/minimal-docx';
-import { normalizeHtml, parseFragment } from '../testing/dom';
-import { convertParagraph, paragraphAttributes } from './paragraphs';
-import { createStyleResolver } from './styles';
-import { createTestContext, fakePackage, paragraphOf, stylesXml } from './test-support';
-import type { ConverterContext, StyleResolver } from './types';
+import { importDocx } from '../import-docx.js';
+import { buildDocx, run as runXml } from '../preprocess/minimal-docx.js';
+import { normalizeHtml, parseFragment } from '../testing/dom.js';
+import { convertParagraph, paragraphAttributes } from './paragraphs.js';
+import { createStyleResolver } from './styles.js';
+import { createTestContext, fakePackage, paragraphOf, stylesXml } from './test-support.js';
+import type { ConverterContext, StyleResolver } from './types.js';
 
 const STYLES = stylesXml(
   '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>' +

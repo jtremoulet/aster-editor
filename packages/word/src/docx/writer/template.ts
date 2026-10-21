@@ -1,27 +1,27 @@
 import type { HeaderFooterSet } from '@aster-editor/core';
-import type { DocxExportWarning } from '../../export/types';
-import { hasZipSignature, isArrayBuffer, isBlobLike } from '../import-docx';
-import { transformVariablesXml } from '../preprocess/variables';
-import { childNamed, childrenNamed } from '../preprocess/xml-utils';
-import { convertBlocks } from '../reader';
-import { readHeadersFooters, type HeadersFootersResult } from '../reader/headers';
-import { createImageConverter } from '../reader/images';
-import { createNumberingResolver, renderBlocks } from '../reader/lists';
-import { createNoteRegistry } from '../reader/notes';
-import { openPackage } from '../reader/package';
-import { convertParagraph } from '../reader/paragraphs';
-import { createStyleResolver, type DocxStyleResolver } from '../reader/styles';
-import { convertTable } from '../reader/tables';
+import type { DocxExportWarning } from '../../export/types.js';
+import { hasZipSignature, isArrayBuffer, isBlobLike } from '../import-docx.js';
+import { transformVariablesXml } from '../preprocess/variables.js';
+import { childNamed, childrenNamed } from '../preprocess/xml-utils.js';
+import { convertBlocks } from '../reader/index.js';
+import { readHeadersFooters, type HeadersFootersResult } from '../reader/headers.js';
+import { createImageConverter } from '../reader/images.js';
+import { createNumberingResolver, renderBlocks } from '../reader/lists.js';
+import { createNoteRegistry } from '../reader/notes.js';
+import { openPackage } from '../reader/package.js';
+import { convertParagraph } from '../reader/paragraphs.js';
+import { createStyleResolver, type DocxStyleResolver } from '../reader/styles.js';
+import { convertTable } from '../reader/tables.js';
 import type {
   ConverterContext,
   DocxPackage,
   NumberingResolver,
   ReaderOptions,
-} from '../reader/types';
-import type { DocxInput } from '../types';
-import { allSectPrs } from './graft-sections';
-import { headerFooterParts } from './header-footer-variables';
-import { wordAttr, xmlDeclarationOf, type XmlCodec } from './xml-io';
+} from '../reader/types.js';
+import type { DocxInput } from '../types.js';
+import { allSectPrs } from './graft-sections.js';
+import { headerFooterParts } from './header-footer-variables.js';
+import { wordAttr, xmlDeclarationOf, type XmlCodec } from './xml-io.js';
 
 /**
  * Ouverture du gabarit de `exportDocx({ template })` : octets, paquet en lecture, partie

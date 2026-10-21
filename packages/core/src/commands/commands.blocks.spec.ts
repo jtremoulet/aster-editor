@@ -5,7 +5,7 @@ import {
   mountEditor,
   selectRange,
   type MountedEditor,
-} from '../testing/mount';
+} from '../testing/mount.js';
 
 const ALIGN_COMMANDS = ['alignLeft', 'alignCenter', 'alignRight', 'alignJustify'] as const;
 

@@ -1,17 +1,17 @@
 import type { DocumentLayout, SectionLayout } from '@aster-editor/core';
-import type { DocxImportWarning, DocxLostObject } from '../types';
-import { childNamed } from '../preprocess/xml-utils';
-import { readEffectiveHeadersFooters, type HeadersFootersResult } from './headers';
-import { escapeHtml } from './html';
-import { createImageConverter } from './images';
-import { createNumberingResolver, registerListItem, renderBlocks } from './lists';
-import { detectLost } from './lost';
-import { createNoteRegistry } from './notes';
-import { openPackage } from './package';
-import { convertParagraph } from './paragraphs';
-import { readDocumentLang, readSectionLayout, readSectionProperties } from './sections';
-import { createStyleResolver } from './styles';
-import { convertTable } from './tables';
+import type { DocxImportWarning, DocxLostObject } from '../types.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import { readEffectiveHeadersFooters, type HeadersFootersResult } from './headers.js';
+import { escapeHtml } from './html.js';
+import { createImageConverter } from './images.js';
+import { createNumberingResolver, registerListItem, renderBlocks } from './lists.js';
+import { detectLost } from './lost.js';
+import { createNoteRegistry } from './notes.js';
+import { openPackage } from './package.js';
+import { convertParagraph } from './paragraphs.js';
+import { readDocumentLang, readSectionLayout, readSectionProperties } from './sections.js';
+import { createStyleResolver } from './styles.js';
+import { convertTable } from './tables.js';
 import type {
   Block,
   BlockConverters,
@@ -20,7 +20,7 @@ import type {
   RawBlock,
   ReaderOptions,
   ReaderResult,
-} from './types';
+} from './types.js';
 
 /**
  * Lecteur OOXML d'Aster (chemin `fidelity: 'styled'`). Orchestre les modules du dossier :

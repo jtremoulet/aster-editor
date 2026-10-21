@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 describe('AsterEditor : paragraphes vides', () => {
   let mounted: MountedEditor;

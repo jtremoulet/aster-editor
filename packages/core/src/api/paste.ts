@@ -1,4 +1,4 @@
-import type { AsterEditor } from './editor';
+import type { AsterEditor } from './editor.js';
 
 /** Contexte passé à chaque transformateur de collage. */
 export interface PasteContext {

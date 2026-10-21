@@ -1,4 +1,4 @@
-import type { DocxInput, DocxLostObject } from '../types';
+import type { DocxInput, DocxLostObject } from '../types.js';
 
 /**
  * Contrat du rapport de fidélité (session 3, figé en phase 0, implémenté par L28).

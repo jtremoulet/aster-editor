@@ -7,8 +7,8 @@ import {
   pageBreak,
   preformatted,
   type BlockScope,
-} from './blocks-paragraph';
-import { registerList, type ExportContext } from './context';
+} from './blocks-paragraph.js';
+import { registerList, type ExportContext } from './context.js';
 import {
   BLOCK_TAGS,
   PAGE_BREAK_ATTRIBUTE,
@@ -20,9 +20,9 @@ import {
   isText,
   positiveIntAttribute,
   tagOf,
-} from './dom';
-import { DOCX_NUM_ID_ATTRIBUTE, listKindFromType, type ListKind } from './styles';
-import { convertTable } from './tables';
+} from './dom.js';
+import { DOCX_NUM_ID_ATTRIBUTE, listKindFromType, type ListKind } from './styles.js';
+import { convertTable } from './tables.js';
 
 /**
  * Blocs HTML → enfants de section `docx` : listes, conteneurs, dispatch par balise et
@@ -30,7 +30,7 @@ import { convertTable } from './tables';
  * ré-exportés d'ici : l'API du module est celle d'avant le découpage (L45).
  */
 
-export { ROOT_SCOPE, type BlockScope, type ListScope } from './blocks-paragraph';
+export { ROOT_SCOPE, type BlockScope, type ListScope } from './blocks-paragraph.js';
 
 /**
  * `<li>` : le premier paragraphe porte la numérotation, les suivants un simple retrait,

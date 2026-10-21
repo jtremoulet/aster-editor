@@ -1,9 +1,9 @@
 import type { TabAlign, TabLeader } from '@aster-editor/core';
 import type { ImageRun } from 'docx';
-import { warn, type ExportContext } from './context';
-import { parsePoints, pointsToTwips } from './css';
-import type { InlineState } from './inline-state';
-import { resolvedValue, splitVariables } from './variables';
+import { warn, type ExportContext } from './context.js';
+import { parsePoints, pointsToTwips } from './css.js';
+import type { InlineState } from './inline-state.js';
+import { resolvedValue, splitVariables } from './variables.js';
 
 /**
  * Morceaux inline (`Piece`) accumulés pendant la descente : texte, sauts, images,

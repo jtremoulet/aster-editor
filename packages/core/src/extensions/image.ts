@@ -3,7 +3,7 @@ import { Image } from '@tiptap/extension-image';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
-import { DEFAULT_LINK_POLICY, isAllowedImageSrc, type ResolvedLinkPolicy } from './link-safety';
+import { DEFAULT_LINK_POLICY, isAllowedImageSrc, type ResolvedLinkPolicy } from './link-safety.js';
 
 /** Alignements d'image reconnus, sérialisés en `data-align`. */
 export const IMAGE_ALIGNMENTS = ['left', 'center', 'right'] as const;

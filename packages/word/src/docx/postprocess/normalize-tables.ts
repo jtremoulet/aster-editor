@@ -1,5 +1,5 @@
-import { hasTag, isElement, isIgnorableNode } from './dom-utils';
-import type { PostprocessPass } from './types';
+import { hasTag, isElement, isIgnorableNode } from './dom-utils.js';
+import type { PostprocessPass } from './types.js';
 
 /**
  * Vrai si la cellule ne contient que du texte en gras : `<td><strong>x</strong></td>`

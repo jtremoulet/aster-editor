@@ -1,7 +1,7 @@
-import { childrenNamed } from '../preprocess/xml-utils';
-import { PART_CONTENT_TYPES } from './content-types';
-import { REL_TYPE, type RelationshipTable } from './relationships';
-import { directoryOf, emptyDocumentLike, setWordAttr, wordAttr, type PartStore } from './xml-io';
+import { childrenNamed } from '../preprocess/xml-utils.js';
+import { PART_CONTENT_TYPES } from './content-types.js';
+import { REL_TYPE, type RelationshipTable } from './relationships.js';
+import { directoryOf, emptyDocumentLike, setWordAttr, wordAttr, type PartStore } from './xml-io.js';
 
 /**
  * Notes de bas de page du corps greffé. Les notes générées sont **ajoutées** à

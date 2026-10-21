@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from '../index';
-import { importDocx } from './import-docx';
-import { buildDocx, documentXml, headerXml, run, W_NS } from './preprocess/minimal-docx';
-import { normalizeHtml } from './testing/dom';
+import { exportDocx } from '../index.js';
+import { importDocx } from './import-docx.js';
+import { buildDocx, documentXml, headerXml, run, W_NS } from './preprocess/minimal-docx.js';
+import { normalizeHtml } from './testing/dom.js';
 
 /** Charge une fixture .docx en `ArrayBuffer` détaché du pool de buffers Node. */
 function loadFixture(name: string): ArrayBuffer {

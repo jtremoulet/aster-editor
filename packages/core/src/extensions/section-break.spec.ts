@@ -1,11 +1,15 @@
 import { NodeSelection } from '@tiptap/pm/state';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AsterEditor, DocumentLayout } from '../api';
-import { AsterEditorImpl } from '../editor/aster-editor';
-import { en } from '../i18n/en';
-import { fr } from '../i18n/fr';
-import { SECTION_COMMAND_IDS } from '../commands/sections';
-import { PAGE_VIEW_CSS_VARIABLES, resolveSectionLayout, sectionOpenedByBreak } from './page-view';
+import type { AsterEditor, DocumentLayout } from '../api/index.js';
+import { AsterEditorImpl } from '../editor/aster-editor.js';
+import { en } from '../i18n/en.js';
+import { fr } from '../i18n/fr.js';
+import { SECTION_COMMAND_IDS } from '../commands/sections.js';
+import {
+  PAGE_VIEW_CSS_VARIABLES,
+  resolveSectionLayout,
+  sectionOpenedByBreak,
+} from './page-view.js';
 import {
   MAX_SECTION_NUMBER,
   SECTION_BREAK_ATTRIBUTE,
@@ -17,8 +21,8 @@ import {
   sanitizeSectionNumber,
   sectionBreakAttrs,
   sectionBreakRank,
-} from './section-break';
-import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount';
+} from './section-break.js';
+import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
 
 const TWO_BREAKS = '<p>a</p><hr data-section-break="1"><p>b</p><hr data-section-break="2"><p>c</p>';
 

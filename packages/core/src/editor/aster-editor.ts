@@ -18,23 +18,27 @@ import type {
   VariableStore,
   I18n,
   Unsubscribe,
-} from '../api';
-import { createCommandRegistry } from '../commands/registry';
-import { createStandardCommands } from '../commands/standard';
-import { createAsterExtensions } from '../extensions/aster-extensions';
-import { createImageUploadProps } from '../extensions/image-upload';
-import { resolveLinkPolicy } from '../extensions/link-safety';
-import { applyPageView, resolveSectionLayout, type PageViewHandle } from '../extensions/page-view';
-import { createPastePipelineProps } from '../extensions/paste-pipeline';
-import { SET_CONTENT_META } from '../extensions/section-break';
-import { collectShortcutBindings } from '../extensions/shortcuts';
-import { TAB_NODE_NAME, TAB_TEXT, normalizeTabsInCodeBlocks } from '../extensions/tab';
-import { normalizeOutputHtml } from '../html/normalize-output';
-import { resolveVariablesHtml } from '../html/resolve-variables';
-import { serializeDocumentHtml } from '../html/serialize-html';
-import { createI18n } from '../i18n/create-i18n';
-import { createEventEmitter, type AsterEventEmitter } from './event-emitter';
-import { VARIABLE_NODE_NAME, createVariableStore, variableText } from './variable-store';
+} from '../api/index.js';
+import { createCommandRegistry } from '../commands/registry.js';
+import { createStandardCommands } from '../commands/standard.js';
+import { createAsterExtensions } from '../extensions/aster-extensions.js';
+import { createImageUploadProps } from '../extensions/image-upload.js';
+import { resolveLinkPolicy } from '../extensions/link-safety.js';
+import {
+  applyPageView,
+  resolveSectionLayout,
+  type PageViewHandle,
+} from '../extensions/page-view.js';
+import { createPastePipelineProps } from '../extensions/paste-pipeline.js';
+import { SET_CONTENT_META } from '../extensions/section-break.js';
+import { collectShortcutBindings } from '../extensions/shortcuts.js';
+import { TAB_NODE_NAME, TAB_TEXT, normalizeTabsInCodeBlocks } from '../extensions/tab.js';
+import { normalizeOutputHtml } from '../html/normalize-output.js';
+import { resolveVariablesHtml } from '../html/resolve-variables.js';
+import { serializeDocumentHtml } from '../html/serialize-html.js';
+import { createI18n } from '../i18n/create-i18n.js';
+import { createEventEmitter, type AsterEventEmitter } from './event-emitter.js';
+import { VARIABLE_NODE_NAME, createVariableStore, variableText } from './variable-store.js';
 
 /** Classe CSS du conteneur créé dans `options.element`. */
 export const CONTENT_CLASS = 'aster-content';

@@ -1,7 +1,7 @@
-import { childNamed } from '../preprocess/xml-utils';
-import type { DocxPackage } from '../reader/types';
-import { PART_CONTENT_TYPES } from './content-types';
-import { REL_TYPE, type RelationshipTable } from './relationships';
+import { childNamed } from '../preprocess/xml-utils.js';
+import type { DocxPackage } from '../reader/types.js';
+import { PART_CONTENT_TYPES } from './content-types.js';
+import { REL_TYPE, type RelationshipTable } from './relationships.js';
 import {
   directoryOf,
   insertOrdered,
@@ -9,7 +9,7 @@ import {
   wordAttr,
   wordElement,
   type PartStore,
-} from './xml-io';
+} from './xml-io.js';
 
 /**
  * Réglages du document (`settings.xml`) que la greffe doit poser pour que Word honore le

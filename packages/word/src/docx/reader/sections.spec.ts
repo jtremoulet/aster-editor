@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { DocxImportWarning } from '../types';
+import type { DocxImportWarning } from '../types.js';
 import {
   namedPageSize,
   readDocumentLang,
   readSectionLayout,
   readSectionProperties,
   readSectionStart,
-} from './sections';
-import { buildPackage, fragment, partXml, stubStyles } from './testing-blocks';
+} from './sections.js';
+import { buildPackage, fragment, partXml, stubStyles } from './testing-blocks.js';
 
 const styles = stubStyles();
 

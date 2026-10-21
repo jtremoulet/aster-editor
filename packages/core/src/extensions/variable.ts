@@ -7,14 +7,14 @@ import {
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
-import type { AsterEditor, Unsubscribe } from '../api';
+import type { AsterEditor, Unsubscribe } from '../api/index.js';
 import {
   VARIABLE_NODE_NAME,
   isValidVariableName,
   variableLabel,
   variableName,
   variablePlaceholder,
-} from '../editor/variable-store';
+} from '../editor/variable-store.js';
 
 /** Nom de l'événement DOM émis au double-clic sur une puce, pour ouvrir le dialogue d'édition. */
 export const VARIABLE_EDIT_EVENT = 'aster:variable-edit';

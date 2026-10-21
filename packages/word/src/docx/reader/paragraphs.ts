@@ -1,16 +1,16 @@
 import type { BlockBorder } from '@aster-editor/core';
-import { childNamed } from '../preprocess/xml-utils';
-import { escapeAttr, pt, styleAttr } from './html';
-import { tabStopsOf, type DocxParagraphProps } from './properties';
-import { convertRuns, PAGE_BREAK } from './runs';
-import { docDefaultsOf, tableParagraphDefaultsOf } from './styles';
+import { childNamed } from '../preprocess/xml-utils.js';
+import { escapeAttr, pt, styleAttr } from './html.js';
+import { tabStopsOf, type DocxParagraphProps } from './properties.js';
+import { convertRuns, PAGE_BREAK } from './runs.js';
+import { docDefaultsOf, tableParagraphDefaultsOf } from './styles.js';
 import type {
   ConverterContext,
   ParagraphBlock,
   ResolvedParagraphProps,
   ResolvedRunProps,
   TableStyleProps,
-} from './types';
+} from './types.js';
 
 /**
  * Paragraphe Word → `<p …>` ou `<hN …>` avec la sérialisation exacte du contrat

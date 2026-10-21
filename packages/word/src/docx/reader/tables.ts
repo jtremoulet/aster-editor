@@ -1,8 +1,8 @@
 import type { BlockBorder, BorderSide, CellVerticalAlign } from '@aster-editor/core';
-import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { escapeAttr, pt, styleAttr } from './html';
-import { deriveContext } from './index';
-import { conditionalFormatsOf } from './styles';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { escapeAttr, pt, styleAttr } from './html.js';
+import { deriveContext } from './index.js';
+import { conditionalFormatsOf } from './styles.js';
 import {
   applyConditionalFormats,
   conditionalTypesOf,
@@ -10,8 +10,8 @@ import {
   readTableLook,
   tableLookAttribute,
   type CellPosition,
-} from './table-conditional';
-import type { ConverterContext, TableBlock, TableStyleProps } from './types';
+} from './table-conditional.js';
+import type { ConverterContext, TableBlock, TableStyleProps } from './types.js';
 import {
   booleanAttribute,
   borderDeclarations,
@@ -27,7 +27,7 @@ import {
   withSide,
   type BorderMap,
   type PaddingPt,
-} from './units';
+} from './units.js';
 
 /**
  * Conversion d'un `w:tbl` en `<table>` stylé selon le contrat `TableLayoutAttrs` /

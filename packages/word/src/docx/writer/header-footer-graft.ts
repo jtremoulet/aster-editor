@@ -1,11 +1,11 @@
 import type { HeaderFooterSet } from '@aster-editor/core';
-import type { DocxExportWarning } from '../../export/types';
-import { allNamed, childNamed } from '../preprocess/xml-utils';
-import { PART_CONTENT_TYPES } from './content-types';
-import type { MediaCopier } from './media';
-import { REL_TYPE, RelationshipTable } from './relationships';
-import type { StyleMerger } from './styles-merge';
-import { directoryOf, setWordAttr, wordAttr, type PartStore } from './xml-io';
+import type { DocxExportWarning } from '../../export/types.js';
+import { allNamed, childNamed } from '../preprocess/xml-utils.js';
+import { PART_CONTENT_TYPES } from './content-types.js';
+import type { MediaCopier } from './media.js';
+import { REL_TYPE, RelationshipTable } from './relationships.js';
+import type { StyleMerger } from './styles-merge.js';
+import { directoryOf, setWordAttr, wordAttr, type PartStore } from './xml-io.js';
 
 /**
  * En-têtes et pieds de page du gabarit quand `layout.headers` / `footers` (ou ceux d'une

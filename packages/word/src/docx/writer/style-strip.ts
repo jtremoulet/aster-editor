@@ -1,7 +1,7 @@
 import type { BlockBorder } from '@aster-editor/core';
-import { childNamed } from '../preprocess/xml-utils';
-import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
-import { removeWordAttr, wordAttr } from './xml-io';
+import { childNamed } from '../preprocess/xml-utils.js';
+import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types.js';
+import { removeWordAttr, wordAttr } from './xml-io.js';
 
 /**
  * Retrait des propriétés directes redondantes du corps greffé. Le corps généré porte en

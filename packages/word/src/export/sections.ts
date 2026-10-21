@@ -1,17 +1,17 @@
 import type { SectionLayout, SectionStart } from '@aster-editor/core';
 import type { FileChild, Footer, Header, ISectionOptions, ISectionPropertiesOptions } from 'docx';
-import type { ExportContext } from './context';
-import { SECTION_BREAK_ATTRIBUTE, isElement } from './dom';
+import type { ExportContext } from './context.js';
+import { SECTION_BREAK_ATTRIBUTE, isElement } from './dom.js';
 import {
   buildFooters,
   buildHeaders,
   buildSectionFooters,
   buildSectionHeaders,
   type HeaderFooterGroup,
-} from './header-footer';
-import { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout';
-import { resolvePageLayout, type PageLayout } from './styles';
-import type { DocxExportOptions, DocxExportWarning } from './types';
+} from './header-footer.js';
+import { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout.js';
+import { resolvePageLayout, type PageLayout } from './styles.js';
+import type { DocxExportOptions, DocxExportWarning } from './types.js';
 
 /**
  * Sections de l'export neuf (session 4). Le corps HTML est découpé à chaque
@@ -23,7 +23,7 @@ import type { DocxExportOptions, DocxExportWarning } from './types';
  * une section). La règle est celle de `section-layout.ts`, partagée avec la greffe.
  */
 
-export { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout';
+export { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout.js';
 
 /** Un segment du corps : son conteneur et le numéro (à partir de 1, par position) de la section qu'il forme. */
 export interface BodySegment {

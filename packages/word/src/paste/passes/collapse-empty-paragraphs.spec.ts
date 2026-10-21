@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import { collapseEmptyParagraphs } from './collapse-empty-paragraphs';
+import { runPass } from '../../testing/html-compare.js';
+import { collapseEmptyParagraphs } from './collapse-empty-paragraphs.js';
 
 describe('collapseEmptyParagraphs', () => {
   it('supprime les paragraphes ne contenant que des insécables, des espaces ou des br', () => {

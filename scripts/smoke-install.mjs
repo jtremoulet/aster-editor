@@ -232,4 +232,42 @@ writeFileSync(
 run('npx ngc -p tsconfig.ng.json', app);
 console.log('✔ angular : composant standalone compilé par ngc (strictTemplates)');
 
+// 6. Import ESM en Node pur, sans bundler : esbuild et ngc tolèrent les spécificateurs
+// relatifs sans extension, Node non (`ERR_MODULE_NOT_FOUND` sur `from './api'`). Les
+// paquets 0.6.0 publiés échouaient ici. `createEditor` et consorts ne tournent pas sans
+// DOM : on vérifie seulement que chaque paquet se charge et expose ses exports.
+// Le FESM Angular est en compilation partielle (`ɵɵngDeclare*`) : sans le linker d'un
+// bundler, Angular retombe sur le JIT et exige `@angular/compiler` chargé avant, d'où
+// l'import préalable (même recette que les tests Angular en Node).
+writeFileSync(
+  join(app, 'esm-node.mjs'),
+  `await import('@angular/compiler');
+const checks = [
+  ['@aster-editor/core', 'createEditor'],
+  ['@aster-editor/word', 'importDocx'],
+  ['@aster-editor/ui', 'createAster'],
+  ['@aster-editor/angular', 'AsterEditorComponent'],
+];
+const failures = [];
+for (const [name, symbol] of checks) {
+  try {
+    const mod = await import(name);
+    const kind = typeof mod[symbol];
+    if (kind !== 'function') failures.push(name + ' : ' + symbol + ' est ' + kind + ', attendu function');
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.split('\\n')[0] : String(error);
+    failures.push(name + ' : ' + reason);
+  }
+}
+console.log(JSON.stringify(failures));
+`,
+);
+const esmFailures = JSON.parse(capture('node esm-node.mjs', app));
+if (esmFailures.length) {
+  console.error('✖ Import ESM en Node pur :');
+  for (const failure of esmFailures) console.error(`  - ${failure}`);
+  process.exit(1);
+}
+console.log('✔ node : les quatre paquets s’importent en ESM sans bundler');
+
 console.log(`\n✔ Installation à blanc réussie dans ${OUT}`);

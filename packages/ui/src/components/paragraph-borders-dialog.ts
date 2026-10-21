@@ -1,9 +1,9 @@
 import type { AsterEditor, BlockBorder, BorderSide, BorderStyle } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { isRecord } from '../utils/guards';
-import { createPlainButton } from './button';
-import { createDropdown, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
+import { createPlainButton } from './button.js';
+import { createDropdown, type Dropdown } from './dropdown.js';
 import {
   MAX_BORDER_WIDTH_PT,
   MIN_BORDER_WIDTH_PT,
@@ -19,7 +19,7 @@ import {
   setBlockLayout,
   submitOnEnter,
   unsetBlockLayout,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
 
 /** Côtés éditables par le dialogue, dans l'ordre d'affichage (`between` n'est pas proposé). */
 export const BORDER_SIDES: readonly Exclude<BorderSide, 'between'>[] = [

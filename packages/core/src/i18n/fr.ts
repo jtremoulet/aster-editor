@@ -1,4 +1,4 @@
-import type { AsterDictionary } from '../api';
+import type { AsterDictionary } from '../api/index.js';
 
 /** Dictionnaire français. Clés des commandes standard : `command.<id>`. */
 export const fr: AsterDictionary = {

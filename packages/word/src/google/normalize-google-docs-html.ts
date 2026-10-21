@@ -1,13 +1,13 @@
-import { getStyleProperty, isBlank, parseStyle, selectAll, unwrap } from '../paste/dom-utils';
-import { defaultParse, extractFragment } from '../paste/normalize-word-html';
-import { cleanInlineStyles } from '../paste/passes/clean-inline-styles';
-import { collapseEmptyParagraphs } from '../paste/passes/collapse-empty-paragraphs';
-import { normalizeTables } from '../paste/passes/normalize-tables';
-import { normalizeWhitespace } from '../paste/passes/normalize-whitespace';
-import { stripConditionalComments } from '../paste/passes/strip-conditional-comments';
-import { stripOfficeNamespaces } from '../paste/passes/strip-office-namespaces';
-import { wrapVariables } from '../paste/passes/variables';
-import { resolvePasteOptions, type PastePass, type WordPasteOptions } from '../paste/types';
+import { getStyleProperty, isBlank, parseStyle, selectAll, unwrap } from '../paste/dom-utils.js';
+import { defaultParse, extractFragment } from '../paste/normalize-word-html.js';
+import { cleanInlineStyles } from '../paste/passes/clean-inline-styles.js';
+import { collapseEmptyParagraphs } from '../paste/passes/collapse-empty-paragraphs.js';
+import { normalizeTables } from '../paste/passes/normalize-tables.js';
+import { normalizeWhitespace } from '../paste/passes/normalize-whitespace.js';
+import { stripConditionalComments } from '../paste/passes/strip-conditional-comments.js';
+import { stripOfficeNamespaces } from '../paste/passes/strip-office-namespaces.js';
+import { wrapVariables } from '../paste/passes/variables.js';
+import { resolvePasteOptions, type PastePass, type WordPasteOptions } from '../paste/types.js';
 
 /** `list-style-type` que Google pose sur chaque `<li>`, traduit en attribut `type` du `<ol>`. */
 const LIST_STYLE_TYPES: Readonly<Record<string, string>> = {

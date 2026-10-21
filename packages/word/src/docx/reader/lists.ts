@@ -1,6 +1,6 @@
-import type { DocxLostObject } from '../types';
-import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { escapeAttr } from './html';
+import type { DocxLostObject } from '../types.js';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { escapeAttr } from './html.js';
 import type {
   Block,
   ConverterContext,
@@ -10,8 +10,8 @@ import type {
   ListLevel,
   NumberingResolver,
   ParagraphBlock,
-} from './types';
-import { numericAttribute, twipsToPt } from './units';
+} from './types.js';
+import { numericAttribute, twipsToPt } from './units.js';
 
 /**
  * Listes : résolution de `numbering.xml` (`w:abstractNum` → niveaux, `w:num` →

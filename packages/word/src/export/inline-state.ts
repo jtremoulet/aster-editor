@@ -1,5 +1,5 @@
 import type { IRunOptions } from 'docx';
-import { resolveDocxStyle, type ExportContext } from './context';
+import { resolveDocxStyle, type ExportContext } from './context.js';
 import {
   highlightName,
   parseColor,
@@ -9,10 +9,10 @@ import {
   parseStyle,
   pointsToTwips,
   type HighlightName,
-} from './css';
-import { tagOf } from './dom';
-import { sanitizeXmlText } from './sanitize';
-import { CODE_FONT, STYLE_IDS } from './styles';
+} from './css.js';
+import { tagOf } from './dom.js';
+import { sanitizeXmlText } from './sanitize.js';
+import { CODE_FONT, STYLE_IDS } from './styles.js';
 
 /**
  * Marques inline héritées le long de la descente (`InlineState`) : lecture d'un élément

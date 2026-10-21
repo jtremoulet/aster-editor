@@ -9,7 +9,7 @@ if (typeof globalThis.ClipboardEvent === 'undefined') {
     },
   });
 }
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** Sources d'image et verdict attendu avec la politique par défaut. */
 const CASES: readonly [src: string, allowed: boolean][] = [

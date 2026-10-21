@@ -6,27 +6,27 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import { StarterKit } from '@tiptap/starter-kit';
-import type { AsterEditor, AsterOptions } from '../api';
-import { createImageExtension } from './image';
-import { createLinkExtension, type ResolvedLinkPolicy } from './link-safety';
-import { ListLayout } from './list-layout';
-import { Outline } from './outline';
-import { ParagraphLayout } from './paragraph-layout';
+import type { AsterEditor, AsterOptions } from '../api/index.js';
+import { createImageExtension } from './image.js';
+import { createLinkExtension, type ResolvedLinkPolicy } from './link-safety.js';
+import { ListLayout } from './list-layout.js';
+import { Outline } from './outline.js';
+import { ParagraphLayout } from './paragraph-layout.js';
 import {
   AsterHighlight,
   AsterStrike,
   AsterTextStyle,
   AsterUnderline,
   RunLayout,
-} from './run-layout';
-import { AsterHorizontalRule } from './page-break';
-import { Pagination } from './pagination';
-import { Search } from './search';
-import { SectionBreak } from './section-break';
-import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts';
-import { Tab } from './tab';
-import { createTableExtensions } from './table-layout';
-import { Variable } from './variable';
+} from './run-layout.js';
+import { AsterHorizontalRule } from './page-break.js';
+import { Pagination } from './pagination.js';
+import { Search } from './search.js';
+import { SectionBreak } from './section-break.js';
+import { createShortcutsExtension, type ShortcutsExtensionOptions } from './shortcuts.js';
+import { Tab } from './tab.js';
+import { createTableExtensions } from './table-layout.js';
+import { Variable } from './variable.js';
 
 /** Dépendances de l'assemblage, fournies par l'éditeur au montage. */
 export interface AsterExtensionsContext {

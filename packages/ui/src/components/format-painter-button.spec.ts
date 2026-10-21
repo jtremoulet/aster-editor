@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FORMAT_PAINTER_CHANGE_EVENT } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { FORMAT_PAINTER_LOCKED_CLASS, createFormatPainterButton } from './format-painter-button';
-import type { FormatPainterButton } from './format-painter-button';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { FORMAT_PAINTER_LOCKED_CLASS, createFormatPainterButton } from './format-painter-button.js';
+import type { FormatPainterButton } from './format-painter-button.js';
 
 const COMMANDS = ['bold', 'formatPainter.copy', 'formatPainter.paste'];
 

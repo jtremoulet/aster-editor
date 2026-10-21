@@ -9,7 +9,7 @@ import {
   safeStart,
   stripNumberingIndent,
   topLevelElementCount,
-} from './lists';
+} from './lists.js';
 import {
   buildPackage,
   createTestContext,
@@ -17,8 +17,14 @@ import {
   paragraphXml,
   partXml,
   renderBody,
-} from './testing-blocks';
-import type { Block, ConverterContext, DocxPackage, ListDefinition, ParagraphBlock } from './types';
+} from './testing-blocks.js';
+import type {
+  Block,
+  ConverterContext,
+  DocxPackage,
+  ListDefinition,
+  ParagraphBlock,
+} from './types.js';
 
 function lvl(level: number, format: string, text: string, start?: number, left?: number): string {
   return (

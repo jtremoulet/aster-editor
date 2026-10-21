@@ -1,5 +1,5 @@
 import { tableLookValue, type BlockBorder, type BorderSide } from '@aster-editor/core';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
 import {
   applyRunProperties,
   finalizeRun,
@@ -8,9 +8,9 @@ import {
   readShadingFill,
   type MutableRun,
   type ThemeFonts,
-} from './properties';
-import type { ResolvedRunProps, TableStyleProps } from './types';
-import { bordersBySide, CSS_SIDES, numberAttr, onOff } from './units';
+} from './properties.js';
+import type { ResolvedRunProps, TableStyleProps } from './types.js';
+import { bordersBySide, CSS_SIDES, numberAttr, onOff } from './units.js';
 
 /**
  * Styles conditionnels de tableau (`w:tblStylePr` : première ligne, bandes…), approximés

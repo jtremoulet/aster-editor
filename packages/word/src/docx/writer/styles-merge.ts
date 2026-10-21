@@ -1,8 +1,8 @@
-import type { DocxExportWarning } from '../../export/types';
-import { allNamed, childNamed, childrenNamed } from '../preprocess/xml-utils';
-import type { DocxStyleResolver } from '../reader/styles';
-import type { ResolvedParagraphProps } from '../reader/types';
-import { reconcileParagraph, reconcileRun } from './style-reconcile';
+import type { DocxExportWarning } from '../../export/types.js';
+import { allNamed, childNamed, childrenNamed } from '../preprocess/xml-utils.js';
+import type { DocxStyleResolver } from '../reader/styles.js';
+import type { ResolvedParagraphProps } from '../reader/types.js';
+import { reconcileParagraph, reconcileRun } from './style-reconcile.js';
 import {
   directParagraphKeys,
   directRunKeys,
@@ -12,8 +12,8 @@ import {
   styleOnly,
   type ParagraphKey,
   type RunKey,
-} from './style-strip';
-import { wordAttr, type PartStore } from './xml-io';
+} from './style-strip.js';
+import { wordAttr, type PartStore } from './xml-io.js';
 
 /**
  * Styles du corps greffé. Un style référencé par le corps (`w:pStyle`, `w:rStyle`,

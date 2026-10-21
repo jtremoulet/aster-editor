@@ -1,6 +1,6 @@
 import type { BlockBorder, BorderSide, BorderStyle } from '@aster-editor/core';
-import { childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { pt } from './html';
+import { childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { pt } from './html.js';
 
 /**
  * Conversions d'unités, couleurs, attributs et bordures OOXML, partagés par tous les

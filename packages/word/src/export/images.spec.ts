@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ExportContext } from './context';
-import { loadDocx } from './docx-module';
-import { decodeDataUrl, displaySize, imageRun, readImageSize, sniffRasterType } from './images';
-import { RED_PNG_BASE64, RED_PNG_DATA_URL, parseFragment } from './testing/sample';
+import type { ExportContext } from './context.js';
+import { loadDocx } from './docx-module.js';
+import { decodeDataUrl, displaySize, imageRun, readImageSize, sniffRasterType } from './images.js';
+import { RED_PNG_BASE64, RED_PNG_DATA_URL, parseFragment } from './testing/sample.js';
 
 /** Contexte de test avec un collecteur d'avertissements neuf. */
 async function context(overrides: Partial<ExportContext> = {}): Promise<ExportContext> {

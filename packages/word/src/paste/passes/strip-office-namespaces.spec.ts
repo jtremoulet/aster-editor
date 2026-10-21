@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import { stripOfficeNamespaces } from './strip-office-namespaces';
+import { runPass } from '../../testing/html-compare.js';
+import { stripOfficeNamespaces } from './strip-office-namespaces.js';
 
 describe('stripOfficeNamespaces', () => {
   it('déballe <o:p> en gardant son texte', () => {

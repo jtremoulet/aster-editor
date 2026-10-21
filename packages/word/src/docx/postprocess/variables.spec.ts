@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_VARIABLE_PATTERN } from '../preprocess/names';
-import type { CollectedVariable } from '../preprocess/variables';
-import { parseFragment, runPass } from '../testing/dom';
+import { DEFAULT_VARIABLE_PATTERN } from '../preprocess/names.js';
+import type { CollectedVariable } from '../preprocess/variables.js';
+import { parseFragment, runPass } from '../testing/dom.js';
 import {
   collectResultVariables,
   createVariablesPass,
   resolveDocxVariableOptions,
   variablePatterns,
-} from './variables';
+} from './variables.js';
 
 const CUSTOM = /\[([a-z_]+)\]/g;
 const collected = (entries: Array<[string, CollectedVariable]>): Map<string, CollectedVariable> =>

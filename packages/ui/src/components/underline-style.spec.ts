@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   UNDERLINE_STYLES,
   applyUnderlineStyle,
   createUnderlineStyleMenu,
   currentUnderlineStyle,
-} from './underline-style';
+} from './underline-style.js';
 
 describe('createUnderlineStyleMenu', () => {
   let editor: MockEditor;

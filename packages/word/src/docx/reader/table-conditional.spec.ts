@@ -6,9 +6,9 @@ import {
   readConditionalFormats,
   readTableLook,
   type TableLook,
-} from './table-conditional';
-import { fragment } from './testing-blocks';
-import type { TableStyleProps } from './types';
+} from './table-conditional.js';
+import { fragment } from './testing-blocks.js';
+import type { TableStyleProps } from './types.js';
 
 const ALL_OFF: TableLook = {
   firstRow: false,

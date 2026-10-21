@@ -9,11 +9,11 @@ import type {
 } from 'docx';
 import { TABLE_LOOK_ATTRIBUTE, TABLE_LOOK_FLAGS, parseTableLook } from '@aster-editor/core';
 import type { ITableLookOptions } from 'docx';
-import type { BlockScope } from './blocks';
-import { resolveDocxStyle, type ExportContext } from './context';
-import { parseBorders, parseStyle } from './css';
-import { positiveIntAttribute, tagOf } from './dom';
-import { DOCX_STYLE_ATTRIBUTE } from './styles';
+import type { BlockScope } from './blocks.js';
+import { resolveDocxStyle, type ExportContext } from './context.js';
+import { parseBorders, parseStyle } from './css.js';
+import { positiveIntAttribute, tagOf } from './dom.js';
+import { DOCX_STYLE_ATTRIBUTE } from './styles.js';
 import {
   anyCellDeclaresBorders,
   cellLayout,
@@ -21,7 +21,7 @@ import {
   tableAlignment,
   tableBorders,
   type CellEdges,
-} from './tables-borders';
+} from './tables-borders.js';
 import {
   MAX_ROW_SPAN,
   analyzeGrid,
@@ -30,7 +30,7 @@ import {
   columnWidthsTwips,
   isAllHeaderCells,
   type CellPosition,
-} from './tables-grid';
+} from './tables-grid.js';
 
 /**
  * `<table>` → `Table` de `docx`. La grille (`tables-grid.ts`) et les propriétés du
@@ -38,7 +38,7 @@ import {
  * d'avant le découpage (L45).
  */
 
-export { MAX_ROW_SPAN, MAX_TABLE_COLUMNS } from './tables-grid';
+export { MAX_ROW_SPAN, MAX_TABLE_COLUMNS } from './tables-grid.js';
 
 /** Convertisseur de blocs injecté pour casser le cycle `blocks` ↔ `tables`. */
 export type ChildrenConverter = (

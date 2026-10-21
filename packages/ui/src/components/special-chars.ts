@@ -1,9 +1,9 @@
 import type { AsterEditor } from '@aster-editor/core';
 import { escapeHtml } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el, enabledElements } from '../utils/dom';
-import { setDisabled } from './button';
-import { createDropdown, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el, enabledElements } from '../utils/dom.js';
+import { setDisabled } from './button.js';
+import { createDropdown, type Dropdown } from './dropdown.js';
 
 /** Un caractère insérable : la chaîne insérée, un glyphe d'affichage et un libellé optionnels. */
 export interface SpecialChar {

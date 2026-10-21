@@ -1,6 +1,6 @@
-import { imageContentType } from './content-types';
-import { REL_TYPE, type RelationshipTable } from './relationships';
-import { basenameOf, directoryOf, type PartStore } from './xml-io';
+import { imageContentType } from './content-types.js';
+import { REL_TYPE, type RelationshipTable } from './relationships.js';
+import { basenameOf, directoryOf, type PartStore } from './xml-io.js';
 
 /**
  * Copie des médias du paquet généré dans `word/media/` du gabarit. Une image dont les

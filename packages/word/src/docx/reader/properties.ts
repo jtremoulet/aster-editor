@@ -1,7 +1,7 @@
 import type { BlockBorder, BorderSide, TabAlign, TabLeader } from '@aster-editor/core';
-import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { distanceAttr, readShadingFill } from './properties-run';
-import type { ParagraphAlign, ResolvedParagraphProps, ResolvedRunProps } from './types';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { distanceAttr, readShadingFill } from './properties-run.js';
+import type { ParagraphAlign, ResolvedParagraphProps, ResolvedRunProps } from './types.js';
 import {
   bounded,
   lineToMultiple,
@@ -10,7 +10,7 @@ import {
   readBorderElement,
   twipsToPt,
   WORD_LIMITS,
-} from './units';
+} from './units.js';
 
 /**
  * Lecture des propriétés de paragraphe (`w:pPr`) et de run (`w:rPr`) dans des
@@ -30,14 +30,14 @@ export {
   readShadingFill,
   type MutableRun,
   type ThemeFonts,
-} from './properties-run';
+} from './properties-run.js';
 
 /**
  * Un seul lecteur de bordure pour tout le paquet (R42-05, après la fusion L45a) :
  * `readBorder` est `units.readBorderElement`. Un `w:sz` nul, absent ou hors bornes avec un
  * style visible donne le filet fin de Word (½ pt), sur un paragraphe comme sur une cellule.
  */
-export { readBorderElement as readBorder } from './units';
+export { readBorderElement as readBorder } from './units.js';
 
 /**
  * Taquet de tabulation résolu (`w:tab` de `w:tabs`), en points : position, alignement

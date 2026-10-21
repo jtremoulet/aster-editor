@@ -1,4 +1,4 @@
-import type { CommandId } from './commands';
+import type { CommandId } from './commands.js';
 
 /** Thème visuel. `light` et `night` sont fournis par `ui`, toute autre chaîne est un thème custom. */
 export type AsterTheme = 'light' | 'night' | (string & {});

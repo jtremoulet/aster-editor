@@ -1,19 +1,19 @@
-import type { AsterCommand, UploadHandler } from '../api';
-import type { ResolvedLinkPolicy } from '../extensions/link-safety';
-import { ALIGNMENT_COMMANDS } from './alignment';
-import { BLOCK_COMMANDS } from './blocks';
-import { FORMAT_PAINTER_COMMANDS } from './format-painter';
-import { HISTORY_COMMANDS } from './history';
-import { createImageCommands } from './images';
-import { PARAGRAPH_LAYOUT_COMMANDS, TAB_COMMANDS, TEXT_LAYOUT_COMMANDS } from './layout';
-import { createLinkCommands } from './links';
-import { LIST_COMMANDS } from './lists';
-import { MARK_COMMANDS } from './marks';
-import { SEARCH_COMMANDS } from './search';
-import { SECTION_COMMANDS } from './sections';
-import { TABLE_COMMANDS } from './tables';
-import { TEXT_STYLE_COMMANDS } from './text-style';
-import { VARIABLE_COMMANDS } from './variables';
+import type { AsterCommand, UploadHandler } from '../api/index.js';
+import type { ResolvedLinkPolicy } from '../extensions/link-safety.js';
+import { ALIGNMENT_COMMANDS } from './alignment.js';
+import { BLOCK_COMMANDS } from './blocks.js';
+import { FORMAT_PAINTER_COMMANDS } from './format-painter.js';
+import { HISTORY_COMMANDS } from './history.js';
+import { createImageCommands } from './images.js';
+import { PARAGRAPH_LAYOUT_COMMANDS, TAB_COMMANDS, TEXT_LAYOUT_COMMANDS } from './layout.js';
+import { createLinkCommands } from './links.js';
+import { LIST_COMMANDS } from './lists.js';
+import { MARK_COMMANDS } from './marks.js';
+import { SEARCH_COMMANDS } from './search.js';
+import { SECTION_COMMANDS } from './sections.js';
+import { TABLE_COMMANDS } from './tables.js';
+import { TEXT_STYLE_COMMANDS } from './text-style.js';
+import { VARIABLE_COMMANDS } from './variables.js';
 
 /** Ce dont les commandes standard dépendantes de l'éditeur ont besoin. */
 export interface StandardCommandsContext {

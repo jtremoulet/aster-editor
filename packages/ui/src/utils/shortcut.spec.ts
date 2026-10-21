@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatShortcut, isMacPlatform } from './shortcut';
-import { tooltipText } from '../components/tooltip';
-import { rovingIndexFor } from './dom';
+import { formatShortcut, isMacPlatform } from './shortcut.js';
+import { tooltipText } from '../components/tooltip.js';
+import { rovingIndexFor } from './dom.js';
 
 describe('formatShortcut', () => {
   it('rend Mod-b en Ctrl+B sur PC et ⌘B sur mac', () => {

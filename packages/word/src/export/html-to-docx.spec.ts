@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toDocumentXml } from './testing/sample';
+import { toDocumentXml } from './testing/sample.js';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
 function count(haystack: string, needle: string): number {

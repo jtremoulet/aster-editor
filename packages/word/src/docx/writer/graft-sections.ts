@@ -1,17 +1,17 @@
 import type { DocumentLayout, SectionLayout } from '@aster-editor/core';
-import { sectionHeaderFooterSets, sectionLayoutOf } from '../../export/section-layout';
-import { childNamed, childrenNamed } from '../preprocess/xml-utils';
-import type { HeadersFootersResult } from '../reader/headers';
-import { readSectionProperties } from '../reader/sections';
+import { sectionHeaderFooterSets, sectionLayoutOf } from '../../export/section-layout.js';
+import { childNamed, childrenNamed } from '../preprocess/xml-utils.js';
+import type { HeadersFootersResult } from '../reader/headers.js';
+import { readSectionProperties } from '../reader/sections.js';
 import {
   graftAllHeadersFooters,
   graftHeadersFooters,
   wantsHeadersFooters,
   type HeaderFooterGraftContext,
   type HeaderFooterGraftResult,
-} from './header-footer-graft';
-import { PPR_ORDER } from './style-reconcile';
-import { createSibling, insertOrdered, wordAttr } from './xml-io';
+} from './header-footer-graft.js';
+import { PPR_ORDER } from './style-reconcile.js';
+import { createSibling, insertOrdered, wordAttr } from './xml-io.js';
 
 /**
  * Sections du corps greffé (session 4). Un corps à `k` sauts donne `k + 1` sections : le

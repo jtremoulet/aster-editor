@@ -1,5 +1,5 @@
 import type { IParagraphOptions, Paragraph } from 'docx';
-import { resolveDocxStyle, warn, type ExportContext } from './context';
+import { resolveDocxStyle, warn, type ExportContext } from './context.js';
 import {
   parseAlignment,
   parseBorder,
@@ -10,10 +10,10 @@ import {
   parseStyle,
   pointsToTwips,
   type ParagraphAlignment,
-} from './css';
-import { PAGE_BREAK_ATTRIBUTE, tagOf } from './dom';
-import { inlineChildren, type InlineCollector, type InlineState, type TabStop } from './inline';
-import { sanitizeXmlText } from './sanitize';
+} from './css.js';
+import { PAGE_BREAK_ATTRIBUTE, tagOf } from './dom.js';
+import { inlineChildren, type InlineCollector, type InlineState, type TabStop } from './inline.js';
+import { sanitizeXmlText } from './sanitize.js';
 import {
   DOCX_STYLE_ATTRIBUTE,
   HEADING_NUMBERING_REFERENCE,
@@ -23,7 +23,7 @@ import {
   NUM_INDENT_ATTRIBUTE,
   STYLE_IDS,
   borderOptions,
-} from './styles';
+} from './styles.js';
 
 /**
  * Paragraphes de l'export : scope hérité par les blocs, propriétés directes du contrat

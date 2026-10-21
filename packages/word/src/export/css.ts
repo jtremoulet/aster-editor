@@ -6,7 +6,7 @@
  * du module est celle d'avant le découpage (L45).
  */
 
-export { highlightName, parseColor, type HighlightName } from './css-colors';
+export { highlightName, parseColor, type HighlightName } from './css-colors.js';
 export {
   parseLineHeight,
   parsePadding,
@@ -14,7 +14,7 @@ export {
   parsePoints,
   pointsToTwips,
   type CssLineHeight,
-} from './css-lengths';
+} from './css-lengths.js';
 export {
   CSS_BORDER_SIDES,
   parseBorder,
@@ -22,7 +22,7 @@ export {
   type CssBorder,
   type CssBorderSide,
   type CssBorderStyle,
-} from './css-borders';
+} from './css-borders.js';
 
 /** Découpe `a: b; c: d` en map clé → valeur, clés en minuscules, valeurs trimées. */
 export function parseStyle(style: string | null): ReadonlyMap<string, string> {

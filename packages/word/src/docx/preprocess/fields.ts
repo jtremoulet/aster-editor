@@ -1,4 +1,4 @@
-import { toVariableName } from './names';
+import { toVariableName } from './names.js';
 import {
   allNamed,
   childNamed,
@@ -9,7 +9,7 @@ import {
   wordAttribute,
   type CollectedVariable,
   type PartCollector,
-} from './xml-utils';
+} from './xml-utils.js';
 
 /**
  * Champs de fusion Word → runs `{{nom}}`. Deux formes existent dans le XML : le champ

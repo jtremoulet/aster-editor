@@ -1,6 +1,12 @@
-import type { AsterDictionary, AsterEditor, AsterLocale, I18n, TranslateParams } from '../api';
-import { en } from './en';
-import { fr } from './fr';
+import type {
+  AsterDictionary,
+  AsterEditor,
+  AsterLocale,
+  I18n,
+  TranslateParams,
+} from '../api/index.js';
+import { en } from './en.js';
+import { fr } from './fr.js';
 
 /** Locale de repli : toute clé absente de la locale courante est cherchée ici. */
 export const FALLBACK_LOCALE: AsterLocale = 'en';

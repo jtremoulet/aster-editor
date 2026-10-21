@@ -11,8 +11,8 @@ import {
   parseImageHeight,
   parseImageWidth,
   type ImageEditEventDetail,
-} from './image';
-import { mountEditor, selectRange, type MountedEditor } from '../testing/mount';
+} from './image.js';
+import { mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
 
 const SRC = 'https://example.com/a.png';
 

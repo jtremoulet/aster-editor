@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TextSelection } from '@tiptap/pm/state';
-import { findVariableAtSelection } from './variables';
-import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount';
+import { findVariableAtSelection } from './variables.js';
+import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
 
 const CLIENT = '<span data-aster-variable="client" data-label="Client">{{client}}</span>';
 

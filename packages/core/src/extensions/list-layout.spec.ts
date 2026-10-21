@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { bodyHtml, mountEditor, type MountedEditor } from '../testing/mount';
+import { bodyHtml, mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** `setHTML(getHTML())` doit redonner exactement le même HTML (sans le paragraphe final). */
 function expectIdempotent(mounted: MountedEditor): string {

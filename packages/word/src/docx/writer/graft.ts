@@ -1,20 +1,20 @@
 import type { DocumentLayout } from '@aster-editor/core';
-import type { ListDefinition, VariableSettings } from '../../export/context';
-import type { DocxExportWarning } from '../../export/types';
-import { allNamed, childNamed } from '../preprocess/xml-utils';
-import { ensureContentTypes } from './content-types';
-import { writeCoreProperties } from './core-properties';
-import { createFootnoteMerger } from './footnotes-merge';
-import { graftSections } from './graft-sections';
-import { resolveHeaderFooterVariables } from './header-footer-variables';
-import { MediaCopier } from './media';
-import { createNumberingMerger } from './numbering-merge';
-import { REL_TYPE, RelationshipTable } from './relationships';
-import { ensureSettings } from './settings-merge';
-import { createStyleMerger, type StyleMerger, type StyleType } from './styles-merge';
-import { stripConditionalTableProperties } from './table-look';
-import type { TemplateContext } from './template';
-import { PartStore, setWordAttr, wordAttr, type XmlCodec } from './xml-io';
+import type { ListDefinition, VariableSettings } from '../../export/context.js';
+import type { DocxExportWarning } from '../../export/types.js';
+import { allNamed, childNamed } from '../preprocess/xml-utils.js';
+import { ensureContentTypes } from './content-types.js';
+import { writeCoreProperties } from './core-properties.js';
+import { createFootnoteMerger } from './footnotes-merge.js';
+import { graftSections } from './graft-sections.js';
+import { resolveHeaderFooterVariables } from './header-footer-variables.js';
+import { MediaCopier } from './media.js';
+import { createNumberingMerger } from './numbering-merge.js';
+import { REL_TYPE, RelationshipTable } from './relationships.js';
+import { ensureSettings } from './settings-merge.js';
+import { createStyleMerger, type StyleMerger, type StyleType } from './styles-merge.js';
+import { stripConditionalTableProperties } from './table-look.js';
+import type { TemplateContext } from './template.js';
+import { PartStore, setWordAttr, wordAttr, type XmlCodec } from './xml-io.js';
 
 /**
  * Greffe du corps généré dans le gabarit. Principe figé (brief L27) : le `.docx` produit

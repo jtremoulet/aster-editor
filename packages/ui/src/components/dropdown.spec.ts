@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { createCommandDropdown, createDropdown, createMenuItem } from './dropdown';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { createCommandDropdown, createDropdown, createMenuItem } from './dropdown.js';
 
 const key = (target: EventTarget, name: string): void => {
   target.dispatchEvent(

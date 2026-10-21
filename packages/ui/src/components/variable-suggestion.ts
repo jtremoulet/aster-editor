@@ -3,15 +3,15 @@ import type { Range } from '@tiptap/core';
 import { PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Suggestion, exitSuggestion } from '@tiptap/suggestion';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
-import { clear, el } from '../utils/dom';
-import { createPlainButton } from './button';
-import { clampToViewport } from './table-context-menu';
+import { clear, el } from '../utils/dom.js';
+import { createPlainButton } from './button.js';
+import { clampToViewport } from './table-context-menu.js';
 import {
   allowsUnknownVariables,
   isAcceptableVariableName,
   placeholderText,
   renderVariableEntry,
-} from './variable-menu';
+} from './variable-menu.js';
 
 /** Entrée du panneau de suggestion : une variable connue, ou la création de `{{query}}`. */
 export type VariableSuggestionItem =

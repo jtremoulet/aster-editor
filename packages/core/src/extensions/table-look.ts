@@ -1,4 +1,4 @@
-import { TABLE_LOOK_FLAGS, type TableLook, type TableLookFlag } from '../api';
+import { TABLE_LOOK_FLAGS, type TableLook, type TableLookFlag } from '../api/index.js';
 
 /**
  * Drapeaux `w:tblLook` d'un tableau (`TableLayoutAttrs.look`, session 4, vague 3) :

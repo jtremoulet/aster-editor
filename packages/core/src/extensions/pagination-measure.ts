@@ -1,6 +1,6 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
-import type { DocumentLayout, PageViewOptions } from '../api';
+import type { DocumentLayout, PageViewOptions } from '../api/index.js';
 import {
   PAGE_VIEW_CLASS,
   PAGE_VIEW_CSS_VARIABLES,
@@ -9,14 +9,14 @@ import {
   resolveSectionLayout,
   sectionOpenedByBreak,
   type PageMetrics,
-} from './page-view';
+} from './page-view.js';
 import {
   cssLengthToPx,
   paginate,
   type PageSegment,
   type PaginationResult,
   type SectionCssVariables,
-} from './pagination-layout';
+} from './pagination-layout.js';
 
 /**
  * Phase de **mesure** de la pagination approximative (session 3, L30, extrait de

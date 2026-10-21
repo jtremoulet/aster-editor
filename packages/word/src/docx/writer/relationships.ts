@@ -1,5 +1,5 @@
-import { relsPathOf, resolveTarget } from '../reader/package';
-import { directoryOf, type PartStore } from './xml-io';
+import { relsPathOf, resolveTarget } from '../reader/package.js';
+import { directoryOf, type PartStore } from './xml-io.js';
 
 /**
  * Relations OPC d'une partie (`word/_rels/document.xml.rels`) en lecture et en écriture

@@ -1,4 +1,4 @@
-import type { AsterEventName, AsterEvents, Unsubscribe } from '../api';
+import type { AsterEventName, AsterEvents, Unsubscribe } from '../api/index.js';
 
 /**
  * Émetteur d'événements typé sur `AsterEvents`. Volontairement minimal : pas de

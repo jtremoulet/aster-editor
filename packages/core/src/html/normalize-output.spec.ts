@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeOutputHtml } from './normalize-output';
+import { normalizeOutputHtml } from './normalize-output.js';
 
 describe('normalizeOutputHtml', () => {
   it('rend le HTML sans table strictement identique', () => {

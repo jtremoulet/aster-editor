@@ -12,7 +12,7 @@ import {
   partsOf,
   textOf,
   topLevelBlocks,
-} from './testing';
+} from './testing.js';
 
 /** Tous les `w:sectPr` d'un `document.xml`, dans l'ordre, tels qu'écrits. */
 function sectPrsOf(xml: string): string[] {

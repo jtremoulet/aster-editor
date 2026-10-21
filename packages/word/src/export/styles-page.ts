@@ -4,7 +4,7 @@ import type {
   DocxExportWarning,
   DocxPageOrientation,
   DocxPageSize,
-} from './types';
+} from './types.js';
 
 /**
  * Mise en page : formats, marges et largeur utile en twips, depuis `options.page` et le

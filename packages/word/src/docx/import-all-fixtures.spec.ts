@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from './import-docx';
+import { importDocx } from './import-docx.js';
 
 const DIR = `${import.meta.env.ASTER_FIXTURES}docx/`;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_TAB_STOP_TWIPS } from './inline';
-import { MAX_BORDER_SPACE_PT } from './styles';
-import { toDocumentXml } from './testing/sample';
+import { MAX_TAB_STOP_TWIPS } from './inline.js';
+import { MAX_BORDER_SPACE_PT } from './styles.js';
+import { toDocumentXml } from './testing/sample.js';
 
 /**
  * Correctifs R43 sur les tabulations, les bordures et l'alignement de tableau : position

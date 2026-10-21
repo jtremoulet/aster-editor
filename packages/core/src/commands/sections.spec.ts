@@ -1,7 +1,7 @@
 import { AllSelection, NodeSelection } from '@tiptap/pm/state';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { findSectionBreaks, getSections, sectionBreakAttrs } from '../extensions/section-break';
-import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount';
+import { findSectionBreaks, getSections, sectionBreakAttrs } from '../extensions/section-break.js';
+import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
 
 const TWO_BREAKS = '<p>a</p><hr data-section-break="1"><p>b</p><hr data-section-break="2"><p>c</p>';
 

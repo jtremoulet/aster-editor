@@ -1,9 +1,9 @@
 import type { DocumentLayout } from '@aster-editor/core';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../docx/import-docx';
-import { exportDocx } from './export-docx';
-import { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout';
-import { toDocumentXml, toZipEntries } from './testing/sample';
+import { importDocx } from '../docx/import-docx.js';
+import { exportDocx } from './export-docx.js';
+import { sectionHeaderFooterSets, sectionLayoutOf } from './section-layout.js';
+import { toDocumentXml, toZipEntries } from './testing/sample.js';
 
 /**
  * Correctifs R43 sur les sections de l'export neuf : règle partagée « quelle

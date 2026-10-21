@@ -1,5 +1,5 @@
-import { isBlank, selectAll } from '../dom-utils';
-import type { PastePass } from '../types';
+import { isBlank, selectAll } from '../dom-utils.js';
+import type { PastePass } from '../types.js';
 
 /** Balises qui donnent un contenu à un paragraphe même sans texte. */
 const CONTENT_TAGS = 'img, table, hr, iframe, video, audio';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readBorder } from './properties';
-import { fragment } from './testing-blocks';
+import { readBorder } from './properties.js';
+import { fragment } from './testing-blocks.js';
 import {
   booleanAttribute,
   borderColor,
@@ -22,7 +22,7 @@ import {
   twipsToMm,
   twipsToPt,
   twipsToPx,
-} from './units';
+} from './units.js';
 
 describe('units : conversions', () => {
   it('convertit twips, EMU, points et huitièmes de point', () => {

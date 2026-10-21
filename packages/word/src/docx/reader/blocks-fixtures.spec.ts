@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { childNamed } from '../preprocess/xml-utils';
-import { normalizeHtml } from '../testing/dom';
-import { openPackage } from './package';
-import { readDocumentLang } from './sections';
-import { createTestContext, parseXml } from './testing-blocks';
-import type { ConverterContext } from './types';
+import { importDocx } from '../import-docx.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import { normalizeHtml } from '../testing/dom.js';
+import { openPackage } from './package.js';
+import { readDocumentLang } from './sections.js';
+import { createTestContext, parseXml } from './testing-blocks.js';
+import type { ConverterContext } from './types.js';
 
 const FIXTURES = join(import.meta.env.ASTER_FIXTURES, 'docx');
 const CLIENT = join(FIXTURES, 'client', 'Modele_Demo_DER.docx');

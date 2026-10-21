@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import type { PasteContext } from '@aster-editor/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { untyped } from '../testing/untyped';
-import { wordPasteTransformer } from './word-paste';
+import { untyped } from '../testing/untyped.js';
+import { wordPasteTransformer } from './word-paste.js';
 
 const fixture = (name: string): string =>
   readFileSync(`${import.meta.env.ASTER_FIXTURES}word-html/${name}.html`, 'utf8');

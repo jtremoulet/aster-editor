@@ -1,10 +1,10 @@
 import type { Editor } from '@tiptap/core';
-import type { CommandRegistry } from './commands';
-import type { AsterCounts, AsterDocument } from './document';
-import type { AsterEventName, AsterEvents, Unsubscribe } from './events';
-import type { I18n } from './i18n';
-import type { DocumentLayout, PageViewOptions, SectionLayout } from './layout';
-import type { GetHtmlOptions, VariableStore } from './variables';
+import type { CommandRegistry } from './commands.js';
+import type { AsterCounts, AsterDocument } from './document.js';
+import type { AsterEventName, AsterEvents, Unsubscribe } from './events.js';
+import type { I18n } from './i18n.js';
+import type { DocumentLayout, PageViewOptions, SectionLayout } from './layout.js';
+import type { GetHtmlOptions, VariableStore } from './variables.js';
 
 /**
  * Instance d'éditeur Aster. C'est l'objet que manipulent `ui`, `word` et `angular`.

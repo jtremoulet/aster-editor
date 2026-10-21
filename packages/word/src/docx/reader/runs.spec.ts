@@ -1,11 +1,18 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { run as runXml } from '../preprocess/minimal-docx';
-import { childNamed } from '../preprocess/xml-utils';
-import type { DocxParagraphProps } from './properties';
-import { convertRuns, hyperlinkTarget, PAGE_BREAK, renderRunTags, safeHref, tabHtml } from './runs';
-import { createStyleResolver } from './styles';
-import { createTestContext, fakePackage, paragraphOf, relsXml, stylesXml } from './test-support';
-import type { ConverterContext, DocxPackage, StyleResolver } from './types';
+import { run as runXml } from '../preprocess/minimal-docx.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import type { DocxParagraphProps } from './properties.js';
+import {
+  convertRuns,
+  hyperlinkTarget,
+  PAGE_BREAK,
+  renderRunTags,
+  safeHref,
+  tabHtml,
+} from './runs.js';
+import { createStyleResolver } from './styles.js';
+import { createTestContext, fakePackage, paragraphOf, relsXml, stylesXml } from './test-support.js';
+import type { ConverterContext, DocxPackage, StyleResolver } from './types.js';
 
 const TAB = tabHtml();
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { uiEn } from '../i18n/ui-en';
-import { uiFr } from '../i18n/ui-fr';
-import { isRecord, readNumberOrString, readString } from './guards';
+import { uiEn } from '../i18n/ui-en.js';
+import { uiFr } from '../i18n/ui-fr.js';
+import { isRecord, readNumberOrString, readString } from './guards.js';
 
 describe('guards', () => {
   it('isRecord accepte un objet non nul, refuse null, tableaux et primitifs', () => {

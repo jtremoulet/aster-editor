@@ -1,9 +1,9 @@
 import type { AsterEditor } from '@aster-editor/core';
-import { getIcon } from '../icons';
-import type { ToolbarWidget } from '../types';
-import { el, setIcon } from '../utils/dom';
-import { setDisabled } from './button';
-import { createDropdown } from './dropdown';
+import { getIcon } from '../icons/index.js';
+import type { ToolbarWidget } from '../types.js';
+import { el, setIcon } from '../utils/dom.js';
+import { setDisabled } from './button.js';
+import { createDropdown } from './dropdown.js';
 
 /** Une couleur de la palette : valeur CSS et clé i18n de son nom. */
 export interface PaletteColor {

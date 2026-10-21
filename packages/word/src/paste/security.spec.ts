@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeGoogleDocsHtml } from '../google/normalize-google-docs-html';
-import { normalizeWordHtml } from './normalize-word-html';
+import { normalizeGoogleDocsHtml } from '../google/normalize-google-docs-html.js';
+import { normalizeWordHtml } from './normalize-word-html.js';
 
 /**
  * Suite sécurité (W-10) : un presse-papier forgé ne doit laisser passer ni balise active,

@@ -1,5 +1,5 @@
-import { isElement, isIgnorableNode, wrapInlineChildren } from './dom-utils';
-import type { PostprocessPass } from './types';
+import { isElement, isIgnorableNode, wrapInlineChildren } from './dom-utils.js';
+import type { PostprocessPass } from './types.js';
 
 /** Blocs que Tiptap accepte directement dans une cellule. */
 const CELL_BLOCK_TAGS: readonly string[] = [

@@ -2,7 +2,7 @@ import { appendFileSync, existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from './import-docx';
+import { importDocx } from './import-docx.js';
 
 const CLIENT = join(import.meta.env.ASTER_FIXTURES, 'docx', 'client', 'Modele_Demo_DER.docx');
 const LOG = process.env.ASTER_CLIENT_DOC_LOG;

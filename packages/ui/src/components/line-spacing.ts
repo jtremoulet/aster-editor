@@ -1,8 +1,8 @@
 import type { AsterEditor } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { createPlainButton } from './button';
-import { createDropdown, createMenuItem, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { createPlainButton } from './button.js';
+import { createDropdown, createMenuItem, type Dropdown } from './dropdown.js';
 import {
   MAX_LINE_HEIGHT_MULTIPLE,
   MAX_PARAGRAPH_PT,
@@ -19,7 +19,7 @@ import {
   setBlockLayout,
   submitOnEnter,
   unsetBlockLayout,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
 
 /** Interlignes multiples proposés dans le menu, dans l'ordre d'affichage. */
 export const LINE_SPACING_PRESETS: readonly number[] = [1, 1.15, 1.5, 2];

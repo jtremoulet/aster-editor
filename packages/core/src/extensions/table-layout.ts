@@ -9,8 +9,8 @@ import {
 } from '@tiptap/extension-table';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
-import type { CellVerticalAlign } from '../api';
-import { DOCX_STYLE_ATTRIBUTE } from './paragraph-layout';
+import type { CellVerticalAlign } from '../api/index.js';
+import { DOCX_STYLE_ATTRIBUTE } from './paragraph-layout.js';
 import {
   borderDeclarations,
   formatPt,
@@ -22,8 +22,8 @@ import {
   parseStyleDeclarations,
   roundLayoutNumber,
   sanitizeBorders,
-} from './layout-css';
-import { TABLE_LOOK_ATTRIBUTE, parseTableLook, tableLookValue } from './table-look';
+} from './layout-css.js';
+import { TABLE_LOOK_ATTRIBUTE, parseTableLook, tableLookValue } from './table-look.js';
 
 /** Options de table partagées par le jeu d'Aster. */
 export const TABLE_OPTIONS = { resizable: true, cellMinWidth: 48 } as const;

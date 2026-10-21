@@ -1,6 +1,6 @@
-import { escapeAttr, pt, styleAttr } from './html';
-import type { ResolvedRunProps } from './types';
-import { cssFontFamily } from './units';
+import { escapeAttr, pt, styleAttr } from './html.js';
+import type { ResolvedRunProps } from './types.js';
+import { cssFontFamily } from './units.js';
 
 /**
  * Balises HTML d'un run résolu et accumulateur qui fusionne les textes voisins aux mêmes

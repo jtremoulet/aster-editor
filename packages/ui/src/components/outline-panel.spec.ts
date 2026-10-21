@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as Core from '@aster-editor/core';
 import { getOutline, scrollToHeading, type OutlineEntry } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createOutlinePanel } from './outline-panel';
+import type { ToolbarWidget } from '../types.js';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { createOutlinePanel } from './outline-panel.js';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();

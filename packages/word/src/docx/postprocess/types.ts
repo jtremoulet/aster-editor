@@ -1,4 +1,4 @@
-import type { DocxImportOptions, DocxImportWarning } from '../types';
+import type { DocxImportOptions, DocxImportWarning } from '../types.js';
 
 /** Contexte partagé par les passes de post-traitement. */
 export interface PostprocessContext {

@@ -5,8 +5,8 @@ import {
   paragraphXml,
   partXml,
   renderBody,
-} from './testing-blocks';
-import type { DocxPackage } from './types';
+} from './testing-blocks.js';
+import type { DocxPackage } from './types.js';
 
 const FOOTNOTES = partXml(
   'footnotes',

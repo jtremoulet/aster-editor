@@ -1,10 +1,10 @@
 import type { AsterEditor, SearchOpenEventDetail } from '@aster-editor/core';
 import { SEARCH_OPEN_EVENT } from '@aster-editor/core';
-import { getIcon } from '../icons';
-import type { ToolbarWidget } from '../types';
-import { el, setIcon } from '../utils/dom';
-import { createPlainButton, setDisabled } from './button';
-import { createDropdown } from './dropdown';
+import { getIcon } from '../icons/index.js';
+import type { ToolbarWidget } from '../types.js';
+import { el, setIcon } from '../utils/dom.js';
+import { createPlainButton, setDisabled } from './button.js';
+import { createDropdown } from './dropdown.js';
 
 /** État de recherche tel que l'UI en a besoin. */
 export interface SearchPanelState {

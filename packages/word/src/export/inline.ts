@@ -1,7 +1,7 @@
 import type { ParagraphChild } from 'docx';
-import { warn, type ExportContext } from './context';
-import { BLOCK_TAGS, DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from './dom';
-import { imageRun } from './images';
+import { warn, type ExportContext } from './context.js';
+import { BLOCK_TAGS, DROPPED_TAGS, SILENT_TAGS, isElement, isText, tagOf } from './dom.js';
+import { imageRun } from './images.js';
 import {
   pushBreak,
   pushFootnoteCall,
@@ -11,10 +11,10 @@ import {
   type CollectOptions,
   type InlineCollector,
   type Piece,
-} from './inline-pieces';
-import { applyElementState, runOptions, type InlineState } from './inline-state';
-import { sanitizeXmlText } from './sanitize';
-import { mergeField, variableNameOf } from './variables';
+} from './inline-pieces.js';
+import { applyElementState, runOptions, type InlineState } from './inline-state.js';
+import { sanitizeXmlText } from './sanitize.js';
+import { mergeField, variableNameOf } from './variables.js';
 
 /**
  * Nœuds inline → enfants de `Paragraph` : descente avec state hérité, règles de blancs
@@ -30,8 +30,8 @@ export {
   runOptions,
   type InlineState,
   type UnderlineStyle,
-} from './inline-state';
-export { MAX_TAB_STOP_TWIPS, type InlineCollector, type TabStop } from './inline-pieces';
+} from './inline-state.js';
+export { MAX_TAB_STOP_TWIPS, type InlineCollector, type TabStop } from './inline-pieces.js';
 
 /** Nœud inline de tabulation du contrat (`TabAttrs`). */
 const TAB_ATTRIBUTE = 'data-tab';

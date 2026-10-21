@@ -1,5 +1,5 @@
 import type { BlockBorder, BorderSide } from '@aster-editor/core';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
 import {
   applyBorders,
   applyParagraphProperties,
@@ -12,12 +12,12 @@ import {
   readShadingFill,
   type MutableRun,
   type ThemeFonts,
-} from './properties';
-import type { StyleDefinition } from './styles-part';
-import { readConditionalFormats, type ConditionalFormats } from './table-conditional';
-import type { DocxParagraphProps } from './properties';
-import type { TableStyleProps } from './types';
-import { numberAttr, twipsToPt } from './units';
+} from './properties.js';
+import type { StyleDefinition } from './styles-part.js';
+import { readConditionalFormats, type ConditionalFormats } from './table-conditional.js';
+import type { DocxParagraphProps } from './properties.js';
+import type { TableStyleProps } from './types.js';
+import { numberAttr, twipsToPt } from './units.js';
 
 /**
  * Résolution d'un style de tableau sur sa chaîne `basedOn` : bordures extérieures et de

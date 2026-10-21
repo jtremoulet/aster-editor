@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildDocx, run } from '../preprocess/minimal-docx';
-import { createNumberingResolver } from '../reader/lists';
-import { defaultXmlParse, openPackage } from '../reader/package';
-import { createStyleResolver } from '../reader/styles';
-import { stylesXml } from '../reader/test-support';
+import { buildDocx, run } from '../preprocess/minimal-docx.js';
+import { createNumberingResolver } from '../reader/lists.js';
+import { defaultXmlParse, openPackage } from '../reader/package.js';
+import { createStyleResolver } from '../reader/styles.js';
+import { stylesXml } from '../reader/test-support.js';
 import {
   readDocumentModel,
   type DocumentModel,
   type ParagraphModel,
   type TableModel,
-} from './model';
-import { placeholderFields } from './model-paragraph';
+} from './model.js';
+import { placeholderFields } from './model-paragraph.js';
 
 /** Modèle comparable d'un corps `document.xml` (fragments XML Word), styles facultatifs. */
 async function modelOf(body: string, styles?: string): Promise<DocumentModel> {

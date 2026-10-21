@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { RED_PNG_DATA_URL } from '../../export/testing/sample';
+import { importDocx } from '../import-docx.js';
+import { RED_PNG_DATA_URL } from '../../export/testing/sample.js';
 import {
   alterTemplate,
   bodyOf,
@@ -15,7 +15,7 @@ import {
   partsOf,
   textOf,
   topLevelBlocks,
-} from './testing';
+} from './testing.js';
 
 /** GIF 1x1 en base64 : une seconde image, d'un autre format que le PNG des fixtures. */
 const GIF_DATA_URL =

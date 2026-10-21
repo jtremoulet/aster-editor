@@ -1,5 +1,5 @@
-import { hasTag, isElement, isEmptyBlock } from './dom-utils';
-import type { PostprocessPass } from './types';
+import { hasTag, isElement, isEmptyBlock } from './dom-utils.js';
+import type { PostprocessPass } from './types.js';
 
 /** Saut de section du lecteur stylé : `<hr data-section-break="n">`. */
 function isSectionBreak(element: Element | null): boolean {

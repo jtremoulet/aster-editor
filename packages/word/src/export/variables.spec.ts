@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from './export-docx';
-import { jsonToHtml } from './json-to-html';
-import { toDocumentXml, toZipEntries } from './testing/sample';
-import type { DocxExportOptions } from './types';
+import { exportDocx } from './export-docx.js';
+import { jsonToHtml } from './json-to-html.js';
+import { toDocumentXml, toZipEntries } from './testing/sample.js';
+import type { DocxExportOptions } from './types.js';
 import {
   DEFAULT_VARIABLE_PATTERN,
   quoteFieldName,
   resolveVariableSettings,
   splitVariables,
-} from './variables';
+} from './variables.js';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
 function count(haystack: string, needle: string): number {

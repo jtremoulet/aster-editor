@@ -1,9 +1,9 @@
-import type { ListDefinition } from '../../export/context';
-import type { DocxExportWarning } from '../../export/types';
-import { childNamed, childrenNamed } from '../preprocess/xml-utils';
-import { PART_CONTENT_TYPES } from './content-types';
-import { REL_TYPE, type RelationshipTable } from './relationships';
-import { directoryOf, emptyDocumentLike, setWordAttr, wordAttr, type PartStore } from './xml-io';
+import type { ListDefinition } from '../../export/context.js';
+import type { DocxExportWarning } from '../../export/types.js';
+import { childNamed, childrenNamed } from '../preprocess/xml-utils.js';
+import { PART_CONTENT_TYPES } from './content-types.js';
+import { REL_TYPE, type RelationshipTable } from './relationships.js';
+import { directoryOf, emptyDocumentLike, setWordAttr, wordAttr, type PartStore } from './xml-io.js';
 
 /**
  * Numérotation des listes du corps greffé. La lib `docx` numérote ses `w:num` à partir

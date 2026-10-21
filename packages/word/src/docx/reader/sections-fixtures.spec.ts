@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createEditor, type SectionLayout } from '@aster-editor/core';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { buildDocx, run as runXml } from '../preprocess/minimal-docx';
-import { normalizeHtml } from '../testing/dom';
+import { importDocx } from '../import-docx.js';
+import { buildDocx, run as runXml } from '../preprocess/minimal-docx.js';
+import { normalizeHtml } from '../testing/dom.js';
 
 /**
  * Session 4 (L42) : sections dans le corps et `layout.sections`, tabulations, bordures,

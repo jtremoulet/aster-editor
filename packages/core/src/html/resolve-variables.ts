@@ -1,5 +1,5 @@
-import type { VariableValues } from '../api';
-import { variablePlaceholder } from '../editor/variable-store';
+import type { VariableValues } from '../api/index.js';
+import { variablePlaceholder } from '../editor/variable-store.js';
 
 /** Sélecteur des puces dans le HTML Aster (`getHTML()` en mode `placeholders`). */
 export const VARIABLE_SELECTOR = 'span[data-aster-variable]';

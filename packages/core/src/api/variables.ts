@@ -1,4 +1,4 @@
-import type { AsterEditor } from './editor';
+import type { AsterEditor } from './editor.js';
 
 /**
  * Variable de document (« champ de fusion ») : un nom stable, un libellé affiché dans la

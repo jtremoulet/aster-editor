@@ -1,5 +1,5 @@
-import type { PastePass, ResolvedPasteOptions, WordPasteOptions } from '../paste/types';
-import { resolvePasteOptions } from '../paste/types';
+import type { PastePass, ResolvedPasteOptions, WordPasteOptions } from '../paste/types.js';
+import { resolvePasteOptions } from '../paste/types.js';
 
 /** Balises de bloc autour desquelles les blancs n'ont aucun sens dans la comparaison. */
 const BLOCK_BOUNDARY =

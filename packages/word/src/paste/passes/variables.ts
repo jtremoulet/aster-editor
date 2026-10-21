@@ -1,5 +1,5 @@
-import { DEFAULT_VARIABLE_PATTERN, isVariableName } from '../../docx/preprocess/names';
-import type { PastePass } from '../types';
+import { DEFAULT_VARIABLE_PATTERN, isVariableName } from '../../docx/preprocess/names.js';
+import type { PastePass } from '../types.js';
 
 /**
  * Détection des variables `{{nom}}` dans un HTML déjà nettoyé : chaque occurrence dans un

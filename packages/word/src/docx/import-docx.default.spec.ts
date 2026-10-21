@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createEditor } from '@aster-editor/core';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from './import-docx';
-import { normalizeHtml, parseFragment } from './testing/dom';
+import { importDocx } from './import-docx.js';
+import { normalizeHtml, parseFragment } from './testing/dom.js';
 
 /**
  * Chemin par défaut de `importDocx` depuis la 0.6 (L46) : sans option, c'est le lecteur

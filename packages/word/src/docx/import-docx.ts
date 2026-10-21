@@ -5,21 +5,21 @@ import {
   createVariablesPass,
   resolveDocxVariableOptions,
   variablePatterns,
-} from './postprocess/variables';
-import { runPostprocess } from './postprocess/run-postprocess';
-import { stripEmptyParagraphs } from './postprocess/strip-empty-paragraphs';
-import { readDocx } from './reader';
-import { defaultXmlParse } from './reader/package';
-import type { CollectedVariable } from './preprocess/variables';
-import { preprocessVariables } from './preprocess/variables';
-import { buildStyleMap } from './style-map';
+} from './postprocess/variables.js';
+import { runPostprocess } from './postprocess/run-postprocess.js';
+import { stripEmptyParagraphs } from './postprocess/strip-empty-paragraphs.js';
+import { readDocx } from './reader/index.js';
+import { defaultXmlParse } from './reader/package.js';
+import type { CollectedVariable } from './preprocess/variables.js';
+import { preprocessVariables } from './preprocess/variables.js';
+import { buildStyleMap } from './style-map.js';
 import type {
   DocxImportOptions,
   DocxImportResult,
   DocxImportWarning,
   DocxInput,
   HtmlParser,
-} from './types';
+} from './types.js';
 
 type Mammoth = typeof mammothTypes;
 type MammothInput = Parameters<Mammoth['convertToHtml']>[0];

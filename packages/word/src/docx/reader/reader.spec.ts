@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { buildDocx } from '../preprocess/minimal-docx';
-import { relsPathOf, resolveTarget } from './package';
+import { importDocx } from '../import-docx.js';
+import { buildDocx } from '../preprocess/minimal-docx.js';
+import { relsPathOf, resolveTarget } from './package.js';
 
 const FIXTURES = join(import.meta.env.ASTER_FIXTURES, 'docx');
 

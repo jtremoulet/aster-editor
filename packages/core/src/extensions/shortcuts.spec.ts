@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsterCommand, AsterEditor } from '../api';
-import { EXTRA_SHORTCUT_BINDINGS, collectShortcutBindings } from './shortcuts';
-import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
+import { EXTRA_SHORTCUT_BINDINGS, collectShortcutBindings } from './shortcuts.js';
+import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount.js';
 
 /** Simule une frappe sur le contenteditable. `Mod` = Ctrl hors macOS, ce que jsdom est. */
 function press(target: HTMLElement, key: string, modifiers: Partial<KeyboardEventInit> = {}): void {

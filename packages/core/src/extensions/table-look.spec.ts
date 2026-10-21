@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TABLE_LOOK_FLAGS } from '../api';
+import { TABLE_LOOK_FLAGS } from '../api/index.js';
 import {
   TABLE_LOOK_ATTRIBUTE,
   isTableLookFlag,
   parseTableLook,
   sanitizeTableLook,
   tableLookValue,
-} from './table-look';
-import { tableLayoutHtmlAttributes } from './table-layout';
-import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount';
+} from './table-look.js';
+import { tableLayoutHtmlAttributes } from './table-layout.js';
+import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** `setHTML(getHTML())` doit redonner exactement le même HTML (sans le paragraphe final). */
 function expectIdempotent(mounted: MountedEditor): string {

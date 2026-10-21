@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   createIndentButton,
   currentIndentLeft,
   isInList,
   nextIndentLeft,
-} from './paragraph-indent';
-import { INDENT_STEP_PT, MAX_PARAGRAPH_PT } from './paragraph-layout';
+} from './paragraph-indent.js';
+import { INDENT_STEP_PT, MAX_PARAGRAPH_PT } from './paragraph-layout.js';
 
 describe('nextIndentLeft', () => {
   it('ajoute ou retire 18 pt, arrondi au centième, null à 0 (R26-06), plafonné à 1584 pt', () => {

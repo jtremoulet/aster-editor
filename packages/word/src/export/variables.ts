@@ -1,7 +1,7 @@
 import type { ParagraphChild } from 'docx';
-import { warn, type ExportContext, type VariableSettings } from './context';
-import { sanitizeXmlText } from './sanitize';
-import type { DocxExportVariableOptions } from './types';
+import { warn, type ExportContext, type VariableSettings } from './context.js';
+import { sanitizeXmlText } from './sanitize.js';
+import type { DocxExportVariableOptions } from './types.js';
 
 /** Attribut HTML qui marque une puce de variable, convention du core. */
 export const VARIABLE_ATTRIBUTE = 'data-aster-variable';

@@ -1,10 +1,10 @@
 import { inflateRawSync } from 'node:zlib';
-import { importDocx } from '../../docx/import-docx';
-import type { DocxImportResult } from '../../docx/types';
-import { loadDocx } from '../docx-module';
-import { exportDocx } from '../export-docx';
-import { buildDocx } from '../html-to-docx';
-import type { DocxExportOptions, DocxExportWarning } from '../types';
+import { importDocx } from '../../docx/import-docx.js';
+import type { DocxImportResult } from '../../docx/types.js';
+import { loadDocx } from '../docx-module.js';
+import { exportDocx } from '../export-docx.js';
+import { buildDocx } from '../html-to-docx.js';
+import type { DocxExportOptions, DocxExportWarning } from '../types.js';
 
 /** PNG 2x2 rouge, le plus petit PNG valide, en base64 (même image que les fixtures). */
 export const RED_PNG_BASE64 =

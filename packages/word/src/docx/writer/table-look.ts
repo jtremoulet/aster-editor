@@ -3,23 +3,23 @@ import {
   effectiveCellBorders,
   effectiveTableBorders,
   type CellEdges,
-} from '../compare/model-borders';
-import { allNamed, childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { conditionalFormatsOf, type DocxStyleResolver } from '../reader/styles';
+} from '../compare/model-borders.js';
+import { allNamed, childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { conditionalFormatsOf, type DocxStyleResolver } from '../reader/styles.js';
 import {
   applyConditionalFormats,
   conditionalTypesOf,
   readBandSizes,
   readTableLook,
-} from '../reader/table-conditional';
-import type { TableStyleProps } from '../reader/types';
+} from '../reader/table-conditional.js';
+import type { TableStyleProps } from '../reader/types.js';
 import {
   numericAttribute,
   onOff,
   readBorders,
   shadingColor,
   type BorderMap,
-} from '../reader/units';
+} from '../reader/units.js';
 
 /**
  * Tableaux à style conditionnel dans le gabarit (L49). Le lecteur résout les formats

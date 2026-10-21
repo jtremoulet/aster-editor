@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { alternateContentChoice, detectLost, detectLostInline, textboxLost } from './lost';
-import { buildPackage, createTestContext, fragment, renderBody } from './testing-blocks';
-import type { ConverterContext } from './types';
+import { alternateContentChoice, detectLost, detectLostInline, textboxLost } from './lost.js';
+import { buildPackage, createTestContext, fragment, renderBody } from './testing-blocks.js';
+import type { ConverterContext } from './types.js';
 
 const TEXTBOX =
   '<w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="101" name="Zone de texte 1"/><a:graphic><a:graphicData uri="x">' +

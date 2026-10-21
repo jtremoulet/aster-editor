@@ -16,7 +16,7 @@ import type {
   Unsubscribe,
 } from '@aster-editor/core';
 import { STANDARD_COMMAND_IDS, en, fr } from '@aster-editor/core';
-import { createMockVariables, type MockVariablesOptions } from './mock-variables';
+import { createMockVariables, type MockVariablesOptions } from './mock-variables.js';
 
 /** Appel de commande enregistré par le mock, pour les assertions. */
 export interface RecordedCall {

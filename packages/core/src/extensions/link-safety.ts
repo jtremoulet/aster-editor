@@ -1,6 +1,6 @@
 import type { Mark } from '@tiptap/core';
 import { Link } from '@tiptap/extension-link';
-import type { LinkPolicy } from '../api';
+import type { LinkPolicy } from '../api/index.js';
 
 /** Politique de liens entièrement renseignée, dérivée de `LinkPolicy` et des défauts. */
 export interface ResolvedLinkPolicy {

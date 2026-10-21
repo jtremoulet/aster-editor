@@ -1,7 +1,7 @@
-import type { AsterEditor } from './editor';
-import type { AsterLocale } from './i18n';
-import type { DocumentLayout } from './layout';
-import type { VariableValues } from './variables';
+import type { AsterEditor } from './editor.js';
+import type { AsterLocale } from './i18n.js';
+import type { DocumentLayout } from './layout.js';
+import type { VariableValues } from './variables.js';
 
 /**
  * Événements émis par un `AsterEditor`. Les handlers reçoivent toujours l'éditeur

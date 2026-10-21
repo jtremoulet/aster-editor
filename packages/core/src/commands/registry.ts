@@ -1,4 +1,4 @@
-import type { AsterCommand, AsterEditor, CommandRegistry } from '../api';
+import type { AsterCommand, AsterEditor, CommandRegistry } from '../api/index.js';
 
 /**
  * Registre concret. Tolérant par contrat : un identifiant inconnu, un éditeur

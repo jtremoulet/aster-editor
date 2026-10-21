@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
 import {
   SLASH_MENU_PLUGIN_KEY,
   buildSlashItems,
@@ -11,7 +11,7 @@ import {
   runSlashItem,
   type SlashMenuItem,
   type SlashMenuPanel,
-} from './slash-menu';
+} from './slash-menu.js';
 
 const item = (id: string, label: string, keywords: string[] = []): SlashMenuItem => ({
   id,

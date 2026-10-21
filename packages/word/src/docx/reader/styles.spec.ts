@@ -4,9 +4,9 @@ import {
   createStyleResolver,
   docDefaultsOf,
   tableParagraphDefaultsOf,
-} from './styles';
-import { fakePackage, pPrOf, rPrOf, stylesXml, themeXml } from './test-support';
-import type { StyleResolver } from './types';
+} from './styles.js';
+import { fakePackage, pPrOf, rPrOf, stylesXml, themeXml } from './test-support.js';
+import type { StyleResolver } from './types.js';
 
 const DOC_DEFAULTS =
   '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial"/><w:sz w:val="20"/></w:rPr></w:rPrDefault>' +

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { loadDocx, type DocxModule } from '../../export/docx-module';
-import { importDocx } from '../import-docx';
+import { loadDocx, type DocxModule } from '../../export/docx-module.js';
+import { importDocx } from '../import-docx.js';
 
 /**
  * Test de charge du lecteur stylé (L45) : un document de 100 pages généré en mémoire par

@@ -4,14 +4,14 @@ import type {
   INumberingOptions,
   IParagraphStyleOptions,
 } from 'docx';
-import type { ListDefinition } from './context';
-import type { CssBorder } from './css';
-import type { DocxModule } from './docx-module';
+import type { ListDefinition } from './context.js';
+import type { CssBorder } from './css.js';
+import type { DocxModule } from './docx-module.js';
 import {
   HEADING_NUMBERING_REFERENCE,
   headingLevelText,
   type HeadingNumbering,
-} from './styles-headings';
+} from './styles-headings.js';
 
 /**
  * Styles, numérotations et bordures de l'export : identifiants de styles, attributs du
@@ -27,7 +27,7 @@ export {
   buildDefaultStyles,
   resolveHeadingNumbering,
   type HeadingNumbering,
-} from './styles-headings';
+} from './styles-headings.js';
 export {
   HEADER_DISTANCE,
   MIN_CONTENT_EXTENT,
@@ -39,7 +39,7 @@ export {
   type PageDimensions,
   type PageLayout,
   type PageMargins,
-} from './styles-page';
+} from './styles-page.js';
 
 /** Police à chasse fixe des blocs et marques de code. */
 export const CODE_FONT = 'Consolas';

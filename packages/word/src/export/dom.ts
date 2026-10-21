@@ -1,4 +1,4 @@
-import type { HtmlParser } from '../docx/types';
+import type { HtmlParser } from '../docx/types.js';
 
 /**
  * Helpers DOM de l'export, sans `instanceof` : le `Document` vient d'un parseur

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CellSelection } from '@tiptap/pm/tables';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** Positions des cellules (`td`/`th`) du document, dans l'ordre. */
 function cellPositions(mounted: MountedEditor): number[] {

@@ -1,8 +1,8 @@
 import type { PasteTransformer } from '@aster-editor/core';
-import { normalizeGoogleDocsHtml } from '../google/normalize-google-docs-html';
-import { isGoogleDocsHtml, isWordHtml } from '../paste/detectors';
-import { normalizeWordHtml } from '../paste/normalize-word-html';
-import type { WordPasteOptions } from '../paste/types';
+import { normalizeGoogleDocsHtml } from '../google/normalize-google-docs-html.js';
+import { isGoogleDocsHtml, isWordHtml } from '../paste/detectors.js';
+import { normalizeWordHtml } from '../paste/normalize-word-html.js';
+import type { WordPasteOptions } from '../paste/types.js';
 
 /**
  * Fabrique le transformateur de collage à passer dans `AsterOptions.pasteTransformers`.

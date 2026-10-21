@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IMAGE_EDIT_EVENT } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { Bubble } from './bubble';
-import { IMAGE_BUBBLE_SIZES, createImageBubble, widthForRatio } from './image-bubble';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { Bubble } from './bubble.js';
+import { IMAGE_BUBBLE_SIZES, createImageBubble, widthForRatio } from './image-bubble.js';
 
 describe('widthForRatio', () => {
   it('arrondit la fraction de la largeur du contenu, null sans largeur mesurable', () => {

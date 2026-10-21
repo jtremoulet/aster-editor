@@ -1,10 +1,10 @@
 import type { AnyExtension } from '@tiptap/core';
-import type { AsterCommand } from './commands';
-import type { AsterDocument } from './document';
-import type { AsterLocale } from './i18n';
-import type { PageViewOptions } from './layout';
-import type { PasteTransformer } from './paste';
-import type { VariableSource } from './variables';
+import type { AsterCommand } from './commands.js';
+import type { AsterDocument } from './document.js';
+import type { AsterLocale } from './i18n.js';
+import type { PageViewOptions } from './layout.js';
+import type { PasteTransformer } from './paste.js';
+import type { VariableSource } from './variables.js';
 
 /** Politique de sécurité et de comportement des liens. */
 export interface LinkPolicy {

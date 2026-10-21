@@ -1,5 +1,5 @@
 import type { EditorView } from '@tiptap/pm/view';
-import type { AsterEditor, PasteContext, PasteTransformer } from '../api';
+import type { AsterEditor, PasteContext, PasteTransformer } from '../api/index.js';
 
 /**
  * Applique les transformateurs dans l'ordre, chacun recevant la sortie du

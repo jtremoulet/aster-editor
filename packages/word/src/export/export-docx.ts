@@ -1,12 +1,12 @@
-import { graftIntoTemplate } from '../docx/writer/graft';
-import { openTemplate, type TemplateContext } from '../docx/writer/template';
-import { defaultXmlCodec } from '../docx/writer/xml-io';
-import { loadDocx } from './docx-module';
-import { resolveParser } from './dom';
-import { buildDocx } from './html-to-docx';
-import { jsonToHtml } from './json-to-html';
-import type { DocxExportInput, DocxExportOptions, DocxExportWarning } from './types';
-import { resolveVariableSettings } from './variables';
+import { graftIntoTemplate } from '../docx/writer/graft.js';
+import { openTemplate, type TemplateContext } from '../docx/writer/template.js';
+import { defaultXmlCodec } from '../docx/writer/xml-io.js';
+import { loadDocx } from './docx-module.js';
+import { resolveParser } from './dom.js';
+import { buildDocx } from './html-to-docx.js';
+import { jsonToHtml } from './json-to-html.js';
+import type { DocxExportInput, DocxExportOptions, DocxExportWarning } from './types.js';
+import { resolveVariableSettings } from './variables.js';
 
 /** Type MIME d'un document Word .docx. */
 export const DOCX_MIME_TYPE =

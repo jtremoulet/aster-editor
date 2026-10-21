@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MAX_IMAGE_PX, bytesToDataUrl, createImageConverter, isSafeImageUrl } from './images';
-import { PNG_1X1, buildPackage, createTestContext, fragment, renderBody } from './testing-blocks';
-import type { DocxPackage } from './types';
+import { MAX_IMAGE_PX, bytesToDataUrl, createImageConverter, isSafeImageUrl } from './images.js';
+import {
+  PNG_1X1,
+  buildPackage,
+  createTestContext,
+  fragment,
+  renderBody,
+} from './testing-blocks.js';
+import type { DocxPackage } from './types.js';
 
 const PNG_DATA_URL = bytesToDataUrl(PNG_1X1, 'image/png');
 

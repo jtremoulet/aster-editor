@@ -1,6 +1,6 @@
-import { warn, type ExportContext } from './context';
-import { parsePixels, parseStyle } from './css';
-import { childElements, positiveIntAttribute, tagOf } from './dom';
+import { warn, type ExportContext } from './context.js';
+import { parsePixels, parseStyle } from './css.js';
+import { childElements, positiveIntAttribute, tagOf } from './dom.js';
 
 /**
  * Grille d'une table HTML : lignes et cellules, fusions bornées, largeurs de colonnes

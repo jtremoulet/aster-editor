@@ -1,13 +1,13 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { buildDocx, run, W_NS } from '../preprocess/minimal-docx';
-import { relsXml, stylesXml } from '../reader/test-support';
-import { compareDocx } from './compare-docx';
-import { compareTable } from './compare-tables';
-import type { TableModel } from './model';
-import { Tally } from './tally';
-import type { FidelityProperty, FidelityReport } from './types';
-import { ABSENT } from './values';
+import { buildDocx, run, W_NS } from '../preprocess/minimal-docx.js';
+import { relsXml, stylesXml } from '../reader/test-support.js';
+import { compareDocx } from './compare-docx.js';
+import { compareTable } from './compare-tables.js';
+import type { TableModel } from './model.js';
+import { Tally } from './tally.js';
+import type { FidelityProperty, FidelityReport } from './types.js';
+import { ABSENT } from './values.js';
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';

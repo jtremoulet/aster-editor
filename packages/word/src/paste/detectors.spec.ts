@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { untyped } from '../testing/untyped';
-import { isGoogleDocsHtml, isWordHtml } from './detectors';
+import { untyped } from '../testing/untyped.js';
+import { isGoogleDocsHtml, isWordHtml } from './detectors.js';
 
 const fixture = (name: string): string =>
   readFileSync(`${import.meta.env.ASTER_FIXTURES}word-html/${name}.html`, 'utf8');

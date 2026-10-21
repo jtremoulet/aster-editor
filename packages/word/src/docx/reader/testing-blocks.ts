@@ -1,12 +1,12 @@
 import JSZip from 'jszip';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { escapeHtml } from './html';
-import { createImageConverter } from './images';
-import { createNumberingResolver, registerListItem, renderBlocks } from './lists';
-import { alternateContentChoice, detectLost, detectLostInline } from './lost';
-import { createNoteRegistry } from './notes';
-import { openPackage } from './package';
-import { convertTable } from './tables';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { escapeHtml } from './html.js';
+import { createImageConverter } from './images.js';
+import { createNumberingResolver, registerListItem, renderBlocks } from './lists.js';
+import { alternateContentChoice, detectLost, detectLostInline } from './lost.js';
+import { createNoteRegistry } from './notes.js';
+import { openPackage } from './package.js';
+import { convertTable } from './tables.js';
 import type {
   Block,
   ConverterContext,
@@ -16,8 +16,8 @@ import type {
   ReaderOptions,
   ResolvedParagraphProps,
   StyleResolver,
-} from './types';
-import { numericAttribute, twipsToPt } from './units';
+} from './types.js';
+import { numericAttribute, twipsToPt } from './units.js';
 
 /**
  * Harnais de test du lot L25 : fragments XML Word, paquets minimaux et contexte de

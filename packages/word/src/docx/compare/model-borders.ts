@@ -1,6 +1,6 @@
 import type { BlockBorder } from '@aster-editor/core';
-import type { TableStyleProps } from '../reader/types';
-import { bordersBySide, type BorderMap } from '../reader/units';
+import type { TableStyleProps } from '../reader/types.js';
+import { bordersBySide, type BorderMap } from '../reader/units.js';
 
 /**
  * Bordures **effectives** d'un tableau et de ses cellules, telles que Word les rend : style

@@ -1,10 +1,10 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import type { DocxExportWarning } from '../../export/types';
-import { W_NS } from '../preprocess/minimal-docx';
-import { createNumberingMerger } from './numbering-merge';
-import { REL_TYPE, RelationshipTable } from './relationships';
-import { PartStore, defaultXmlCodec } from './xml-io';
+import type { DocxExportWarning } from '../../export/types.js';
+import { W_NS } from '../preprocess/minimal-docx.js';
+import { createNumberingMerger } from './numbering-merge.js';
+import { REL_TYPE, RelationshipTable } from './relationships.js';
+import { PartStore, defaultXmlCodec } from './xml-io.js';
 
 const DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEARCH_COMMAND_IDS, SEARCH_OPEN_EVENT, STANDARD_COMMAND_IDS } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createWidget } from '../toolbar/widgets';
-import type { ToolbarWidget } from '../types';
-import { createSearchPanel, readSearchState } from './search-panel';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { createWidget } from '../toolbar/widgets.js';
+import type { ToolbarWidget } from '../types.js';
+import { createSearchPanel, readSearchState } from './search-panel.js';
 
 /** Forme du storage Tiptap que le panneau lit, posée sur le `tiptap` du mock. */
 interface FakeSearchStorage {

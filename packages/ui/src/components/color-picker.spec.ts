@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { COLOR_PALETTE, createColorPicker } from './color-picker';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { COLOR_PALETTE, createColorPicker } from './color-picker.js';
 
 describe('createColorPicker', () => {
   let editor: MockEditor;

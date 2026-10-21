@@ -1,10 +1,10 @@
-import { parseMergeField, type MergeField } from '../preprocess/fields';
-import { toVariableName } from '../preprocess/names';
-import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { applyTableStyle } from '../reader/paragraphs';
-import { docDefaultsOf } from '../reader/styles';
-import type { ResolvedRunProps } from '../reader/types';
-import { emuToPx } from '../reader/units';
+import { parseMergeField, type MergeField } from '../preprocess/fields.js';
+import { toVariableName } from '../preprocess/names.js';
+import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { applyTableStyle } from '../reader/paragraphs.js';
+import { docDefaultsOf } from '../reader/styles.js';
+import type { ResolvedRunProps } from '../reader/types.js';
+import { emuToPx } from '../reader/units.js';
 import type {
   FieldModel,
   ImageModel,
@@ -12,7 +12,7 @@ import type {
   NoteModel,
   ParagraphModel,
   RunModel,
-} from './model';
+} from './model.js';
 
 /**
  * Lecture d'un `w:p` en paragraphes comparables. Trois choix de modélisation, décidés en

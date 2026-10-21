@@ -1,7 +1,7 @@
 import type { DocumentLayout } from '@aster-editor/core';
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from '../../export/export-docx';
-import { toZipEntries } from '../../export/testing/sample';
+import { exportDocx } from '../../export/export-docx.js';
+import { toZipEntries } from '../../export/testing/sample.js';
 import {
   alterTemplate,
   checkIntegrity,
@@ -10,7 +10,7 @@ import {
   importStyled,
   partsOf,
   textOf,
-} from './testing';
+} from './testing.js';
 
 /**
  * Correctifs R43 sur la greffe des sections : même règle « quelle `SectionLayout` pour

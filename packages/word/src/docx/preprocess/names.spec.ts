@@ -4,7 +4,7 @@ import {
   isVariableName,
   normalizeVariableName,
   toVariableName,
-} from './names';
+} from './names.js';
 
 describe('isVariableName', () => {
   it('accepte lettres, chiffres, _, . et - après un premier caractère alphanumérique', () => {

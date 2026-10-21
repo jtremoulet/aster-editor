@@ -1,9 +1,9 @@
 import type { AsterEditor } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { isRecord, readString } from '../utils/guards';
-import { createPlainButton } from './button';
-import { createDropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { isRecord, readString } from '../utils/guards.js';
+import { createPlainButton } from './button.js';
+import { createDropdown } from './dropdown.js';
 
 /** Attributs du mark `link` tels que lus via `tiptap.getAttributes('link')`. */
 interface LinkAttributes {

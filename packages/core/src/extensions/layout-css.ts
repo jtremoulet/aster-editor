@@ -1,4 +1,4 @@
-import type { BlockBorder, BorderSide, BorderStyle } from '../api';
+import type { BlockBorder, BorderSide, BorderStyle } from '../api/index.js';
 
 /**
  * Helpers de sérialisation CSS partagés par les extensions de mise en page (paragraphe,

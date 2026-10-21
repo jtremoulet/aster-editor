@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import { cleanInlineStyles } from './clean-inline-styles';
+import { runPass } from '../../testing/html-compare.js';
+import { cleanInlineStyles } from './clean-inline-styles.js';
 
 describe('cleanInlineStyles', () => {
   it('supprime les propriétés mso-*, polices, tailles, marges et déballe le span vide', () => {

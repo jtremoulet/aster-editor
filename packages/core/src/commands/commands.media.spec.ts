@@ -5,7 +5,7 @@ import {
   selectFirstBlock,
   selectRange,
   type MountedEditor,
-} from '../testing/mount';
+} from '../testing/mount.js';
 
 describe('commandes de liens et d’images', () => {
   let mounted: MountedEditor;

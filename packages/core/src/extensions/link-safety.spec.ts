@@ -5,8 +5,8 @@ import {
   isAllowedHref,
   isAllowedImageSrc,
   resolveLinkPolicy,
-} from './link-safety';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+} from './link-safety.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 describe('LinkSafety', () => {
   describe('resolveLinkPolicy', () => {

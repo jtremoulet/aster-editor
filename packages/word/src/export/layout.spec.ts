@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../docx/import-docx';
-import type { DocxImportResult } from '../docx/types';
-import { exportDocx } from './export-docx';
-import { parseFragment, toDocumentXml, toZipEntries } from './testing/sample';
-import type { DocxExportOptions, DocxExportWarning } from './types';
+import { importDocx } from '../docx/import-docx.js';
+import type { DocxImportResult } from '../docx/types.js';
+import { exportDocx } from './export-docx.js';
+import { parseFragment, toDocumentXml, toZipEntries } from './testing/sample.js';
+import type { DocxExportOptions, DocxExportWarning } from './types.js';
 
 /** Export neuf puis import stylé (le chemin sémantique ne lit pas la mise en page). */
 async function roundTrip(html: string, options: DocxExportOptions = {}): Promise<DocxImportResult> {

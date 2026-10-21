@@ -13,8 +13,8 @@ import {
   parseTableWidth,
   tableAlignFallbackStyle,
   tableLayoutDeclarations,
-} from './table-layout';
-import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount';
+} from './table-layout.js';
+import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** `setHTML(getHTML())` doit redonner exactement le même HTML (sans le paragraphe final). */
 function expectIdempotent(mounted: MountedEditor): string {

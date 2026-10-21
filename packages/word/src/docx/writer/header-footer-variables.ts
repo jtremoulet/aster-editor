@@ -1,10 +1,10 @@
-import type { VariableSettings } from '../../export/context';
-import type { DocxExportWarning } from '../../export/types';
-import { variableValue } from '../../export/variables';
-import { transformVariablesXml, type CollectedVariable } from '../preprocess/variables';
-import { allNamed, stripXmlDeclaration } from '../preprocess/xml-utils';
-import type { DocxPackage } from '../reader/types';
-import { xmlDeclarationOf, type PartStore, type XmlCodec } from './xml-io';
+import type { VariableSettings } from '../../export/context.js';
+import type { DocxExportWarning } from '../../export/types.js';
+import { variableValue } from '../../export/variables.js';
+import { transformVariablesXml, type CollectedVariable } from '../preprocess/variables.js';
+import { allNamed, stripXmlDeclaration } from '../preprocess/xml-utils.js';
+import type { DocxPackage } from '../reader/types.js';
+import { xmlDeclarationOf, type PartStore, type XmlCodec } from './xml-io.js';
 
 /**
  * Variables des en-têtes et pieds de page du gabarit en mode `resolve` : les champs de

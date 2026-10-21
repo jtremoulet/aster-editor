@@ -1,4 +1,4 @@
-import type { FidelityExample, FidelityProperty, FidelityPropertyGroup } from './types';
+import type { FidelityExample, FidelityProperty, FidelityPropertyGroup } from './types.js';
 
 /**
  * Comptage des propriétés comparées et calcul du score pondéré. Chaque appel à `record`

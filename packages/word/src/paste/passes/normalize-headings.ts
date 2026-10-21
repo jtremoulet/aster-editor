@@ -1,5 +1,5 @@
-import { renameElement, selectAll } from '../dom-utils';
-import type { PastePass } from '../types';
+import { renameElement, selectAll } from '../dom-utils.js';
+import type { PastePass } from '../types.js';
 
 /** Classes Word de titre, du plus haut niveau au plus bas. */
 const HEADING_CLASS = /^Mso(?:Title|Heading([1-9]))$/;

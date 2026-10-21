@@ -7,21 +7,21 @@ import {
   type ParagraphLayoutAttrName,
   type TabAlign,
   type TabLeader,
-} from '../api';
-import { isLayoutNumber } from '../extensions/layout-css';
+} from '../api/index.js';
+import { isLayoutNumber } from '../extensions/layout-css.js';
 import {
   PARAGRAPH_LAYOUT_TYPES,
   normalizeParagraphLayoutValue,
-} from '../extensions/paragraph-layout';
-import { isCaps, type RunCaps } from '../extensions/run-layout';
+} from '../extensions/paragraph-layout.js';
+import { isCaps, type RunCaps } from '../extensions/run-layout.js';
 import {
   TAB_NODE_NAME,
   canInsertTab,
   sanitizeTabAlign,
   sanitizeTabLeader,
   sanitizeTabStop,
-} from '../extensions/tab';
-import { defineStandardCommand, iconIdFor } from './define';
+} from '../extensions/tab.js';
+import { defineStandardCommand, iconIdFor } from './define.js';
 
 /** Arguments de `text.setLetterSpacing` : espacement en points, `null` pour retirer. */
 export interface SetLetterSpacingArgs {

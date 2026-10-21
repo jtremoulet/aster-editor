@@ -1,20 +1,20 @@
-import type { DocxLostObject } from '../types';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { escapeAttr, escapeHtml, pt } from './html';
-import { detectLostInline } from './lost';
-import { tabStopsOf, type TabStop } from './properties';
-import { hyperlinkHref, hyperlinkTarget, safeHref } from './runs-links';
-import { InlineWriter, renderRunTags } from './runs-tags';
-import { docDefaultsOf } from './styles';
-import type { ConverterContext, ResolvedParagraphProps } from './types';
-import { fontName } from './units';
+import type { DocxLostObject } from '../types.js';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { escapeAttr, escapeHtml, pt } from './html.js';
+import { detectLostInline } from './lost.js';
+import { tabStopsOf, type TabStop } from './properties.js';
+import { hyperlinkHref, hyperlinkTarget, safeHref } from './runs-links.js';
+import { InlineWriter, renderRunTags } from './runs-tags.js';
+import { docDefaultsOf } from './styles.js';
+import type { ConverterContext, ResolvedParagraphProps } from './types.js';
+import { fontName } from './units.js';
 
 /**
  * Les liens (`runs-links.ts`) et les balises de run (`runs-tags.ts`) sont ré-exportés
  * d'ici : l'API du module est celle d'avant le découpage (L45).
  */
-export { hyperlinkTarget, safeHref } from './runs-links';
-export { renderRunTags, type RunTags } from './runs-tags';
+export { hyperlinkTarget, safeHref } from './runs-links.js';
+export { renderRunTags, type RunTags } from './runs-tags.js';
 
 /** Enfants d'un `w:p` sans contenu ni objet : jamais signalés. */
 const IGNORED_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([

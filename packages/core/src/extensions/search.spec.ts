@@ -3,9 +3,9 @@ import {
   SEARCH_OPEN_EVENT,
   getSearchStorage,
   type SearchOpenEventDetail,
-} from '../commands/search';
-import { mountEditor, selectRange, type MountedEditor } from '../testing/mount';
-import { SEARCH_CURRENT_CLASS, SEARCH_MATCH_CLASS, findMatches } from './search';
+} from '../commands/search.js';
+import { mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
+import { SEARCH_CURRENT_CLASS, SEARCH_MATCH_CLASS, findMatches } from './search.js';
 
 const CONTENT = '<p>Le chat dort. Le Chat ronfle.</p><h2>chat perché</h2>';
 

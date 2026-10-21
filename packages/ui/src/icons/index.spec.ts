@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STANDARD_COMMAND_IDS } from '@aster-editor/core';
-import { WIDGETS } from '../toolbar/widgets';
-import { ICON_NAMES, getIcon, hasIcon, iconNameForCommand } from './index';
+import { WIDGETS } from '../toolbar/widgets.js';
+import { ICON_NAMES, getIcon, hasIcon, iconNameForCommand } from './index.js';
 
 /** Icône attendue pour chaque widget de la toolbar (déclencheur ou bouton). */
 const WIDGET_ICONS: Readonly<Record<string, string>> = {

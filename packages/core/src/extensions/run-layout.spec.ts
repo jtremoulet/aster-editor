@@ -1,9 +1,9 @@
 import { Editor, type AnyExtension } from '@tiptap/core';
 import { StarterKit } from '@tiptap/starter-kit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { serializeDocumentHtml } from '../html/serialize-html';
-import { en } from '../i18n/en';
-import { fr } from '../i18n/fr';
+import { serializeDocumentHtml } from '../html/serialize-html.js';
+import { en } from '../i18n/en.js';
+import { fr } from '../i18n/fr.js';
 import {
   AsterHighlight,
   AsterStrike,
@@ -15,8 +15,8 @@ import {
   normalizeStyleColors,
   parseCaps,
   parseDecorationStyle,
-} from './run-layout';
-import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount';
+} from './run-layout.js';
+import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount.js';
 
 /**
  * Éditeur Tiptap nu avec les extensions données : pour `AsterStrike` et `AsterHighlight`,

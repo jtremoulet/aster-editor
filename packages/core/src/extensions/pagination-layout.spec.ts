@@ -7,7 +7,7 @@ import {
   samePagination,
   type PageSegment,
   type PaginationResult,
-} from './pagination-layout';
+} from './pagination-layout.js';
 
 describe('paginate (calcul pur)', () => {
   it('garde tout sur une page quand les blocs tiennent', () => {

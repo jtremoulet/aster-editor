@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsterEditor, DocumentLayout, PageViewOptions } from '../api';
-import { AsterEditorImpl } from '../editor/aster-editor';
-import * as sanitizeModule from './header-footer-sanitize';
+import type { AsterEditor, DocumentLayout, PageViewOptions } from '../api/index.js';
+import { AsterEditorImpl } from '../editor/aster-editor.js';
+import * as sanitizeModule from './header-footer-sanitize.js';
 import {
   MAX_PAGE_MM,
   MAX_SANITIZE_DEPTH,
@@ -16,8 +16,8 @@ import {
   resolvePageMetrics,
   resolveSectionLayout,
   sanitizeHeaderFooterHtml,
-} from './page-view';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+} from './page-view.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** L'implémentation interne, qui porte `setPageView` et `getLayout` (hors contrat). */
 function impl(editor: AsterEditor): AsterEditorImpl {

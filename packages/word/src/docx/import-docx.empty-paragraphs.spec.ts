@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from '../export/export-docx';
-import { importDocx } from './import-docx';
-import type { DocxImportOptions } from './types';
+import { exportDocx } from '../export/export-docx.js';
+import { importDocx } from './import-docx.js';
+import type { DocxImportOptions } from './types.js';
 
 /**
  * Sur les deux chemins de lecture : le lecteur stylé (défaut, 0.6) habille les blocs de

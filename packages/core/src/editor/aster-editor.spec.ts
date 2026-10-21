@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DocumentLayout } from '../api';
-import { PAGE_VIEW_CHANGE_EVENT, PAGE_VIEW_CLASS } from '../extensions/page-view';
-import { CONTENT_CLASS, DESTROYED_ERROR_MESSAGE } from './aster-editor';
-import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount';
+import type { DocumentLayout } from '../api/index.js';
+import { PAGE_VIEW_CHANGE_EVENT, PAGE_VIEW_CLASS } from '../extensions/page-view.js';
+import { CONTENT_CLASS, DESTROYED_ERROR_MESSAGE } from './aster-editor.js';
+import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount.js';
 
 /**
  * Document complet pour l'idempotence : titres, listes imbriquées, table avec

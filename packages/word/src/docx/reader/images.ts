@@ -1,9 +1,9 @@
-import type { DocxLostObject } from '../types';
-import { allNamed, childNamed } from '../preprocess/xml-utils';
-import { escapeAttr, escapeHtml } from './html';
-import { alternateContentChoice, detectLostInline, textboxLost } from './lost';
-import type { ConverterContext, DocxPackage, ImageConverter, ReaderOptions } from './types';
-import { emuToPxInt, ptToPx } from './units';
+import type { DocxLostObject } from '../types.js';
+import { allNamed, childNamed } from '../preprocess/xml-utils.js';
+import { escapeAttr, escapeHtml } from './html.js';
+import { alternateContentChoice, detectLostInline, textboxLost } from './lost.js';
+import type { ConverterContext, DocxPackage, ImageConverter, ReaderOptions } from './types.js';
+import { emuToPxInt, ptToPx } from './units.js';
 
 /**
  * Conversion des dessins Word en `<img>` : `w:drawing` (`wp:inline` et `wp:anchor`,

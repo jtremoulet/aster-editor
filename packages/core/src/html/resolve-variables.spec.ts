@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveVariablesHtml, type HtmlContainerParser } from './resolve-variables';
+import { resolveVariablesHtml, type HtmlContainerParser } from './resolve-variables.js';
 
 const CLIENT = '<span data-aster-variable="client" data-label="Client">{{client}}</span>';
 

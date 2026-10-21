@@ -1,5 +1,5 @@
-import { collectTextNodes, isBlank, renameElement, selectAll, unwrap } from '../dom-utils';
-import type { PastePass } from '../types';
+import { collectTextNodes, isBlank, renameElement, selectAll, unwrap } from '../dom-utils.js';
+import type { PastePass } from '../types.js';
 
 /** Attributs de cellule conservés ; la fusion de cellules est la seule information de structure. */
 const CELL_ATTRIBUTES: readonly string[] = ['colspan', 'rowspan'];

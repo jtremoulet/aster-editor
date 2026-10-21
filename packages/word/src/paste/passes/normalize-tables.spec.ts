@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import { normalizeTables } from './normalize-tables';
+import { runPass } from '../../testing/html-compare.js';
+import { normalizeTables } from './normalize-tables.js';
 
 /** Cellule Word après `cleanInlineStyles` : attributs de layout encore présents, `<p>` déjà nettoyé. */
 const cell = (content: string, attrs = ''): string =>

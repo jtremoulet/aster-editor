@@ -7,7 +7,7 @@ import {
 import type { Node as ProseMirrorNode, NodeType } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
-import type { AsterEditor, DocumentLayout, SectionBreakAttrs } from '../api';
+import type { AsterEditor, DocumentLayout, SectionBreakAttrs } from '../api/index.js';
 import {
   PAGE_VIEW_CHANGE_EVENT,
   PAGE_VIEW_CSS_VARIABLES,
@@ -17,7 +17,7 @@ import {
   resolvePageMetrics,
   resolveSectionLayout,
   sectionOpenedByBreak,
-} from './page-view';
+} from './page-view.js';
 
 /** Nom du nœud de saut de section. */
 export const SECTION_BREAK_NODE_NAME = 'sectionBreak';
@@ -39,7 +39,7 @@ export const SECTION_START_ATTRIBUTE = 'data-section-start';
  * pendant `update()`, ProseMirror peut encore porter des nœuds périmés avant le saut.
  * Défini dans `page-view.ts` (qui l'écoute) pour éviter un cycle d'imports.
  */
-export { SECTION_BREAKS_CHANGE_EVENT } from './page-view';
+export { SECTION_BREAKS_CHANGE_EVENT } from './page-view.js';
 
 /**
  * Numéro de section maximal (R41-06), même ordre de grandeur que `MAX_PAGE_MM`. Au-delà,

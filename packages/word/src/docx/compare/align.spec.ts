@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignSequences, MAX_LCS_CELLS } from './align';
+import { alignSequences, MAX_LCS_CELLS } from './align.js';
 
 describe('alignSequences', () => {
   it('même longueur, un bloc modifié : apparié par position (trou de même taille des deux côtés)', () => {

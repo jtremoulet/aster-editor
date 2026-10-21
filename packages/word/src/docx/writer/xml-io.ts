@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { stripXmlDeclaration } from '../preprocess/xml-utils';
+import { stripXmlDeclaration } from '../preprocess/xml-utils.js';
 
 /**
  * Accès en lecture et en écriture aux parties d'un paquet `.docx` pour la greffe : les

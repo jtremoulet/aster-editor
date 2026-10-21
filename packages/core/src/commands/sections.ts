@@ -1,13 +1,13 @@
 import { NodeSelection, TextSelection, type Transaction } from '@tiptap/pm/state';
-import type { AsterCommand, AsterEditor } from '../api';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
 import {
   SECTION_BREAK_NODE_NAME,
   findSectionBreaks,
   isSectionBreak,
   renumberSections,
   sectionBreakAttrs,
-} from '../extensions/section-break';
-import { iconIdFor } from './define';
+} from '../extensions/section-break.js';
+import { iconIdFor } from './define.js';
 
 /** Identifiants des commandes de section, enregistrées en plus de `STANDARD_COMMAND_IDS`. */
 export const SECTION_COMMAND_IDS = [

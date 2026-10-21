@@ -1,5 +1,5 @@
-import type { AsterCommand } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 /** Marques que `clearFormatting` conserve : un lien est une donnée, pas une mise en forme. */
 const PRESERVED_MARKS: ReadonlySet<string> = new Set(['link']);

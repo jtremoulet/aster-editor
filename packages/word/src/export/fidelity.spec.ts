@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from './export-docx';
-import { jsonToHtml } from './json-to-html';
-import { RED_PNG_DATA_URL, toDocumentXml, toZipEntries } from './testing/sample';
-import type { DocxExportOptions } from './types';
+import { exportDocx } from './export-docx.js';
+import { jsonToHtml } from './json-to-html.js';
+import { RED_PNG_DATA_URL, toDocumentXml, toZipEntries } from './testing/sample.js';
+import type { DocxExportOptions } from './types.js';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
 function count(haystack: string, needle: string): number {

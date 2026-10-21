@@ -1,13 +1,13 @@
 import { CellSelection } from '@tiptap/pm/tables';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { STANDARD_COMMAND_IDS } from '../api';
-import { FORMAT_PAINTER_COMMAND_IDS } from './format-painter';
-import { TAB_COMMAND_IDS, TEXT_LAYOUT_COMMAND_IDS, hasLayoutBlockInSelection } from './layout';
-import { SEARCH_COMMAND_IDS } from './search';
-import { SECTION_COMMAND_IDS } from './sections';
-import { en } from '../i18n/en';
-import { fr } from '../i18n/fr';
-import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount';
+import { STANDARD_COMMAND_IDS } from '../api/index.js';
+import { FORMAT_PAINTER_COMMAND_IDS } from './format-painter.js';
+import { TAB_COMMAND_IDS, TEXT_LAYOUT_COMMAND_IDS, hasLayoutBlockInSelection } from './layout.js';
+import { SEARCH_COMMAND_IDS } from './search.js';
+import { SECTION_COMMAND_IDS } from './sections.js';
+import { en } from '../i18n/en.js';
+import { fr } from '../i18n/fr.js';
+import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** Table 2×2 de la preuve R23-02 : cellules `a`, `b`, `c`, `d`. */
 const TABLE_2X2 =

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from './export-docx';
-import { sanitizeXmlText } from './sanitize';
-import { toZipEntries } from './testing/sample';
+import { exportDocx } from './export-docx.js';
+import { sanitizeXmlText } from './sanitize.js';
+import { toZipEntries } from './testing/sample.js';
 
 /** Caractère d'un code, pour composer la classe sans littéral de contrôle dans la source. */
 const ch = (code: number): string => String.fromCharCode(code);

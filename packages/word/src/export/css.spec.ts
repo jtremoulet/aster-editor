@@ -6,7 +6,7 @@ import {
   parseFontSize,
   parsePixels,
   parseStyle,
-} from './css';
+} from './css.js';
 
 describe('parseStyle', () => {
   it('découpe les déclarations en map, clés en minuscules et valeurs trimées', () => {
@@ -119,7 +119,7 @@ describe('parsePixels', () => {
 
 describe('mise en page du contrat (L27)', () => {
   it('parsePoints : unités absolues, signe, relatives refusées', async () => {
-    const { parsePoints } = await import('./css');
+    const { parsePoints } = await import('./css.js');
     expect(parsePoints('18pt')).toBe(18);
     expect(parsePoints('-14.15pt')).toBe(-14.15);
     expect(parsePoints('16px')).toBe(12);
@@ -131,7 +131,7 @@ describe('mise en page du contrat (L27)', () => {
   });
 
   it('parseBorder : raccourci dans tout ordre, couleurs hex / rgb / nommées, none', async () => {
-    const { parseBorder } = await import('./css');
+    const { parseBorder } = await import('./css.js');
     expect(parseBorder('1pt solid #000000')).toEqual({
       style: 'solid',
       widthPt: 1,
@@ -151,7 +151,7 @@ describe('mise en page du contrat (L27)', () => {
   });
 
   it('parseBorders : raccourci, côtés, propriétés longues', async () => {
-    const { parseBorders, parseStyle } = await import('./css');
+    const { parseBorders, parseStyle } = await import('./css.js');
     const borders = parseBorders(
       parseStyle(
         'border: 1pt solid #000; border-left: none; border-top-color: #ff0000; border-bottom-width: 2pt',
@@ -170,7 +170,7 @@ describe('mise en page du contrat (L27)', () => {
   });
 
   it('parseLineHeight, parsePadding, highlightName', async () => {
-    const { parseLineHeight, parsePadding, highlightName } = await import('./css');
+    const { parseLineHeight, parsePadding, highlightName } = await import('./css.js');
     expect(parseLineHeight('1.15')).toEqual({ kind: 'multiple', value: 1.15 });
     expect(parseLineHeight('150%')).toEqual({ kind: 'multiple', value: 1.5 });
     expect(parseLineHeight('14pt')).toEqual({ kind: 'exact', points: 14 });
