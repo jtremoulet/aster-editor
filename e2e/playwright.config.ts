@@ -73,9 +73,10 @@ export default defineConfig({
     {
       name: 'playground',
       // `variables.spec.ts` (variables, bulles, menu `/`, sommaire), `fidelity.spec.ts`
-      // (import stylé, vue page, pagination, export gabarit) et `sections.spec.ts`
-      // (sections, tabulations) tournent aussi sur le playground.
-      testMatch: /(playground|variables|fidelity|sections)\.spec\.ts$/,
+      // (import stylé, vue page, pagination, export gabarit), `sections.spec.ts`
+      // (sections, tabulations) et `search.spec.ts` (bandeau et défilement de la recherche,
+      // session 5) tournent aussi sur le playground.
+      testMatch: /(playground|variables|fidelity|sections|headers-dialog|search)\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'], baseURL: PLAYGROUND_URL },
     },
     ...(firefoxAvailable()

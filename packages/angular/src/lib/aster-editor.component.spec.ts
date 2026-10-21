@@ -625,11 +625,13 @@ describe('AsterEditorComponent', () => {
 
       // La mise en page est appliquée à la vue page par un effet : au prochain rendu.
       // Depuis la feuille par section (L44), l'hôte porte la section 1 (A4, en-tête
-      // « Rapport ») ; la section 2 (Letter paysage) est portée par le saut de section.
+      // « Première page » sur la page 1, `titlePage`) ; la section 2 est portée par le saut.
       TestBed.tick();
       expect(component.layout()?.sections?.length).toBe(2);
       expect(pageWidth(editor)).toBe('210mm');
-      expect(editor.element.querySelector('.aster-page-header')?.textContent).toContain('Rapport');
+      expect(editor.element.querySelector('.aster-page-header')?.textContent).toContain(
+        'Première page',
+      );
       expect(
         editor.element.querySelector('hr[data-section-break]')?.getAttribute('style'),
       ).toContain('279.4mm');
@@ -832,6 +834,39 @@ describe('AsterEditorComponent', () => {
       api?.setPageView(false);
       expect(component.layout()).toBe(other);
       expect(editor.element.classList.contains('aster--page-view')).toBe(false);
+    });
+
+    it('L54 : un en-tête saisi dans le dialogue « Mise en page » est relayé par layoutChanged', async () => {
+      // Le widget `pageLayout` est dans la toolbar `full` (pas dans `standard`).
+      const { fixture, component, editor } = await mount({ pageView: true, toolbar: 'full' });
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+      const host = fixture.nativeElement as HTMLElement;
+      const trigger = host.querySelector<HTMLButtonElement>(
+        '.aster-dropdown__trigger[aria-label="Mise en page"]',
+      );
+      expect(trigger, 'déclencheur « Mise en page »').not.toBeNull();
+      expect(trigger?.disabled).toBe(false);
+      trigger?.click();
+      const dialog = host.querySelector<HTMLElement>('.aster-page-layout');
+      expect(dialog?.hasAttribute('hidden'), 'dialogue ouvert').toBe(false);
+      const field = dialog?.querySelector<HTMLElement>('.aster-page-layout__headers-default');
+      expect(field?.getAttribute('contenteditable')).toBe('true');
+      if (!dialog || !field) throw new Error('dialogue « Mise en page » attendu');
+      field.innerHTML = '<p onclick="x()">En-tête du <b>dialogue</b></p>';
+      Array.from(dialog.querySelectorAll<HTMLButtonElement>('.aster-dialog__button'))
+        .find((button) => button.textContent === 'Appliquer')
+        ?.click();
+      // Le core relit la vue page (`pageViewChange`) : `layout()` suit, assaini et normalisé.
+      expect(component.layout()?.headers?.default?.html).toBe(
+        '<p>En-tête du <strong>dialogue</strong></p>',
+      );
+      expect(editor.element.querySelector('.aster-page-header')?.textContent).toBe(
+        'En-tête du dialogue',
+      );
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+      expect(layoutChanged).toHaveBeenCalledWith(component.layout());
     });
 
     it('compareWithTemplate rend null sans gabarit, puis un rapport après import', async () => {

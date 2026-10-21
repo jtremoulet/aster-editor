@@ -12,11 +12,11 @@ import type {
 } from '@aster-editor/core';
 import type { EditorState } from '@tiptap/pm/state';
 import { PAGE_SIZES_MM, getActivePageView, isPaginationEnabled } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { isRecord } from '../utils/guards';
-import { createPlainButton } from './button';
-import { createDropdown, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
+import { createPlainButton } from './button.js';
+import { createDropdown, type Dropdown } from './dropdown.js';
 import {
   createAlert,
   createCheckbox,
@@ -26,7 +26,8 @@ import {
   isOutOfRange,
   parseNumberInput,
   submitOnEnter,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
+import { createHeaderFooterSection } from './page-layout-headers.js';
 
 /** Classe posée par le core sur l'hôte (`editor.element`) quand la vue page est active. */
 export const PAGE_VIEW_CLASS = 'aster--page-view';
@@ -276,32 +277,66 @@ function withLastSection(base: DocumentLayout, last: SectionLayout): DocumentLay
 }
 
 /**
- * Mise en page avec la page de la section `position.index` remplacée. `sections` n'est
- * **jamais tronqué** (R44-02) : il garde toutes les sections déclarées, complétées jusqu'à
- * `position.count` par le premier niveau ; quand la section éditée est la dernière du
- * corps, la dernière entrée de `sections` est recopiée dans `page`, `columns`,
- * `headers`, `footers` et `titlePage` (invariant du contrat `DocumentLayout.sections`).
- * Avec une seule section et `layout.sections` présent (sauts supprimés, mise en page
- * conservée), c'est `sections[0]` qui est éditée, comme l'hôte la rend (R44-03) ; sans
- * `sections`, seul `page` change, comme avant.
+ * Champs d'une section à remplacer : une clé **présente à `undefined`** retire le champ
+ * (en-tête vidé, « Première page différente » décochée), une clé absente le conserve.
  */
+export type SectionLayoutPatch = {
+  readonly [K in keyof SectionLayout]?: SectionLayout[K] | undefined;
+};
+
+/** Copie de `target` avec les champs de `patch` posés, ou retirés quand ils valent `undefined`. */
+function patched<T extends SectionLayout | DocumentLayout>(
+  target: T,
+  patch: SectionLayoutPatch,
+): T {
+  const next: { -readonly [K in keyof SectionLayout]?: SectionLayout[K] } & T = { ...target };
+  for (const [field, value] of Object.entries(patch) as [keyof SectionLayout, unknown][]) {
+    if (value === undefined) {
+      delete next[field];
+    } else {
+      Object.assign(next, { [field]: value });
+    }
+  }
+  return next;
+}
+
+/**
+ * Mise en page avec les champs de la section `position.index` remplacés (L54 : page,
+ * en-têtes, pieds, `titlePage`). `sections` n'est **jamais tronqué** (R44-02) : il garde
+ * toutes les sections déclarées, complétées jusqu'à `position.count` par le premier
+ * niveau ; quand la section éditée est la dernière du corps, la dernière entrée de
+ * `sections` est recopiée dans `page`, `columns`, `headers`, `footers` et `titlePage`
+ * (invariant du contrat `DocumentLayout.sections`). Avec une seule section et
+ * `layout.sections` présent (sauts supprimés, mise en page conservée), c'est `sections[0]`
+ * qui est éditée, comme l'hôte la rend (R44-03) ; sans `sections`, seuls les champs du
+ * premier niveau changent, comme avant.
+ */
+export function withSectionLayout(
+  layout: DocumentLayout | null,
+  position: SectionPosition,
+  patch: SectionLayoutPatch,
+): DocumentLayout {
+  const base: DocumentLayout = layout ?? {};
+  const known = knownSections(layout);
+  if (position.count <= 1 && known.length === 0) {
+    return patched(base, patch);
+  }
+  const count = Math.max(position.count, known.length);
+  const sections = sectionsOf(layout, count).map((section, index) =>
+    index === position.index - 1 ? patched(section, patch) : section,
+  );
+  const next: DocumentLayout = { ...base, sections };
+  const last = sections[sections.length - 1];
+  return position.index === position.count && last ? withLastSection(next, last) : next;
+}
+
+/** Mise en page avec la page de la section `position.index` remplacée (voir `withSectionLayout`). */
 export function withSectionPage(
   layout: DocumentLayout | null,
   position: SectionPosition,
   page: PageSetup,
 ): DocumentLayout {
-  const base: DocumentLayout = layout ?? {};
-  const known = knownSections(layout);
-  if (position.count <= 1 && known.length === 0) {
-    return { ...base, page };
-  }
-  const count = Math.max(position.count, known.length);
-  const sections = sectionsOf(layout, count).map((section, index) =>
-    index === position.index - 1 ? { ...section, page } : section,
-  );
-  const next: DocumentLayout = { ...base, sections };
-  const last = sections[sections.length - 1];
-  return position.index === position.count && last ? withLastSection(next, last) : next;
+  return withSectionLayout(layout, position, { page });
 }
 
 /**
@@ -317,6 +352,10 @@ export function withSectionPage(
  * plusieurs sections est signalée, R44-06), préremplit la page de cette section et
  * n'applique qu'elle (`layout.sections[n - 1].page`), les autres sections étant
  * conservées, jamais tronquées (R44-02).
+ *
+ * En-têtes et pieds (session 5, L54) : la section « En-tête et pied » édite les jeux
+ * `headers` / `footers` et `titlePage` de la même section (`page-layout-headers.ts`) ;
+ * un champ vidé retire le type, un jeu sans type est retiré de la section.
  */
 export function createPageLayoutDialog(editor: AsterEditor): ToolbarWidget {
   return createDropdown({
@@ -338,7 +377,8 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   // Section de la tête de sélection (L44) : sa page est éditée. Sans saut, c'est la
   // section 1, résolue comme l'hôte la rend (`sections[0]` quand il existe, R44-03).
   const position = sectionOfSelection(editor);
-  const current = resolvePageSetup(sectionsOf(layout, position.count)[position.index - 1] ?? null);
+  const section = sectionsOf(layout, position.count)[position.index - 1] ?? {};
+  const current = resolvePageSetup(section);
   const suffix = fieldSuffix();
   panel.setAttribute('aria-label', t('ui.pageLayout.title'));
   const alert = createAlert();
@@ -460,6 +500,9 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
     ),
   );
 
+  // En-têtes et pieds de la section (L54) : champs riches minimaux, lus à l'application.
+  const headerFooter = createHeaderFooterSection({ section, suffix, t });
+
   const enabled = createCheckbox(
     t('ui.pageLayout.enabled'),
     isPageViewActive(editor),
@@ -503,7 +546,10 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
       orientation: selectedOrientation(),
       margins: { ...current.margins, ...margins },
     };
-    const next = withSectionPage(layout, position, page);
+    // Un jeu ou `titlePage` absent des valeurs lues est **retiré** de la section (clé à
+    // `undefined` dans le correctif) : en-tête vidé = en-tête retiré.
+    const { headers, footers, titlePage } = headerFooter.read();
+    const next = withSectionLayout(layout, position, { page, headers, footers, titlePage });
     const options: PaginatedPageViewOptions = pagination.input.checked
       ? { layout: next }
       : { layout: next, pagination: false };
@@ -539,6 +585,7 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
     sizeField,
     orientationGroup,
     marginsGroup,
+    headerFooter.element,
     alert,
     el('div', { className: 'aster-dialog__field' }, [enabled.wrapper, pagination.wrapper]),
     el('div', { className: 'aster-dialog__actions' }, [cancel, ok]),

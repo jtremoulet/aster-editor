@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DocumentLayout, PageSetup, PaginatedPageViewOptions } from '@aster-editor/core';
 import { applyPageView, createEditor } from '@aster-editor/core';
-import { createMockEditor, type MockEditor, type MockEditorOptions } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import {
+  createMockEditor,
+  type MockEditor,
+  type MockEditorOptions,
+} from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   DEFAULT_PAGE_MARGIN_MM,
   MAX_PAGE_DIMENSION_MM,
@@ -18,7 +22,7 @@ import {
   sectionOfSelection,
   sectionsOf,
   withSectionPage,
-} from './page-layout-dialog';
+} from './page-layout-dialog.js';
 
 const LAYOUT: DocumentLayout = {
   page: {
@@ -753,6 +757,208 @@ describe('createPageLayoutDialog', () => {
         real.destroy();
         container.remove();
       }
+    });
+  });
+
+  describe('en-têtes et pieds (L54)', () => {
+    const rich = (kind: 'headers' | 'footers', type: 'default' | 'first' | 'even'): HTMLElement =>
+      panel().querySelector<HTMLElement>(`.aster-page-layout__${kind}-${type}`)!;
+    const richShown = (kind: 'headers' | 'footers', type: 'default' | 'first' | 'even'): boolean =>
+      !rich(kind, type).parentElement!.hasAttribute('hidden');
+    const titlePage = (): HTMLInputElement =>
+      panel().querySelector<HTMLInputElement>('.aster-page-layout__title-page')!;
+    const evenPages = (): HTMLInputElement =>
+      panel().querySelector<HTMLInputElement>('.aster-page-layout__even-pages')!;
+    const sentLayout = (index = 0): DocumentLayout => {
+      const call = editor.pageViewCalls[index];
+      if (typeof call !== 'object' || !call.layout) throw new Error('layout attendu');
+      return call.layout;
+    };
+    /** Fixture 18 en miniature : première page sur la 1, pages paires sur la 2, pied sur la 3. */
+    const TRIPLE: DocumentLayout = {
+      page: { size: 'A4' },
+      footers: { default: { html: '<p>Pied 3</p>' } },
+      sections: [
+        {
+          page: { size: 'A4' },
+          headers: {
+            default: { html: '<p>Section 1</p>' },
+            first: { html: '<p>Première page</p>' },
+          },
+          titlePage: true,
+        },
+        {
+          page: { size: 'Letter', orientation: 'landscape' },
+          headers: {
+            default: { html: '<p>Section 2</p>' },
+            even: { html: '<p>Section 2 paire</p>' },
+          },
+        },
+        { page: { size: 'A4' }, footers: { default: { html: '<p>Pied 3</p>' } } },
+      ],
+    };
+
+    it('affiche les champs de la section du curseur : default toujours, first si titlePage, even si présent', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 1 } });
+      open();
+      const group = panel().querySelector('.aster-page-layout__headers');
+      expect(group?.getAttribute('aria-label')).toBe('Header and footer');
+      expect(group?.querySelector('.aster-page-layout__hint')?.textContent).toContain(
+        'Enter starts a new paragraph',
+      );
+      expect(titlePage().checked).toBe(true);
+      expect(evenPages().checked).toBe(false);
+      expect(rich('headers', 'default').innerHTML).toBe('<p>Section 1</p>');
+      expect(rich('headers', 'first').innerHTML).toBe('<p>Première page</p>');
+      expect(richShown('headers', 'first')).toBe(true);
+      expect(richShown('headers', 'even')).toBe(false);
+      expect(richShown('footers', 'first')).toBe(true);
+      expect(rich('footers', 'default').innerHTML).toBe('');
+      expect(rich('headers', 'default').getAttribute('contenteditable')).toBe('true');
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(panel().querySelector('.aster-page-layout__headers')?.getAttribute('aria-label')).toBe(
+        'En-tête et pied',
+      );
+      expect(
+        panel().querySelector(`label[for="${rich('headers', 'first').id}"]`)?.textContent,
+      ).toBe('En-tête de première page');
+      expect(titlePage().parentElement?.textContent).toBe('Première page différente');
+      expect(evenPages().parentElement?.textContent).toBe('Pages paires différentes');
+      button('Annuler').click();
+      // Section 2 : pas de première page, un en-tête pair.
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 2 } });
+      open();
+      expect(titlePage().checked).toBe(false);
+      expect(evenPages().checked).toBe(true);
+      expect(richShown('headers', 'first')).toBe(false);
+      expect(richShown('headers', 'even')).toBe(true);
+      expect(rich('headers', 'even').innerHTML).toBe('<p>Section 2 paire</p>');
+      expect(rich('headers', 'default').innerHTML).toBe('<p>Section 2</p>');
+    });
+
+    it('assainit la saisie : <script> et onclick retirés, b / i / div normalisés', () => {
+      open();
+      rich('headers', 'default').innerHTML =
+        '<p onclick="alert(1)">Titre<script>alert(1)</script></p><div><b>gras</b> <i>it</i></div>';
+      enabled().checked = true;
+      button('Apply').click();
+      expect(sentLayout()).toEqual({
+        page: {
+          size: 'A4',
+          orientation: 'portrait',
+          margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+        },
+        headers: { default: { html: '<p>Titre</p><p><strong>gras</strong> <em>it</em></p>' } },
+      });
+      expect(isOpen()).toBe(false);
+    });
+
+    it('un champ vidé retire le type, un jeu vide est retiré ; un contenu inchangé garde sa référence', () => {
+      widget.destroy();
+      host.remove();
+      const layout: DocumentLayout = {
+        headers: { default: { html: '<p>H</p>' } },
+        footers: { default: { html: '<p>F</p>' } },
+      };
+      mount({ layout, pageView: true });
+      open();
+      rich('headers', 'default').innerHTML = '<p><br></p>';
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.headers).toBeUndefined();
+      expect('headers' in sent).toBe(false);
+      expect(sent.footers).toEqual(layout.footers);
+      expect(sent.footers?.default).toBe(layout.footers?.default);
+    });
+
+    it('« Première page différente » pose titlePage et écrit first ; décochée, les retire', () => {
+      open();
+      expect(richShown('headers', 'first')).toBe(false);
+      titlePage().click();
+      expect(titlePage().checked).toBe(true);
+      expect(richShown('headers', 'first')).toBe(true);
+      expect(richShown('footers', 'first')).toBe(true);
+      rich('headers', 'first').innerHTML = '<p>Première</p>';
+      enabled().checked = true;
+      button('Apply').click();
+      expect(sentLayout()).toMatchObject({
+        headers: { first: { html: '<p>Première</p>' } },
+        titlePage: true,
+      });
+      expect(sentLayout().footers).toBeUndefined();
+      // Réouvert (le mock mémorise) : la case et le champ suivent ; décocher retire les deux.
+      open();
+      expect(titlePage().checked).toBe(true);
+      expect(rich('headers', 'first').innerHTML).toBe('<p>Première</p>');
+      titlePage().click();
+      expect(richShown('headers', 'first')).toBe(false);
+      button('Apply').click();
+      expect(sentLayout(1).titlePage).toBeUndefined();
+      expect(sentLayout(1).headers).toBeUndefined();
+    });
+
+    it('dernière section du corps : en-têtes et pieds recopiés au premier niveau (invariant)', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 3 } });
+      open();
+      expect(rich('footers', 'default').innerHTML).toBe('<p>Pied 3</p>');
+      rich('footers', 'default').innerHTML = '<p>Nouveau pied</p>';
+      rich('headers', 'default').innerHTML = '<p>Tête 3</p>';
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.sections?.[2]).toEqual({
+        page: {
+          size: 'A4',
+          orientation: 'portrait',
+          margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+        },
+        headers: { default: { html: '<p>Tête 3</p>' } },
+        footers: { default: { html: '<p>Nouveau pied</p>' } },
+      });
+      expect(sent.footers).toBe(sent.sections?.[2]?.footers);
+      expect(sent.headers).toBe(sent.sections?.[2]?.headers);
+      expect(sent.titlePage).toBeUndefined();
+      expect(sent.sections?.[0]).toBe(TRIPLE.sections?.[0]);
+      expect(sent.sections?.[1]).toBe(TRIPLE.sections?.[1]);
+    });
+
+    it('section intermédiaire : son entrée seule change, le premier niveau reste celui de la dernière', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 2 } });
+      open();
+      rich('headers', 'default').innerHTML = '<p>Section 2 bis</p>';
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.sections?.[1]?.headers).toEqual({
+        default: { html: '<p>Section 2 bis</p>' },
+        even: { html: '<p>Section 2 paire</p>' },
+      });
+      expect(sent.sections?.[1]?.headers?.even).toBe(TRIPLE.sections?.[1]?.headers?.even);
+      expect(sent.sections?.[1]?.page).toEqual({
+        size: 'Letter',
+        orientation: 'landscape',
+        margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+      });
+      expect(sent.sections?.[0]).toBe(TRIPLE.sections?.[0]);
+      expect(sent.sections?.[2]).toBe(TRIPLE.sections?.[2]);
+      expect(sent.headers).toBeUndefined();
+      expect(sent.footers).toBe(TRIPLE.footers);
+      expect(sent.page).toBe(TRIPLE.page);
+      // Entrée dans un champ riche ne valide pas le dialogue.
+      open();
+      rich('headers', 'default').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      expect(isOpen()).toBe(true);
+      expect(editor.pageViewCalls).toHaveLength(1);
     });
   });
 });
