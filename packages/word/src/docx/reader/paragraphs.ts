@@ -1,19 +1,24 @@
 import type { BlockBorder } from '@aster-editor/core';
-import { childNamed } from '../preprocess/xml-utils';
-import { escapeAttr, pt, styleAttr } from './html';
-import { convertRuns, PAGE_BREAK } from './runs';
-import { docDefaultsOf, tableParagraphDefaultsOf } from './styles';
+import { childNamed } from '../preprocess/xml-utils.js';
+import { escapeAttr, pt, styleAttr } from './html.js';
+import { tabStopsOf, type DocxParagraphProps } from './properties.js';
+import { convertRuns, PAGE_BREAK } from './runs.js';
+import { docDefaultsOf, paragraphBaseOf, tableParagraphDefaultsOf } from './styles.js';
 import type {
   ConverterContext,
   ParagraphBlock,
   ResolvedParagraphProps,
   ResolvedRunProps,
-} from './types';
+  TableStyleProps,
+} from './types.js';
 
 /**
  * Paragraphe Word → `<p …>` ou `<hN …>` avec la sérialisation exacte du contrat
- * (`packages/core/src/api/layout.ts`). Les valeurs égales aux `docDefaults` ne sont pas
- * écrites. Un `w:br w:type="page"` au milieu du paragraphe coupe le bloc : le `html` du
+ * (`packages/core/src/api/layout.ts`). Les valeurs égales à la base d'émission ne sont
+ * pas écrites : les `docDefaults` pour tout, sauf l'interligne et les espacements avant /
+ * après, comparés à `layout.defaultParagraph` (`docDefaults` puis `Normal`, R53-01), ce
+ * que la vue page et l'export neuf appliquent à un paragraphe sans valeur propre.
+ * Un `w:br w:type="page"` au milieu du paragraphe coupe le bloc : le `html` du
  * `ParagraphBlock` contient alors plusieurs frères (`<p>a</p><hr data-page-break><p>b</p>`),
  * que le rendu concatène tels quels (décision figée, L25 les laisse hors liste).
  */
@@ -35,24 +40,35 @@ const INHERITABLE_RUN_KEYS = ['fontFamily', 'fontSizePt', 'bold', 'italic', 'col
  * Approximation du style de tableau : ses défauts de paragraphe et de run s'intercalent
  * entre `docDefaults` et le style de paragraphe. Faute de savoir ce que le style de
  * paragraphe a posé lui-même, on ne prend la valeur du tableau que là où le paragraphe
- * est encore égal aux `docDefaults`.
+ * est encore égal aux `docDefaults` (même règle pour les taquets, R42-07 : ceux du style
+ * de tableau quand le paragraphe n'en a pas d'autres que ceux des `docDefaults`).
+ * `tableStyle` est le style vu par la cellule, formats conditionnels compris. Exportée
+ * pour que le comparateur (`compare/model-paragraph.ts`) résolve comme le lecteur (L46).
  */
-function applyTableStyle(
+export function applyTableStyle(
   props: ResolvedParagraphProps,
-  ctx: ConverterContext,
+  tableStyle: TableStyleProps | null,
   defaults: { paragraph: ResolvedParagraphProps; run: ResolvedRunProps },
 ): ResolvedParagraphProps {
-  if (!ctx.tableStyle) return props;
-  const paragraph: { -readonly [K in keyof ResolvedParagraphProps]?: ResolvedParagraphProps[K] } = {
+  if (!tableStyle) return props;
+  const paragraph: { -readonly [K in keyof DocxParagraphProps]?: DocxParagraphProps[K] } = {
     ...props,
   };
-  const tableParagraph = tableParagraphDefaultsOf(ctx.tableStyle);
+  const tableParagraph = tableParagraphDefaultsOf(tableStyle);
   if (tableParagraph) {
     for (const key of INHERITABLE_PARAGRAPH_KEYS) {
       const value = tableParagraph[key];
       if (value !== undefined && props[key] === defaults.paragraph[key]) {
         (paragraph as Record<string, unknown>)[key] = value;
       }
+    }
+    const tableTabs = tableParagraph.tabStops;
+    if (
+      tableTabs &&
+      tableTabs.length > 0 &&
+      JSON.stringify(tabStopsOf(props)) === JSON.stringify(tabStopsOf(defaults.paragraph))
+    ) {
+      paragraph.tabStops = tableTabs;
     }
     const lineUnchanged =
       props.lineHeight === defaults.paragraph.lineHeight &&
@@ -65,7 +81,7 @@ function applyTableStyle(
       else paragraph.lineHeight = tableParagraph.lineHeight;
     }
   }
-  const tableRun = ctx.tableStyle.runDefaults;
+  const tableRun = tableStyle.runDefaults;
   if (tableRun) {
     const run: { -readonly [K in keyof ResolvedRunProps]?: ResolvedRunProps[K] } = {
       ...props.runDefaults,
@@ -117,7 +133,16 @@ function sameBorders(
   return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
 }
 
-/** Attributs du bloc dans l'ordre du contrat : `style`, `data-docx-style`, puis les drapeaux. */
+/**
+ * Attributs du bloc dans l'ordre du contrat : `style`, `data-docx-style`, puis les
+ * drapeaux. `base` est la base d'émission (`paragraphBaseOf`) : interligne et espacements
+ * avant / après y sont ceux de `layout.defaultParagraph`. Un paragraphe résolu **sans**
+ * valeur alors que la base en porte une (style sans `basedOn` dans un document au `Normal`
+ * modifié, R53-01) écrit explicitement le défaut de Word (`line-height: 1`,
+ * `margin-*: 0pt`), sinon la vue page et l'export neuf lui appliqueraient le défaut du
+ * document. Une valeur explicite égale au défaut de Word quand la base n'en a pas
+ * (`w:after="0"` posé par un style de tableau) reste écrite, comme avant.
+ */
 export function paragraphAttributes(
   props: ResolvedParagraphProps,
   base: ParagraphBase,
@@ -127,12 +152,24 @@ export function paragraphAttributes(
     props[key] !== undefined && props[key] !== base[key] ? props[key] : undefined;
   const ptOrNone = (value: number | undefined): string | undefined =>
     value === undefined ? undefined : pt(value);
+  /** Espacement avant / après : la valeur si elle diffère de la base, `0pt` si la base en a une et pas le paragraphe. */
+  const spacing = (key: 'spacingBeforePt' | 'spacingAfterPt'): string | undefined => {
+    const value = props[key];
+    if (value !== undefined) return value !== base[key] ? pt(value) : undefined;
+    const fallback = base[key];
+    return fallback !== undefined && fallback !== 0 ? pt(0) : undefined;
+  };
 
   let lineHeight: string | undefined;
   if (props.lineHeightPt !== undefined) {
     if (props.lineHeightPt !== base.lineHeightPt) lineHeight = pt(props.lineHeightPt);
-  } else if (props.lineHeight !== undefined && props.lineHeight !== base.lineHeight) {
-    lineHeight = String(props.lineHeight);
+  } else if (props.lineHeight !== undefined) {
+    if (props.lineHeight !== base.lineHeight) lineHeight = String(props.lineHeight);
+  } else if (
+    base.lineHeightPt !== undefined ||
+    (base.lineHeight !== undefined && base.lineHeight !== 1)
+  ) {
+    lineHeight = '1';
   }
 
   const borders = sameBorders(props.borders, base.borders) ? [] : (props.borders ?? []);
@@ -142,8 +179,8 @@ export function paragraphAttributes(
   const style = styleAttr([
     ['text-align', props.align && props.align !== 'left' ? props.align : undefined],
     ['line-height', lineHeight],
-    ['margin-top', ptOrNone(differs('spacingBeforePt'))],
-    ['margin-bottom', ptOrNone(differs('spacingAfterPt'))],
+    ['margin-top', spacing('spacingBeforePt')],
+    ['margin-bottom', spacing('spacingAfterPt')],
     ['margin-left', ptOrNone(differs('indentLeftPt'))],
     ['margin-right', ptOrNone(differs('indentRightPt'))],
     ['text-indent', ptOrNone(differs('indentFirstLinePt'))],
@@ -151,6 +188,14 @@ export function paragraphAttributes(
       `border-${border.side}`,
       borderCss(border),
     ]),
+    // `w:space` des bordures (`BlockBorder.spacePt`), juste après les `border-*`, dans le
+    // même ordre de côtés, seulement pour les côtés bordés qui le précisent.
+    ...sides
+      .filter((border) => border.spacePt !== undefined)
+      .map((border): readonly [string, string] => [
+        `padding-${border.side}`,
+        pt(border.spacePt ?? 0),
+      ]),
     ['background-color', differs('shading')],
   ]);
 
@@ -163,9 +208,9 @@ export function paragraphAttributes(
   return attrs.join('');
 }
 
-/** Vrai si le HTML inline n'a ni texte, ni image, ni saut, ni appel de note. */
+/** Vrai si le HTML inline n'a ni texte, ni image, ni saut, ni tabulation, ni appel de note. */
 function isEmptyInline(inline: string): boolean {
-  if (/<(?:img|br|hr|sup)\b/.test(inline)) return false;
+  if (/<(?:img|br|hr|sup)\b|<span data-tab\b/.test(inline)) return false;
   return /^[ \t\r\n]*$/.test(inline.replace(/<[^>]*>/g, ''));
 }
 
@@ -176,11 +221,13 @@ export async function convertParagraph(
 ): Promise<ParagraphBlock> {
   const pPr = childNamed(paragraph, 'pPr');
   const defaults = docDefaultsOf(ctx.styles);
-  const resolved = applyTableStyle(ctx.styles.paragraph(pPr), ctx, defaults);
+  const resolved = applyTableStyle(ctx.styles.paragraph(pPr), ctx.tableStyle, defaults);
   const { props, fromList } = applyListIndent(resolved, pPr, ctx);
   const inline = await convertRuns(paragraph, ctx, props);
   const tag = props.headingLevel ? `h${String(props.headingLevel)}` : 'p';
-  const attrs = paragraphAttributes(props, defaults.paragraph, fromList);
+  // Le style de tableau se résout contre les `docDefaults` seuls ; l'émission, contre la
+  // base qui porte `layout.defaultParagraph` (R53-01).
+  const attrs = paragraphAttributes(props, paragraphBaseOf(ctx.styles), fromList);
   const wrap = (content: string): string => `<${tag}${attrs}>${content}</${tag}>`;
 
   const pieces = inline.split(PAGE_BREAK);

@@ -1,6 +1,6 @@
 {
   "name": "@aster-editor/word",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "description": "Import .docx et nettoyage du collage depuis Word et Google Docs pour Aster Editor",
   "license": "MIT",
   "author": "Joris Tremoulet",
@@ -42,7 +42,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -54,7 +54,7 @@
     "jszip": "^3.10.2"
   },
   "peerDependencies": {
-    "@aster-editor/core": "^0.5.0",
+    "@aster-editor/core": "^0.7.0",
     "@tiptap/core": "^3.31.4"
   }
 }

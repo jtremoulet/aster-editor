@@ -1,6 +1,6 @@
 import type { AsterEditor } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { createPlainButton, setDisabled } from './button';
+import type { ToolbarWidget } from '../types.js';
+import { createPlainButton, setDisabled } from './button.js';
 import {
   INDENT_STEP_PT,
   MAX_PARAGRAPH_PT,
@@ -8,8 +8,8 @@ import {
   currentBlockLayout,
   readNumber,
   setBlockLayout,
-} from './paragraph-layout';
-import { applyTooltip } from './tooltip';
+} from './paragraph-layout.js';
+import { applyTooltip } from './tooltip.js';
 
 /** Sens d'un bouton de retrait. */
 export type IndentDirection = 'increase' | 'decrease';

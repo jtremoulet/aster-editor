@@ -1,5 +1,5 @@
-import type { AsterEditor, AsterOptions } from '../api';
-import { AsterEditorImpl } from './aster-editor';
+import type { AsterEditor, AsterOptions } from '../api/index.js';
+import { AsterEditorImpl } from './aster-editor.js';
 
 /**
  * Crée un éditeur Aster monté dans `options.element`. Fabrique plutôt que classe

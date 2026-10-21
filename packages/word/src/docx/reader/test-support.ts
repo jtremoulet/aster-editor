@@ -1,6 +1,6 @@
-import { W_NS } from '../preprocess/minimal-docx';
-import { childNamed } from '../preprocess/xml-utils';
-import { relsPathOf, resolveTarget } from './package';
+import { W_NS } from '../preprocess/minimal-docx.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import { relsPathOf, resolveTarget } from './package.js';
 import type {
   Block,
   BlockConverters,
@@ -10,7 +10,7 @@ import type {
   Relationship,
   StyleResolver,
   TableBlock,
-} from './types';
+} from './types.js';
 
 /**
  * Harnais des specs du lecteur (L24) : paquet en mémoire à partir de chaînes XML,

@@ -5,7 +5,7 @@ import {
   selectFirstBlock,
   selectRange,
   type MountedEditor,
-} from '../testing/mount';
+} from '../testing/mount.js';
 
 describe('commandes de liens et d’images', () => {
   let mounted: MountedEditor;
@@ -127,6 +127,31 @@ describe('commandes de liens et d’images', () => {
       const html = mounted.editor.getHTML();
       expect(html).toContain('alt="Nouveau"');
       expect(html).toContain('data-align="center"');
+    });
+
+    it('image.setAttributes applique height (L45b) ; une largeur seule l’efface, 0 aussi', () => {
+      mounted.editor.setHTML('<p>a</p><img src="https://example.com/a.png">');
+      mounted.editor.tiptap.commands.setNodeSelection(findNodePos(mounted.editor, 'image'));
+      expect(
+        mounted.editor.commands.run('image.setAttributes', { width: 200, height: 120.4 }),
+      ).toBe(true);
+      expect(mounted.editor.getHTML()).toContain('width="200" height="120"');
+      // Hauteur seule : la largeur reste.
+      expect(mounted.editor.commands.run('image.setAttributes', { height: 80 })).toBe(true);
+      expect(mounted.editor.getHTML()).toContain('width="200" height="80"');
+      // Largeur seule : la hauteur est effacée, l'image reprend son ratio.
+      expect(mounted.editor.commands.run('image.setAttributes', { width: 150 })).toBe(true);
+      expect(mounted.editor.getHTML()).toContain('width="150"');
+      expect(mounted.editor.getHTML()).not.toContain('height=');
+      // Hauteur nulle : effacée sans toucher à la largeur.
+      mounted.editor.commands.run('image.setAttributes', { height: 60 });
+      expect(mounted.editor.commands.run('image.setAttributes', { height: 0 })).toBe(true);
+      expect(mounted.editor.getHTML()).toContain('width="150"');
+      expect(mounted.editor.getHTML()).not.toContain('height=');
+      // Hauteur non finie : ignorée, la commande n'a rien à écrire.
+      expect(mounted.editor.commands.run('image.setAttributes', { height: Number.NaN })).toBe(
+        false,
+      );
     });
 
     it('image.upload refuse un fichier non-image', () => {

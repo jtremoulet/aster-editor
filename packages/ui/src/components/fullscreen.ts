@@ -1,9 +1,9 @@
 import type { AsterEditor, Unsubscribe } from '@aster-editor/core';
-import { getIcon } from '../icons';
-import type { ToolbarWidget } from '../types';
-import { el, setIcon } from '../utils/dom';
-import { createPlainButton } from './button';
-import { applyTooltip } from './tooltip';
+import { getIcon } from '../icons/index.js';
+import type { ToolbarWidget } from '../types.js';
+import { el, setIcon } from '../utils/dom.js';
+import { createPlainButton } from './button.js';
+import { applyTooltip } from './tooltip.js';
 
 /** Classe posée sur la racine `.aster` en plein écran. */
 export const FULLSCREEN_CLASS = 'aster--fullscreen';

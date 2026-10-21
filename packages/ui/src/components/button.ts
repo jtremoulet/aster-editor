@@ -1,8 +1,8 @@
 import type { AsterEditor, ToolbarButtonItem } from '@aster-editor/core';
-import { getIcon, hasIcon, iconNameForCommand } from '../icons';
-import type { ToolbarWidget } from '../types';
-import { el, setIcon } from '../utils/dom';
-import { applyTooltip } from './tooltip';
+import { getIcon, hasIcon, iconNameForCommand } from '../icons/index.js';
+import type { ToolbarWidget } from '../types.js';
+import { el, setIcon } from '../utils/dom.js';
+import { applyTooltip } from './tooltip.js';
 
 /** Classe de base des boutons de toolbar, partagée par les dropdowns pour le style. */
 export const BUTTON_CLASS = 'aster-toolbar__button';

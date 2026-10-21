@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import type { ListLevelDeclaration } from '../types';
-import { parseListFormats, rebuildLists } from './rebuild-lists';
+import { runPass } from '../../testing/html-compare.js';
+import type { ListLevelDeclaration } from '../types.js';
+import { parseListFormats, rebuildLists } from './rebuild-lists.js';
 
 /** Durée d'exécution d'une fonction synchrone, en millisecondes. */
 const ms = (fn: () => unknown): number => {

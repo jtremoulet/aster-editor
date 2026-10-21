@@ -1,4 +1,4 @@
-import { toVariableName } from './names';
+import { toVariableName } from './names.js';
 import {
   allNamed,
   childNamed,
@@ -9,7 +9,7 @@ import {
   wordAttribute,
   type CollectedVariable,
   type PartCollector,
-} from './xml-utils';
+} from './xml-utils.js';
 
 /**
  * Champs de fusion Word → runs `{{nom}}`. Deux formes existent dans le XML : le champ
@@ -31,13 +31,17 @@ const KEEP_WHEN_REMOVING: ReadonlySet<string> = new Set([
 ]);
 
 /** Nom de variable d'un `MERGEFIELD`, avec le nom brut de l'instruction. */
-interface MergeField {
+export interface MergeField {
   readonly name: string;
   readonly raw: string;
 }
 
-/** Lit l'instruction : nom brut et nom de variable. `null` pour toute autre instruction. */
-function parseMergeField(instruction: string): MergeField | null {
+/**
+ * Lit l'instruction : nom brut et nom de variable. `null` pour toute autre instruction.
+ * Partagé avec le comparateur (`compare/model-paragraph.ts`), qui modélise les champs
+ * par leur nom brut (R30-04) : une seule lecture de `MERGEFIELD` dans le paquet.
+ */
+export function parseMergeField(instruction: string): MergeField | null {
   const match = MERGEFIELD_INSTR.exec(instruction);
   if (!match) return null;
   const raw = (match[1] ?? match[2] ?? '').trim();

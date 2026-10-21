@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { Dropdown } from './dropdown';
-import { FONT_FAMILIES, FONT_SIZES, createFontFamilyMenu, createFontSizeMenu } from './font-menu';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { Dropdown } from './dropdown.js';
+import {
+  FONT_FAMILIES,
+  FONT_SIZES,
+  createFontFamilyMenu,
+  createFontSizeMenu,
+} from './font-menu.js';
 
 describe('font menus', () => {
   let editor: MockEditor;

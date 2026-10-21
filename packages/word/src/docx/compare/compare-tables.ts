@@ -4,15 +4,17 @@ import {
   recordWithin,
   WIDTH_TOLERANCE_PT,
   type CompareContext,
-} from './compare-context';
-import type { BlockModel, CellModel, TableModel } from './model';
-import { fmt } from './values';
+} from './compare-context.js';
+import type { BlockModel, CellModel, TableModel } from './model.js';
+import { fmt } from './values.js';
 
 /**
- * Comparaison d'un tableau et de ses cellules : dimensions, style, largeur, alignement,
- * bordures extérieures effectives, largeurs de colonnes (±0,5 pt), fusions, puis chaque
- * cellule (bordures effectives, fond, largeur ±0,5 pt, alignement vertical) et ses blocs,
- * comparés par le comparateur de blocs injecté pour ne pas créer de cycle d'imports.
+ * Comparaison d'un tableau et de ses cellules : dimensions, style, largeur, alignement
+ * (`w:jc`), drapeaux conditionnels (`w:tblLook`, quand le style en fait usage), bordures
+ * extérieures effectives, largeurs de colonnes (±0,5 pt), fusions, puis chaque cellule
+ * (bordures effectives, fond, largeur ±0,5 pt, alignement vertical, formats conditionnels
+ * résolus dans ces valeurs comme le lecteur) et ses blocs, comparés par le comparateur de
+ * blocs injecté pour ne pas créer de cycle d'imports.
  */
 
 /** Comparateur de blocs injecté par `compare-blocks.ts`. */
@@ -106,6 +108,8 @@ export function compareTable(
   recordIfAny(ctx, 'table', 'table.style', where, a.styleId, b?.styleId, present);
   recordIfAny(ctx, 'table', 'table.width', where, a.width, b?.width, present);
   recordIfAny(ctx, 'table', 'table.align', where, a.align, b?.align, present);
+  // Drapeaux `w:tblLook` effectifs, seulement quand le style définit des formats conditionnels.
+  recordIfAny(ctx, 'table', 'table.conditional', where, a.conditional, b?.conditional, present);
   recordIfAny(ctx, 'table', 'table.borders', where, a.borders, b?.borders, present);
   recordWithin(
     ctx,

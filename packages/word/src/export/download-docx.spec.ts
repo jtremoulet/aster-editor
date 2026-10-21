@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { downloadDocx, normalizeDocxFilename } from './download-docx';
+import { downloadDocx, normalizeDocxFilename } from './download-docx.js';
 
 describe('normalizeDocxFilename', () => {
   it('garantit l’extension .docx et un nom par défaut', () => {

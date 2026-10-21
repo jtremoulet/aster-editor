@@ -1,9 +1,9 @@
 import type { AsterEditor } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { clear, el, enabledElements, rovingIndexFor } from '../utils/dom';
-import { resolveIcon } from './button';
-import { createMenuItem } from './dropdown';
-import { TABLE_ACTIONS } from './table-grid-picker';
+import type { ToolbarWidget } from '../types.js';
+import { clear, el, enabledElements, rovingIndexFor } from '../utils/dom.js';
+import { resolveIcon } from './button.js';
+import { createMenuItem } from './dropdown.js';
+import { TABLE_ACTIONS } from './table-grid-picker.js';
 
 /** Menu contextuel de table monté sur un éditeur. */
 export interface TableContextMenu extends ToolbarWidget {

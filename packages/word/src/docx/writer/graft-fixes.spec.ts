@@ -1,10 +1,10 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from '../../export/export-docx';
-import type { DocxExportWarning } from '../../export/types';
-import { resolveVariableSettings } from '../../export/variables';
-import { graftIntoTemplate } from './graft';
-import { openTemplate } from './template';
+import { exportDocx } from '../../export/export-docx.js';
+import type { DocxExportWarning } from '../../export/types.js';
+import { resolveVariableSettings } from '../../export/variables.js';
+import { graftIntoTemplate } from './graft.js';
+import { openTemplate } from './template.js';
 import {
   alterTemplate,
   bodyOf,
@@ -16,8 +16,8 @@ import {
   normalizeXml,
   partsOf,
   textOf,
-} from './testing';
-import { defaultXmlCodec, type XmlCodec } from './xml-io';
+} from './testing.js';
+import { defaultXmlCodec, type XmlCodec } from './xml-io.js';
 
 /**
  * Correctifs de la relecture R27 (lot F27), paquet : taille de la partie principale,

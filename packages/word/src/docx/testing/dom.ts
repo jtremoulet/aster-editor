@@ -1,5 +1,5 @@
-import type { PostprocessContext, PostprocessPass } from '../postprocess/types';
-import type { DocxImportWarning } from '../types';
+import type { PostprocessContext, PostprocessPass } from '../postprocess/types.js';
+import type { DocxImportWarning } from '../types.js';
 
 /** Parse un fragment HTML dans un `Document` jsdom isolé, sans toucher au `document` global. */
 export function parseFragment(html: string): Document {

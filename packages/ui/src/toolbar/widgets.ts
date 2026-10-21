@@ -1,26 +1,26 @@
 import type { AsterEditor } from '@aster-editor/core';
-import { createCapsMenu } from '../components/caps';
-import { createColorPicker } from '../components/color-picker';
-import { createFontFamilyMenu, createFontSizeMenu } from '../components/font-menu';
-import { createFormatPainterButton } from '../components/format-painter-button';
-import { createFullscreenButton } from '../components/fullscreen';
-import { createHeadingMenu } from '../components/heading-menu';
-import { createImageDialog } from '../components/image-dialog';
-import { createLineSpacingMenu } from '../components/line-spacing';
-import { createLinkDialog } from '../components/link-dialog';
-import { createOutlinePanel } from '../components/outline-panel';
-import { createPageLayoutDialog } from '../components/page-layout-dialog';
-import { createParagraphBordersDialog } from '../components/paragraph-borders-dialog';
-import { createIndentButton } from '../components/paragraph-indent';
-import { createParagraphSpacingDialog } from '../components/paragraph-spacing-dialog';
-import { createPrintButton } from '../components/print';
-import { createSearchPanel } from '../components/search-panel';
-import { createSourceButton } from '../components/source-view';
-import { createSpecialChars } from '../components/special-chars';
-import { createTableGridPicker } from '../components/table-grid-picker';
-import { createUnderlineStyleMenu } from '../components/underline-style';
-import { createVariableMenu } from '../components/variable-menu';
-import type { ToolbarWidget, WidgetFactory } from '../types';
+import { createCapsMenu } from '../components/caps.js';
+import { createColorPicker } from '../components/color-picker.js';
+import { createFontFamilyMenu, createFontSizeMenu } from '../components/font-menu.js';
+import { createFormatPainterButton } from '../components/format-painter-button.js';
+import { createFullscreenButton } from '../components/fullscreen.js';
+import { createHeadingMenu } from '../components/heading-menu.js';
+import { createImageDialog } from '../components/image-dialog.js';
+import { createLineSpacingMenu } from '../components/line-spacing.js';
+import { createLinkDialog } from '../components/link-dialog.js';
+import { createOutlinePanel } from '../components/outline-panel.js';
+import { createPageLayoutDialog } from '../components/page-layout-dialog.js';
+import { createParagraphBordersDialog } from '../components/paragraph-borders-dialog.js';
+import { createIndentButton } from '../components/paragraph-indent.js';
+import { createParagraphSpacingDialog } from '../components/paragraph-spacing-dialog.js';
+import { createPrintButton } from '../components/print.js';
+import { createSearchPanel } from '../components/search-panel.js';
+import { createSourceButton } from '../components/source-view.js';
+import { createSpecialChars } from '../components/special-chars.js';
+import { createTableGridPicker } from '../components/table-grid-picker.js';
+import { createUnderlineStyleMenu } from '../components/underline-style.js';
+import { createVariableMenu } from '../components/variable-menu.js';
+import type { ToolbarWidget, WidgetFactory } from '../types.js';
 
 /** Un widget connu : sa fabrique et les commandes dont il a besoin pour exister. */
 interface WidgetDefinition {

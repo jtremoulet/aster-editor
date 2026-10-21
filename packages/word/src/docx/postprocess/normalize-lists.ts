@@ -1,5 +1,5 @@
-import { hasTag, isElement, wrapInlineChildren } from './dom-utils';
-import type { PostprocessPass } from './types';
+import { hasTag, isElement, wrapInlineChildren } from './dom-utils.js';
+import type { PostprocessPass } from './types.js';
 
 /** Blocs autorisés directement dans un `<li>` par le schéma Tiptap. */
 const LI_BLOCK_TAGS: readonly string[] = [

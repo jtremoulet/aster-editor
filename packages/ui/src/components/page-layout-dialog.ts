@@ -8,13 +8,15 @@ import type {
   PageSizeName,
   PageViewOptions,
   PaginatedPageViewOptions,
+  SectionLayout,
 } from '@aster-editor/core';
+import type { EditorState } from '@tiptap/pm/state';
 import { PAGE_SIZES_MM, getActivePageView, isPaginationEnabled } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { isRecord } from '../utils/guards';
-import { createPlainButton } from './button';
-import { createDropdown, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
+import { createPlainButton } from './button.js';
+import { createDropdown, type Dropdown } from './dropdown.js';
 import {
   createAlert,
   createCheckbox,
@@ -24,7 +26,8 @@ import {
   isOutOfRange,
   parseNumberInput,
   submitOnEnter,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
+import { createHeaderFooterSection } from './page-layout-headers.js';
 
 /** Classe posée par le core sur l'hôte (`editor.element`) quand la vue page est active. */
 export const PAGE_VIEW_CLASS = 'aster--page-view';
@@ -57,9 +60,9 @@ const MARGIN_FIELDS: readonly {
 ];
 
 /**
- * Méthodes de vue page de l'éditeur, **hors contrat** : annoncées par L23 sur `AsterEditor`
- * interne (`setPageView`, `getLayout`), absentes de `api/`. Le widget les détecte à
- * l'exécution et se désactive si le core ne les expose pas.
+ * Méthodes de vue page de l'éditeur, au contrat depuis la session 4 (L45b) mais
+ * **optionnelles** sur `AsterEditor` (`setPageView?`, `getLayout?`) : le widget les détecte
+ * à l'exécution et se désactive si l'éditeur fourni ne les expose pas (mock, double).
  */
 export interface PageViewApi {
   setPageView(options: PageViewOptions | false): void;
@@ -144,8 +147,8 @@ export interface ResolvedPageSetup {
     PageMargins;
 }
 
-/** Résout `layout.page` avec les défauts d'Aster (A4, portrait, 25,4 mm). */
-export function resolvePageSetup(layout: DocumentLayout | null): ResolvedPageSetup {
+/** Résout `layout.page` (document ou section) avec les défauts d'Aster (A4, portrait, 25,4 mm). */
+export function resolvePageSetup(layout: DocumentLayout | SectionLayout | null): ResolvedPageSetup {
   const page = layout?.page;
   const size = page?.size;
   const margins = page?.margins ?? {};
@@ -162,6 +165,180 @@ export function resolvePageSetup(layout: DocumentLayout | null): ResolvedPageSet
   };
 }
 
+/** Section du curseur (1-based) et nombre de sections du document (session 4, L44). */
+export interface SectionPosition {
+  readonly index: number;
+  readonly count: number;
+  /** Vrai si la sélection s'étend sur plusieurs sections (R44-06) ; absent sinon. */
+  readonly mixed?: boolean;
+}
+
+/** Document d'une seule section : le comportement d'avant les sections. */
+const SINGLE_SECTION: SectionPosition = { index: 1, count: 1 };
+
+/** Nom du nœud de saut de section du core (`<hr data-section-break="n">`). */
+const SECTION_BREAK_NODE_NAME = 'sectionBreak';
+
+/** Ce que `sectionOfSelection` lit d'une position résolue : sa profondeur et son index de premier niveau. */
+interface TopLevelPos {
+  readonly depth: number;
+  index(depth?: number): number;
+}
+
+/**
+ * Index du bloc de premier niveau qui contient une position résolue. À la profondeur 0
+ * (entre deux blocs : fin d'une sélection de nœud, sélection totale), `index(0)` désigne
+ * le bloc **suivant** : pour une borne haute (`$to`, `$head` d'une sélection de nœud),
+ * on prend le bloc qui précède, celui que la sélection couvre réellement.
+ */
+function topLevelIndex($pos: TopLevelPos, end: boolean): number {
+  const index = $pos.index(0);
+  return end && $pos.depth === 0 ? Math.max(index - 1, 0) : index;
+}
+
+/**
+ * Section du curseur et nombre de sections, comptés sur les nœuds `sectionBreak` de
+ * premier niveau du document (numérotation positionnelle, comme `getSections` du core) :
+ * la section d'un bloc est le nombre de sauts avant lui, plus un ; un curseur sur un
+ * saut appartient à la section qui s'y termine. La section affichée est celle de la
+ * **tête** de la sélection (`$head`, le point d'insertion, comme Word, R44-06), et
+ * `mixed` signale une sélection dont les deux bornes ne sont pas dans la même section.
+ * Sans état Tiptap (mock) ni saut : une seule section.
+ */
+export function sectionOfSelection(editor: AsterEditor): SectionPosition {
+  const state: EditorState | undefined = editor.tiptap.state;
+  if (!state) return SINGLE_SECTION;
+  const { selection } = state;
+  const breaks: number[] = [];
+  state.doc.forEach((node, _offset, index) => {
+    if (node.type.name === SECTION_BREAK_NODE_NAME) breaks.push(index);
+  });
+  if (breaks.length === 0) return SINGLE_SECTION;
+  const sectionAt = (blockIndex: number): number =>
+    breaks.filter((index) => index < blockIndex).length + 1;
+  // Une sélection de nœud a sa tête après le nœud : c'est le nœud lui-même qui compte.
+  const headIsEnd = selection.$head.pos === selection.$to.pos;
+  const index = sectionAt(topLevelIndex(selection.$head, headIsEnd));
+  const mixed =
+    sectionAt(topLevelIndex(selection.$from, false)) !==
+    sectionAt(topLevelIndex(selection.$to, true));
+  const count = breaks.length + 1;
+  return mixed ? { index, count, mixed } : { index, count };
+}
+
+/** Champs de premier niveau d'une mise en page, comme section de repli (`resolveSectionLayout` du core). */
+function topLevelSection(layout: DocumentLayout | null): SectionLayout {
+  const section: { -readonly [K in keyof SectionLayout]: SectionLayout[K] } = {};
+  if (layout?.page !== undefined) section.page = layout.page;
+  if (layout?.columns !== undefined) section.columns = layout.columns;
+  if (layout?.headers !== undefined) section.headers = layout.headers;
+  if (layout?.footers !== undefined) section.footers = layout.footers;
+  if (layout?.titlePage !== undefined) section.titlePage = layout.titlePage;
+  return section;
+}
+
+/** Sections déclarées par la mise en page, ou aucune (`sections` absent ou pas un tableau). */
+function knownSections(layout: DocumentLayout | null): readonly SectionLayout[] {
+  const sections: unknown = layout?.sections;
+  return Array.isArray(sections) ? (sections as readonly SectionLayout[]) : [];
+}
+
+/**
+ * Les `count` sections d'une mise en page, dans l'ordre : `layout.sections` complété, au
+ * besoin, par les champs de premier niveau (la seule section d'un document sans
+ * `sections`, la copie de la dernière sinon), pour qu'un document dont le corps a plus
+ * de sauts que la mise en page ne décale rien. Une entrée qui n'est pas un objet compte
+ * pour le premier niveau, comme `resolveSectionLayout` du core.
+ */
+export function sectionsOf(layout: DocumentLayout | null, count: number): SectionLayout[] {
+  const known = knownSections(layout);
+  const fallback = topLevelSection(layout);
+  return Array.from({ length: count }, (_, position) => {
+    const section: unknown = known[position];
+    return isRecord(section) ? (section as SectionLayout) : fallback;
+  });
+}
+
+/** Champs de section recopiés de la dernière entrée de `sections` au premier niveau (contrat). */
+const SECTION_FIELDS = ['page', 'columns', 'headers', 'footers', 'titlePage'] as const;
+
+/** Mise en page dont les champs de premier niveau sont la copie de `last` (invariant du contrat). */
+function withLastSection(base: DocumentLayout, last: SectionLayout): DocumentLayout {
+  const next: { -readonly [K in keyof DocumentLayout]: DocumentLayout[K] } = { ...base };
+  for (const field of SECTION_FIELDS) {
+    const value = last[field];
+    if (value === undefined) {
+      delete next[field];
+    } else {
+      Object.assign(next, { [field]: value });
+    }
+  }
+  return next;
+}
+
+/**
+ * Champs d'une section à remplacer : une clé **présente à `undefined`** retire le champ
+ * (en-tête vidé, « Première page différente » décochée), une clé absente le conserve.
+ */
+export type SectionLayoutPatch = {
+  readonly [K in keyof SectionLayout]?: SectionLayout[K] | undefined;
+};
+
+/** Copie de `target` avec les champs de `patch` posés, ou retirés quand ils valent `undefined`. */
+function patched<T extends SectionLayout | DocumentLayout>(
+  target: T,
+  patch: SectionLayoutPatch,
+): T {
+  const next: { -readonly [K in keyof SectionLayout]?: SectionLayout[K] } & T = { ...target };
+  for (const [field, value] of Object.entries(patch) as [keyof SectionLayout, unknown][]) {
+    if (value === undefined) {
+      delete next[field];
+    } else {
+      Object.assign(next, { [field]: value });
+    }
+  }
+  return next;
+}
+
+/**
+ * Mise en page avec les champs de la section `position.index` remplacés (L54 : page,
+ * en-têtes, pieds, `titlePage`). `sections` n'est **jamais tronqué** (R44-02) : il garde
+ * toutes les sections déclarées, complétées jusqu'à `position.count` par le premier
+ * niveau ; quand la section éditée est la dernière du corps, la dernière entrée de
+ * `sections` est recopiée dans `page`, `columns`, `headers`, `footers` et `titlePage`
+ * (invariant du contrat `DocumentLayout.sections`). Avec une seule section et
+ * `layout.sections` présent (sauts supprimés, mise en page conservée), c'est `sections[0]`
+ * qui est éditée, comme l'hôte la rend (R44-03) ; sans `sections`, seuls les champs du
+ * premier niveau changent, comme avant.
+ */
+export function withSectionLayout(
+  layout: DocumentLayout | null,
+  position: SectionPosition,
+  patch: SectionLayoutPatch,
+): DocumentLayout {
+  const base: DocumentLayout = layout ?? {};
+  const known = knownSections(layout);
+  if (position.count <= 1 && known.length === 0) {
+    return patched(base, patch);
+  }
+  const count = Math.max(position.count, known.length);
+  const sections = sectionsOf(layout, count).map((section, index) =>
+    index === position.index - 1 ? patched(section, patch) : section,
+  );
+  const next: DocumentLayout = { ...base, sections };
+  const last = sections[sections.length - 1];
+  return position.index === position.count && last ? withLastSection(next, last) : next;
+}
+
+/** Mise en page avec la page de la section `position.index` remplacée (voir `withSectionLayout`). */
+export function withSectionPage(
+  layout: DocumentLayout | null,
+  position: SectionPosition,
+  page: PageSetup,
+): DocumentLayout {
+  return withSectionLayout(layout, position, { page });
+}
+
 /**
  * Widget `pageLayout` : dialogue « Mise en page » (format A4 / A3 / A5 / Letter / Legal,
  * orientation, marges en mm, case « Vue page »), prérempli depuis `editor.getLayout()`.
@@ -169,6 +346,16 @@ export function resolvePageSetup(layout: DocumentLayout | null): ResolvedPageSet
  * de la mise en page conservé (en-têtes, pieds, police…), ou `setPageView(false)` si la
  * case est décochée. Désactivé si le core n'expose pas ces méthodes ou en lecture seule ;
  * le déclencheur est « enfoncé » quand la vue page est active.
+ *
+ * Sections (session 4, L44) : dans un document à sauts de section, le dialogue affiche
+ * « Section n sur N » (section de la tête de sélection ; une sélection à cheval sur
+ * plusieurs sections est signalée, R44-06), préremplit la page de cette section et
+ * n'applique qu'elle (`layout.sections[n - 1].page`), les autres sections étant
+ * conservées, jamais tronquées (R44-02).
+ *
+ * En-têtes et pieds (session 5, L54) : la section « En-tête et pied » édite les jeux
+ * `headers` / `footers` et `titlePage` de la même section (`page-layout-headers.ts`) ;
+ * un champ vidé retire le type, un jeu sans type est retiré de la section.
  */
 export function createPageLayoutDialog(editor: AsterEditor): ToolbarWidget {
   return createDropdown({
@@ -187,10 +374,24 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   const t = (key: string): string => editor.i18n.t(key);
   const api = pageViewApiOf(editor);
   const layout = api?.getLayout() ?? null;
-  const current = resolvePageSetup(layout);
+  // Section de la tête de sélection (L44) : sa page est éditée. Sans saut, c'est la
+  // section 1, résolue comme l'hôte la rend (`sections[0]` quand il existe, R44-03).
+  const position = sectionOfSelection(editor);
+  const section = sectionsOf(layout, position.count)[position.index - 1] ?? {};
+  const current = resolvePageSetup(section);
   const suffix = fieldSuffix();
   panel.setAttribute('aria-label', t('ui.pageLayout.title'));
   const alert = createAlert();
+  const sectionNote =
+    position.count > 1
+      ? el('p', {
+          className: 'aster-page-layout__section',
+          text: editor.i18n.t(
+            position.mixed ? 'ui.pageLayout.sectionMixed' : 'ui.pageLayout.section',
+            { index: position.index, count: position.count },
+          ),
+        })
+      : null;
 
   // Format : les formats nommés, plus « Personnalisé » (dimensions libres) seulement si le
   // document en utilise un, conservé tel quel à l'application.
@@ -299,6 +500,9 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
     ),
   );
 
+  // En-têtes et pieds de la section (L54) : champs riches minimaux, lus à l'application.
+  const headerFooter = createHeaderFooterSection({ section, suffix, t });
+
   const enabled = createCheckbox(
     t('ui.pageLayout.enabled'),
     isPageViewActive(editor),
@@ -342,9 +546,13 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
       orientation: selectedOrientation(),
       margins: { ...current.margins, ...margins },
     };
+    // Un jeu ou `titlePage` absent des valeurs lues est **retiré** de la section (clé à
+    // `undefined` dans le correctif) : en-tête vidé = en-tête retiré.
+    const { headers, footers, titlePage } = headerFooter.read();
+    const next = withSectionLayout(layout, position, { page, headers, footers, titlePage });
     const options: PaginatedPageViewOptions = pagination.input.checked
-      ? { layout: { ...(layout ?? {}), page } }
-      : { layout: { ...(layout ?? {}), page }, pagination: false };
+      ? { layout: next }
+      : { layout: next, pagination: false };
     api.setPageView(options);
     dropdown.close(false);
     dropdown.update();
@@ -372,10 +580,12 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   });
   cancel.addEventListener('click', () => dropdown.close(true));
 
+  if (sectionNote) panel.append(sectionNote);
   panel.append(
     sizeField,
     orientationGroup,
     marginsGroup,
+    headerFooter.element,
     alert,
     el('div', { className: 'aster-dialog__field' }, [enabled.wrapper, pagination.wrapper]),
     el('div', { className: 'aster-dialog__actions' }, [cancel, ok]),

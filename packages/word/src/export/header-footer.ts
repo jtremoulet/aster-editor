@@ -1,16 +1,16 @@
 import type { HeaderFooterSet } from '@aster-editor/core';
 import type { Footer, Header, Paragraph, Table } from 'docx';
-import type { HtmlParser } from '../docx/types';
-import { convertChildren, type BlockScope } from './blocks';
-import type { ExportContext } from './context';
-import type { ParagraphAlignment } from './css';
-import { parseFragment, resolveParser } from './dom';
+import type { HtmlParser } from '../docx/types.js';
+import { convertChildren, type BlockScope } from './blocks.js';
+import type { ExportContext } from './context.js';
+import type { ParagraphAlignment } from './css.js';
+import { parseFragment, resolveParser } from './dom.js';
 import type {
   DocxExportOptions,
   DocxFooterOptions,
   DocxHeaderAlign,
   DocxHeaderOptions,
-} from './types';
+} from './types.js';
 
 /** Échappe un texte brut pour le passer au convertisseur HTML. */
 function escapeHtml(text: string): string {
@@ -118,15 +118,15 @@ function layoutOption(
 }
 
 /**
- * En-têtes de la section : `options.header` pour les pages courantes (il prime), sinon
- * `layout.headers.default` ; `first` et `even` viennent du `layout` seul (contrat
- * `HeaderFooterSet`, en général lu par l'import). Vide si rien n'est demandé.
+ * En-têtes de la dernière section : `options.header` pour les pages courantes (il prime),
+ * sinon `sets.default` (`layout.headers` par défaut) ; `first` et `even` viennent du jeu
+ * seul (contrat `HeaderFooterSet`, en général lu par l'import). Vide si rien n'est demandé.
  */
 export async function buildHeaders(
   options: DocxExportOptions,
   ctx: ExportContext,
+  sets: HeaderFooterSet | undefined = options.layout?.headers,
 ): Promise<HeaderFooterGroup<Header>> {
-  const sets = options.layout?.headers;
   const group: { -readonly [K in keyof HeaderFooterGroup<Header>]: Header | undefined } = {
     default: await buildHeader(options.header ?? layoutOption(sets, 'default'), ctx, options.parse),
     first: await buildHeader(layoutOption(sets, 'first'), ctx, options.parse),
@@ -135,16 +135,51 @@ export async function buildHeaders(
   return compact(group);
 }
 
-/** Pieds de la section, mêmes règles que `buildHeaders` (numérotation via `options.footer`). */
+/** Pieds de la dernière section, mêmes règles que `buildHeaders` (numérotation via `options.footer`). */
 export async function buildFooters(
   options: DocxExportOptions,
   ctx: ExportContext,
+  sets: HeaderFooterSet | undefined = options.layout?.footers,
 ): Promise<HeaderFooterGroup<Footer>> {
-  const sets = options.layout?.footers;
   const group: { -readonly [K in keyof HeaderFooterGroup<Footer>]: Footer | undefined } = {
     default: await buildFooter(options.footer ?? layoutOption(sets, 'default'), ctx, options.parse),
     first: await buildFooter(layoutOption(sets, 'first'), ctx, options.parse),
     even: await buildFooter(layoutOption(sets, 'even'), ctx, options.parse),
+  };
+  return compact(group);
+}
+
+/**
+ * En-têtes d'une section intermédiaire (`layout.sections[n].headers`) : le jeu du contrat,
+ * `options.header` en **repli** du type `default` quand la section n'en déclare pas
+ * (R43-03 : les options explicites portent sur tout le document, comme en 0.5, mais une
+ * section qui a son propre en-tête le garde).
+ */
+export async function buildSectionHeaders(
+  sets: HeaderFooterSet | undefined,
+  options: DocxExportOptions,
+  ctx: ExportContext,
+): Promise<HeaderFooterGroup<Header>> {
+  const { parse } = options;
+  const group: { -readonly [K in keyof HeaderFooterGroup<Header>]: Header | undefined } = {
+    default: await buildHeader(layoutOption(sets, 'default') ?? options.header, ctx, parse),
+    first: await buildHeader(layoutOption(sets, 'first'), ctx, parse),
+    even: await buildHeader(layoutOption(sets, 'even'), ctx, parse),
+  };
+  return compact(group);
+}
+
+/** Pieds d'une section intermédiaire (`layout.sections[n].footers`), `options.footer` en repli `default`. */
+export async function buildSectionFooters(
+  sets: HeaderFooterSet | undefined,
+  options: DocxExportOptions,
+  ctx: ExportContext,
+): Promise<HeaderFooterGroup<Footer>> {
+  const { parse } = options;
+  const group: { -readonly [K in keyof HeaderFooterGroup<Footer>]: Footer | undefined } = {
+    default: await buildFooter(layoutOption(sets, 'default') ?? options.footer, ctx, parse),
+    first: await buildFooter(layoutOption(sets, 'first'), ctx, parse),
+    even: await buildFooter(layoutOption(sets, 'even'), ctx, parse),
   };
   return compact(group);
 }

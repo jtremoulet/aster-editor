@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import type { AsterCommand, CommandRegistry, HeadingLevel } from '../api';
+import type { AsterCommand, CommandRegistry, HeadingLevel } from '../api/index.js';
 
 /** Liaison clavier → commande Aster, avec arguments fixes éventuels. */
 export interface ShortcutBinding {

@@ -1,8 +1,8 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { REL_TYPE, RelationshipTable, relativeTarget } from './relationships';
-import { PartStore, defaultXmlCodec } from './xml-io';
-import { ensureContentTypes, imageContentType } from './content-types';
+import { REL_TYPE, RelationshipTable, relativeTarget } from './relationships.js';
+import { PartStore, defaultXmlCodec } from './xml-io.js';
+import { ensureContentTypes, imageContentType } from './content-types.js';
 
 const RELS =
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +

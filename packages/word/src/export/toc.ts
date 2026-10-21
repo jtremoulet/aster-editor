@@ -1,8 +1,8 @@
 import type { FileChild } from 'docx';
-import type { ExportContext } from './context';
-import { sanitizeXmlText } from './sanitize';
-import { HEADING_LEVELS, STYLE_IDS } from './styles';
-import type { DocxTocOptions } from './types';
+import type { ExportContext } from './context.js';
+import { sanitizeXmlText } from './sanitize.js';
+import { HEADING_LEVELS, STYLE_IDS } from './styles.js';
+import type { DocxTocOptions } from './types.js';
 
 /** Profondeur de titres par défaut de la table des matières. */
 const DEFAULT_TOC_LEVELS = 3;

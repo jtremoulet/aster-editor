@@ -1,4 +1,4 @@
-import { round2 } from '../reader/units';
+import { round2 } from '../reader/units.js';
 
 /**
  * Normalisation des valeurs comparées par le rapport de fidélité : tout passe par une

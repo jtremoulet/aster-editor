@@ -3,9 +3,14 @@ import {
   SEARCH_OPEN_EVENT,
   getSearchStorage,
   type SearchOpenEventDetail,
-} from '../commands/search';
-import { mountEditor, selectRange, type MountedEditor } from '../testing/mount';
-import { SEARCH_CURRENT_CLASS, SEARCH_MATCH_CLASS, findMatches } from './search';
+} from '../commands/search.js';
+import { mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
+import {
+  SEARCH_CURRENT_CLASS,
+  SEARCH_MATCH_CLASS,
+  findMatches,
+  scrollCurrentIntoView,
+} from './search.js';
 
 const CONTENT = '<p>Le chat dort. Le Chat ronfle.</p><h2>chat perché</h2>';
 
@@ -109,6 +114,48 @@ describe('recherche / remplacement', () => {
       expect(tiptap().commands.nextMatch()).toBe(false);
       expect(tiptap().commands.previousMatch()).toBe(false);
       expect(tiptap().can().nextMatch()).toBe(false);
+    });
+
+    it('L52 (retour n° 5b) : la correspondance courante défile à l’écran même sans focus dans l’éditeur', () => {
+      // jsdom n'implémente pas `scrollIntoView` : on l'observe sur le prototype.
+      const scrolled: Element[] = [];
+      const spy = vi.fn(function (this: Element) {
+        scrolled.push(this);
+      });
+      Object.defineProperty(Element.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: spy,
+      });
+      try {
+        // Le focus est ailleurs (champ du bandeau) : ProseMirror n'écrit pas la sélection
+        // dans le DOM et ignore `tr.scrollIntoView()` ; le plugin fait défiler lui-même.
+        const input = document.createElement('input');
+        document.body.append(input);
+        input.focus();
+        expect(document.activeElement).toBe(input);
+        tiptap().commands.setSearchQuery('chat');
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenLastCalledWith({ block: 'center', inline: 'nearest' });
+        expect(scrolled[0]).toBe(current());
+        tiptap().commands.nextMatch();
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect(scrolled[1]).toBe(current());
+        expect(scrolled[1]).not.toBe(scrolled[0]);
+        tiptap().commands.previousMatch();
+        expect(spy).toHaveBeenCalledTimes(3);
+        tiptap().commands.replaceCurrent('chien');
+        expect(spy).toHaveBeenCalledTimes(4);
+        // Une frappe ailleurs recalcule les correspondances sans faire défiler.
+        tiptap().commands.insertContentAt(tiptap().state.doc.content.size - 1, ' x');
+        expect(spy).toHaveBeenCalledTimes(4);
+        tiptap().commands.replaceAll('chien');
+        tiptap().commands.clearSearch();
+        expect(spy).toHaveBeenCalledTimes(4);
+        expect(scrollCurrentIntoView).toBeTypeOf('function');
+        input.remove();
+      } finally {
+        Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+      }
     });
   });
 

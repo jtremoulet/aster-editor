@@ -1,5 +1,5 @@
-import type { AsterCommand } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 /**
  * Historique et sélection. `redo` déclare `Mod-Shift-z` ; le second raccourci

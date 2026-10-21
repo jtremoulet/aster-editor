@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { RED_PNG_DATA_URL } from '../../export/testing/sample';
+import { importDocx } from '../import-docx.js';
+import { RED_PNG_DATA_URL } from '../../export/testing/sample.js';
 import {
   alterTemplate,
   bodyOf,
@@ -15,7 +15,7 @@ import {
   partsOf,
   textOf,
   topLevelBlocks,
-} from './testing';
+} from './testing.js';
 
 /** GIF 1x1 en base64 : une seconde image, d'un autre format que le PNG des fixtures. */
 const GIF_DATA_URL =
@@ -34,6 +34,11 @@ function normalizeHtml(html: string): string {
 /** Blocs normalisés du corps d'un `document.xml`. */
 function blocksOf(xml: string): string[] {
   return topLevelBlocks(normalizeXml(bodyOf(xml)));
+}
+
+/** Tous les `w:sectPr` d'un `document.xml`, dans l'ordre, tels qu'écrits. */
+function allSectPrsOf(xml: string): string[] {
+  return xml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>|<w:sectPr\b[^>]*\/>/g) ?? [];
 }
 
 const STYLED_FIXTURES = [
@@ -187,7 +192,7 @@ describe('listes', () => {
     expect(numbering).toContain(`<w:num w:numId="${numId}">`);
     const again = await importStyled(result.buffer);
     expect(again.html).toContain('Nouvelle puce');
-    expect(again.html).toMatch(/<ol start="4" data-docx-num-id="\d+"><li><p[^>]*>Quatre<\/p>/);
+    expect(again.html).toMatch(/<ol data-docx-num-id="\d+" start="4"><li><p[^>]*>Quatre<\/p>/);
   });
 
   it('retrouve le niveau d’une liste Word relue à plat d’après sa puce (fixture 15)', async () => {
@@ -243,9 +248,11 @@ describe('styles', () => {
       '<w:p><w:pPr><w:pStyle w:val="Important"/></w:pPr><w:r><w:t xml:space="preserve">Important</w:t></w:r></w:p>',
     );
     // Sans mise en page ni marques dans le HTML : le style est annulé propriété par propriété
-    // (le lecteur n'écrit que ce qui diffère des docDefaults, un HTML nu signifie docDefaults).
+    // (le lecteur n'écrit que ce qui diffère des docDefaults, un HTML nu signifie docDefaults),
+    // sauf l'interligne et l'espacement après : un HTML nu y signifie le `Normal` du
+    // document (1,15 / 8 pt), qu'`Important` hérite déjà — rien à réécrire (R53-01).
     expect(body).toContain(
-      '<w:p><w:pPr><w:pStyle w:val="Important"/><w:pBdr><w:left w:val="nil"/></w:pBdr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="0"/></w:pPr>' +
+      '<w:p><w:pPr><w:pStyle w:val="Important"/><w:pBdr><w:left w:val="nil"/></w:pBdr><w:ind w:left="0"/></w:pPr>' +
         '<w:r><w:rPr><w:b w:val="0"/><w:bCs w:val="0"/><w:i w:val="0"/><w:iCs w:val="0"/><w:color w:val="auto"/></w:rPr><w:t xml:space="preserve">Sans rien</w:t></w:r></w:p>',
     );
     expect(result.warnings).toEqual([]);
@@ -450,18 +457,35 @@ describe('variables dans le gabarit', () => {
 });
 
 describe('en-têtes et pieds du gabarit', () => {
-  it('fixture 16 : le sectPr final hérite des en-têtes de première page de la section 1', async () => {
+  it('fixture 16 : les deux sections ressortent avec leur w:sectPr du gabarit, en-têtes relus identiques', async () => {
     const template = await fixture('16-sections.docx');
     const imported = await importStyled(template);
     const result = await exportInTemplate(imported.html, template);
-    const sectPr = finalSectPr(textOf(result.parts, 'word/document.xml'));
-    expect(sectPr).toContain('<w:headerReference w:type="first" r:id="rId7"/>');
-    expect(sectPr).toContain('<w:footerReference w:type="first" r:id="rId9"/>');
+    const document = textOf(result.parts, 'word/document.xml');
+    expect(allSectPrsOf(document)).toEqual(
+      allSectPrsOf(textOf(await partsOf(template), 'word/document.xml')),
+    );
+    const sectPr = finalSectPr(document);
     expect(sectPr).toContain('<w:headerReference w:type="default" r:id="rId10"/>');
     expect(sectPr).toContain('<w:cols w:space="720" w:num="2" w:equalWidth="true"/>');
     const again = await importStyled(result.buffer);
     expect(again.layout.headers).toEqual(imported.layout.headers);
     expect(again.layout.footers).toEqual(imported.layout.footers);
+    expect(again.layout.sections).toEqual(imported.layout.sections);
+  });
+
+  it('corps sans saut de section dans un gabarit à deux sections : le sectPr final hérite des références de la section 1 abandonnée', async () => {
+    const template = await fixture('16-sections.docx');
+    const result = await exportInTemplate('<p>Une seule section</p>', template);
+    const document = textOf(result.parts, 'word/document.xml');
+    expect(allSectPrsOf(document)).toHaveLength(1);
+    const sectPr = finalSectPr(document);
+    expect(sectPr).toContain('<w:headerReference w:type="first" r:id="rId7"/>');
+    expect(sectPr).toContain('<w:footerReference w:type="first" r:id="rId9"/>');
+    expect(sectPr).toContain('<w:headerReference w:type="default" r:id="rId10"/>');
+    // `w:titlePg` de la section 1 abandonnée n'est pas hérité : Word ne le fait pas (R43-06).
+    expect(sectPr).not.toContain('<w:titlePg/>');
+    expect(sectPr).toContain('<w:cols w:space="720" w:num="2" w:equalWidth="true"/>');
   });
 
   it('mode resolve : {{client}} de l’en-tête (fixture 16) résolu, autres parties intactes', async () => {
@@ -617,8 +641,12 @@ describe.skipIf(!existsSync(CLIENT))('document client Modele_Demo_DER', () => {
     const document = textOf(result.parts, 'word/document.xml');
     expect(document).toContain('<w:rStyle w:val="Lienhypertexte"/>');
     expect(document).not.toContain('"Hyperlink"');
-    const sectPr = finalSectPr(document);
-    expect(sectPr).toContain('<w:footerReference w:type="default" r:id="rId13"/>');
+    // Les trois sections du client ressortent avec leur `w:sectPr` identique à l'octet : le
+    // pied n'est référencé que par la première, Word le fait hériter aux suivantes.
+    const sectPrs = allSectPrsOf(document);
+    expect(sectPrs).toEqual(allSectPrsOf(textOf(original, 'word/document.xml')));
+    expect(sectPrs).toHaveLength(3);
+    expect(sectPrs[0]).toContain('<w:footerReference w:type="default" r:id="rId13"/>');
     const codes = new Set(result.warnings.map((warning) => warning.code));
     expect(codes).toEqual(new Set(['variable-unresolved']));
     const again = await importStyled(result.buffer);

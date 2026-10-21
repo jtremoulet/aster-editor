@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SEARCH_COMMAND_IDS, SEARCH_OPEN_EVENT, STANDARD_COMMAND_IDS } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createWidget } from '../toolbar/widgets';
-import type { ToolbarWidget } from '../types';
-import { createSearchPanel, readSearchState } from './search-panel';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { createWidget } from '../toolbar/widgets.js';
+import type { ToolbarWidget } from '../types.js';
+import { createSearchPanel, readSearchState } from './search-panel.js';
 
 /** Forme du storage Tiptap que le panneau lit, posée sur le `tiptap` du mock. */
 interface FakeSearchStorage {
@@ -31,14 +31,18 @@ describe('createSearchPanel', () => {
   let widget: ToolbarWidget;
 
   const trigger = (): HTMLButtonElement => widget.element.querySelector('button')!;
-  const panel = (): HTMLElement => widget.element.querySelector('.aster-dropdown__panel')!;
+  /** Le bandeau vit hors du widget, dans le flux juste avant l'hôte de l'éditeur (L52). */
+  const panel = (): HTMLElement => document.querySelector('.aster-search-panel')!;
   const query = (): HTMLInputElement => panel().querySelector('.aster-search-panel__query')!;
   const replacement = (): HTMLInputElement =>
     panel().querySelector('.aster-search-panel__replacement')!;
   const checkbox = (): HTMLInputElement => panel().querySelector('input[type="checkbox"]')!;
   const count = (): HTMLElement => panel().querySelector('.aster-search-panel__count')!;
   const button = (selector: string): HTMLButtonElement => panel().querySelector(selector)!;
-  const isOpen = (): boolean => !panel().hasAttribute('hidden');
+  const isOpen = (): boolean => {
+    const element = document.querySelector('.aster-search-panel');
+    return element !== null && !element.hasAttribute('hidden');
+  };
   const type = (input: HTMLInputElement, value: string): void => {
     input.value = value;
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -64,13 +68,18 @@ describe('createSearchPanel', () => {
     editor.element.remove();
   });
 
-  it('rend un déclencheur dialog avec libellé i18n et un panneau complet', () => {
+  it('rend un déclencheur dialog avec libellé i18n et un bandeau complet', () => {
     expect(trigger().getAttribute('aria-haspopup')).toBe('dialog');
+    expect(trigger().getAttribute('aria-expanded')).toBe('false');
     expect(trigger().getAttribute('aria-label')).toBe('Find and replace');
     expect(trigger().querySelector('svg')).not.toBeNull();
+    expect(isOpen()).toBe(false);
     trigger().click();
     expect(isOpen()).toBe(true);
+    expect(trigger().getAttribute('aria-expanded')).toBe('true');
+    expect(trigger().getAttribute('aria-controls')).toBe(panel().id);
     expect(panel().getAttribute('role')).toBe('dialog');
+    expect(panel().getAttribute('aria-label')).toBe('Find and replace');
     expect(document.activeElement).toBe(query());
     expect(replacement()).not.toBeNull();
     expect(checkbox()).not.toBeNull();
@@ -158,9 +167,11 @@ describe('createSearchPanel', () => {
     expect(editor.calls).toEqual([{ id: 'search.clear', args: undefined }]);
     expect(isOpen()).toBe(false);
     expect(document.activeElement).toBe(trigger());
-    // Après destroy, Échap sur le panneau n'appelle plus rien.
+    // Après destroy, le bandeau est retiré du DOM : Échap n'a plus de cible.
+    const band = panel();
     widget.destroy();
-    key(panel(), 'Escape');
+    expect(band.isConnected).toBe(false);
+    key(band, 'Escape');
     expect(editor.calls.length).toBe(1);
     widget = createSearchPanel(editor);
     host.append(widget.element);
@@ -209,6 +220,43 @@ describe('createSearchPanel', () => {
     trigger().click();
     expect(button('.aster-search-panel__close').textContent).toBe('Fermer');
     expect(query().getAttribute('placeholder')).toBe('Rechercher');
+  });
+
+  it('L52 : le bandeau est dans le flux juste avant l’hôte, jamais en position absolue dans la toolbar', () => {
+    expect(panel().previousElementSibling).toBe(host);
+    expect(panel().nextElementSibling).toBe(editor.element);
+    expect(widget.element.contains(panel())).toBe(false);
+    expect(widget.element.querySelector('.aster-dropdown__panel')).toBeNull();
+    expect(panel().hasAttribute('hidden')).toBe(true);
+  });
+
+  it('L52 : reste ouvert quand on clique dans le document ou que le focus le quitte', () => {
+    trigger().click();
+    expect(isOpen()).toBe(true);
+    editor.element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(isOpen()).toBe(true);
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    outside.focus();
+    expect(isOpen()).toBe(true);
+    outside.remove();
+    // Second clic sur le déclencheur : fermeture, focus rendu au déclencheur si le bandeau l'avait.
+    query().focus();
+    trigger().click();
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it('L52 : sans parent pour l’hôte, le bandeau suit le déclencheur ; destroy le retire', () => {
+    widget.destroy();
+    const orphan = createMockEditor({ commands: [...STANDARD_COMMAND_IDS, ...SEARCH_COMMAND_IDS] });
+    registerUiTranslations(orphan);
+    const detached = createSearchPanel(orphan);
+    expect(detached.element.querySelector('.aster-search-panel')).not.toBeNull();
+    detached.destroy();
+    expect(detached.element.querySelector('.aster-search-panel')).toBeNull();
+    widget = createSearchPanel(editor);
+    host.append(widget.element);
   });
 
   it('est enregistré comme widget « search » conditionné à search.open', () => {

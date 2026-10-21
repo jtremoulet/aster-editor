@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STANDARD_COMMAND_IDS } from '@aster-editor/core';
 import type { ToolbarWidgetItem } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { createToolbar } from './create-toolbar';
-import { FULL_PRESET, STANDARD_PRESET } from './presets';
-import { WIDGETS, createWidget } from './widgets';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { createToolbar } from './create-toolbar.js';
+import { FULL_PRESET, STANDARD_PRESET } from './presets.js';
+import { WIDGETS, createWidget } from './widgets.js';
 
 /** Widgets de mise en page ajoutés par L26, avec la commande qui conditionne leur rendu. */
 const LAYOUT_WIDGETS: readonly { readonly name: string; readonly requires: string }[] = [

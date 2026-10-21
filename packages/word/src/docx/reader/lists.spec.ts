@@ -9,7 +9,7 @@ import {
   safeStart,
   stripNumberingIndent,
   topLevelElementCount,
-} from './lists';
+} from './lists.js';
 import {
   buildPackage,
   createTestContext,
@@ -17,8 +17,14 @@ import {
   paragraphXml,
   partXml,
   renderBody,
-} from './testing-blocks';
-import type { Block, ConverterContext, DocxPackage, ListDefinition, ParagraphBlock } from './types';
+} from './testing-blocks.js';
+import type {
+  Block,
+  ConverterContext,
+  DocxPackage,
+  ListDefinition,
+  ParagraphBlock,
+} from './types.js';
 
 function lvl(level: number, format: string, text: string, start?: number, left?: number): string {
   return (
@@ -135,7 +141,7 @@ describe('renderBlocks', () => {
       '<p>Intro</p><ol data-docx-num-id="1"><li><p>a</p></li><li><p>b</p></li></ol><p>Fin</p>',
     );
     expect(renderBlocks([paragraph('x', { numId: '3', level: 0 })], ctx)).toBe(
-      '<ol type="I" start="4" data-docx-num-id="3"><li><p>x</p></li></ol>',
+      '<ol data-docx-num-id="3" start="4" type="I"><li><p>x</p></li></ol>',
     );
     expect(renderBlocks([paragraph('x', { numId: '2', level: 0 })], ctx)).toBe(
       '<ul data-bullet="•" data-docx-num-id="2"><li><p>x</p></li></ul>',
@@ -153,10 +159,10 @@ describe('renderBlocks', () => {
     ];
     expect(renderBlocks(blocks, ctx)).toBe(
       '<ol data-docx-num-id="1"><li><p>1</p>' +
-        '<ol type="a" data-docx-num-id="1"><li><p>1.a</p>' +
-        '<ol type="i" data-docx-num-id="1"><li><p>1.a.i</p></li></ol></li>' +
+        '<ol data-docx-num-id="1" type="a"><li><p>1.a</p>' +
+        '<ol data-docx-num-id="1" type="i"><li><p>1.a.i</p></li></ol></li>' +
         '<li><p>1.b</p></li></ol></li>' +
-        '<li><p>2</p><ol type="a" data-docx-num-id="1"><li><p>2.a</p></li></ol></li></ol>',
+        '<li><p>2</p><ol data-docx-num-id="1" type="a"><li><p>2.a</p></li></ol></li></ol>',
     );
   });
 
@@ -172,7 +178,7 @@ describe('renderBlocks', () => {
     expect(renderBlocks(blocks, ctx)).toBe(
       '<ol data-docx-num-id="1"><li><p>a</p></li><li><p>b</p></li></ol>' +
         '<p>Interruption</p>' +
-        '<ol start="3" data-docx-num-id="1"><li><p>c</p></li></ol>' +
+        '<ol data-docx-num-id="1" start="3"><li><p>c</p></li></ol>' +
         '<p>Nouvelle instance</p>' +
         '<ol data-docx-num-id="6"><li><p>d</p></li></ol>',
     );
@@ -229,7 +235,7 @@ describe('renderBlocks', () => {
     expect(renderBlocks(blocks, ctx)).toBe(
       '<ol data-docx-num-id="1"><li><p style="margin-left: 36pt">un</p></li></ol>' +
         '<h2 style="margin-left: 36pt">Titre indenté</h2>' +
-        '<ol start="2" data-docx-num-id="1"><li><p style="margin-left: 36pt">deux</p></li></ol>',
+        '<ol data-docx-num-id="1" start="2"><li><p style="margin-left: 36pt">deux</p></li></ol>',
     );
   });
 
@@ -243,8 +249,8 @@ describe('renderBlocks', () => {
     );
     expect(html).toBe(
       '<ol data-docx-num-id="1"><li><p>un</p></li><li><p>deux</p></li></ol>' +
-        '<table><tbody><tr><td><ol start="3" data-docx-num-id="1"><li><p>trois (cellule)</p></li></ol></td></tr></tbody></table>' +
-        '<ol start="4" data-docx-num-id="1"><li><p>quatre</p></li></ol>',
+        '<table><tbody><tr><td><ol data-docx-num-id="1" start="3"><li><p>trois (cellule)</p></li></ol></td></tr></tbody></table>' +
+        '<ol data-docx-num-id="1" start="4"><li><p>quatre</p></li></ol>',
     );
     expect(ctx.warnings).toEqual([]);
   });
@@ -262,15 +268,15 @@ describe('renderBlocks', () => {
     expect(registerListItem(paragraph('hors liste'), ctx)).toBeUndefined();
     // Rendu dans le désordre : chaque liste porte le `start` de son rang d'enregistrement.
     expect(renderBlocks([second], ctx)).toBe(
-      '<ol start="2" data-docx-num-id="1"><li><p>b</p></li></ol>',
+      '<ol data-docx-num-id="1" start="2"><li><p>b</p></li></ol>',
     );
     expect(renderBlocks([first, nested], ctx)).toBe(
-      '<ol data-docx-num-id="1"><li><p>a</p><ol type="a" data-docx-num-id="1"><li><p>a.1</p></li></ol></li></ol>',
+      '<ol data-docx-num-id="1"><li><p>a</p><ol data-docx-num-id="1" type="a"><li><p>a.1</p></li></ol></li></ol>',
     );
     // Un contexte dérivé (cellule, note) partage le même document, donc les mêmes compteurs.
     const derived: ConverterContext = { ...ctx, where: 'footnote' };
     expect(renderBlocks([paragraph('c', { numId: '1', level: 0 })], derived)).toBe(
-      '<ol start="3" data-docx-num-id="1"><li><p>c</p></li></ol>',
+      '<ol data-docx-num-id="1" start="3"><li><p>c</p></li></ol>',
     );
   });
 
@@ -301,7 +307,7 @@ describe('renderBlocks', () => {
       '<ol data-docx-num-id="7"><li><p>x</p></li></ol>',
     );
     expect(await renderBody(numberedXml('y', '8') + numberedXml('z', '8'), ctx)).toBe(
-      `<ol start="${String(Number.MAX_SAFE_INTEGER)}" data-docx-num-id="8"><li><p>y</p></li><li><p>z</p></li></ol>`,
+      `<ol data-docx-num-id="8" start="${String(Number.MAX_SAFE_INTEGER)}"><li><p>y</p></li><li><p>z</p></li></ol>`,
     );
   });
 
@@ -393,7 +399,7 @@ describe('renderBlocks', () => {
     );
     expect(html).toBe(
       '<ol data-docx-num-id="1"><li><p>un</p></li><li><p>deux</p>' +
-        '<ol type="a" data-docx-num-id="1"><li><p>a</p><p style="margin-left: 72pt">suite</p></li></ol></li></ol>' +
+        '<ol data-docx-num-id="1" type="a"><li><p>a</p><p style="margin-left: 72pt">suite</p></li></ol></li></ol>' +
         '<table><tbody><tr><td><ul data-bullet="•" data-docx-num-id="2"><li><p>puce</p>' +
         '<ul data-bullet="–" data-docx-num-id="2"><li><p>puce 2</p></li></ul></li></ul></td></tr></tbody></table>',
     );

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONTENT_CLASS, DESTROYED_ERROR_MESSAGE } from './aster-editor';
-import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount';
+import type { DocumentLayout } from '../api/index.js';
+import { PAGE_VIEW_CHANGE_EVENT, PAGE_VIEW_CLASS } from '../extensions/page-view.js';
+import { CONTENT_CLASS, DESTROYED_ERROR_MESSAGE } from './aster-editor.js';
+import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount.js';
 
 /**
  * Document complet pour l'idempotence : titres, listes imbriquées, table avec
@@ -230,6 +232,34 @@ describe('createEditor', () => {
       expect(mounted.editor.getHTML()).toBe('<p>Bonjour</p>');
     });
 
+    it('L50 : setHTML(html, true) ferme son groupe d’historique, une édition immédiate s’annule seule', () => {
+      const change = vi.fn();
+      mounted.editor.on('change', change);
+      mounted.editor.setHTML('<p>Chargé</p>');
+      expect(change).toHaveBeenCalledTimes(1);
+      // Édition dans les 500 ms (`newGroupDelay`) : avant L50, elle rejoignait le groupe du
+      // chargement et `undo` revenait au document initial.
+      mounted.editor.tiptap.commands.insertContentAt(1, 'x');
+      expect(mounted.editor.getHTML()).toBe('<p>xChargé</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Chargé</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Bonjour</p>');
+      expect(mounted.editor.commands.run('undo')).toBe(false);
+      expect(mounted.editor.commands.run('redo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>Chargé</p>');
+    });
+
+    it('L50 : setJSON(doc, true) ferme aussi son groupe', () => {
+      mounted.editor.setJSON({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'J' }] }],
+      });
+      mounted.editor.tiptap.commands.insertContentAt(1, 'x');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      expect(mounted.editor.getHTML()).toBe('<p>J</p>');
+    });
+
     it('émet selectionChange sur un simple déplacement de sélection, sans change', () => {
       const change = vi.fn();
       const selection = vi.fn();
@@ -296,6 +326,116 @@ describe('createEditor', () => {
       mounted.editor.on('change', after);
       expect(() => mounted.editor.setHTML('<p>x</p>')).toThrow('boom');
       expect(after).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('vue page (contrat, L45b)', () => {
+    const TWO_SECTIONS: DocumentLayout = {
+      sections: [{ page: { size: 'A5' } }, { page: { size: 'A3' } }],
+    };
+
+    /** Compte les événements DOM `aster:page-view-change`, qui doivent rester émis. */
+    function countDomEvents(): () => number {
+      let count = 0;
+      mounted.editor.contentElement.addEventListener(PAGE_VIEW_CHANGE_EVENT, () => {
+        count += 1;
+      });
+      return () => count;
+    }
+
+    it('setPageView, getLayout et getSectionLayout sont joignables par le contrat AsterEditor', () => {
+      // `mounted.editor` est typé `AsterEditor` : aucun cast vers l'implémentation.
+      expect(typeof mounted.editor.setPageView).toBe('function');
+      expect(typeof mounted.editor.getLayout).toBe('function');
+      expect(typeof mounted.editor.getSectionLayout).toBe('function');
+      expect(mounted.editor.getLayout?.()).toBeNull();
+      expect(mounted.editor.getSectionLayout?.(1)).toBeNull();
+    });
+
+    it('setPageView(true) émet pageViewChange { active, layout: {} } et l’événement DOM reste émis', () => {
+      const handler = vi.fn();
+      const domEvents = countDomEvents();
+      mounted.editor.on('pageViewChange', handler);
+      mounted.editor.setPageView?.(true);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith({ editor: mounted.editor, active: true, layout: {} });
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+      expect(domEvents()).toBe(1);
+    });
+
+    it('setPageView(options) émet la mise en page donnée (même référence) et getSectionLayout la résout', () => {
+      const handler = vi.fn();
+      mounted.editor.on('pageViewChange', handler);
+      mounted.editor.setPageView?.({ layout: TWO_SECTIONS });
+      expect(handler).toHaveBeenCalledWith({
+        editor: mounted.editor,
+        active: true,
+        layout: TWO_SECTIONS,
+      });
+      expect(mounted.editor.getLayout?.()).toBe(TWO_SECTIONS);
+      expect(mounted.editor.getSectionLayout?.(2)).toBe(TWO_SECTIONS.sections?.[1]);
+      // Hors plage : repli sur le premier niveau (vide ici).
+      expect(mounted.editor.getSectionLayout?.(3)).toEqual({});
+    });
+
+    it('setPageView(false) émet { active: false, layout: null } une fois, et rien sans vue active', () => {
+      const handler = vi.fn();
+      const domEvents = countDomEvents();
+      mounted.editor.on('pageViewChange', handler);
+      mounted.editor.setPageView?.(false);
+      expect(handler).not.toHaveBeenCalled();
+      expect(domEvents()).toBe(0);
+      mounted.editor.setPageView?.({ layout: TWO_SECTIONS });
+      mounted.editor.setPageView?.(false);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenLastCalledWith({
+        editor: mounted.editor,
+        active: false,
+        layout: null,
+      });
+      expect(mounted.editor.getLayout?.()).toBeNull();
+      // DOM : un par montage et un par retrait, comme avant.
+      expect(domEvents()).toBe(2);
+    });
+
+    it('un remplacement émet une seule fois, une fois l’état à jour : getLayout répond la nouvelle mise en page', () => {
+      mounted.editor.setPageView?.(true);
+      const seen: (DocumentLayout | null | undefined)[] = [];
+      const domEvents = countDomEvents();
+      mounted.editor.on('pageViewChange', ({ editor, layout }) => {
+        seen.push(editor.getLayout?.(), layout);
+      });
+      mounted.editor.setPageView?.({ layout: TWO_SECTIONS });
+      expect(seen).toEqual([TWO_SECTIONS, TWO_SECTIONS]);
+      // DOM : retrait de l'ancienne vue puis montage de la nouvelle.
+      expect(domEvents()).toBe(2);
+    });
+
+    it('une mise en page hostile n’émet pas pageViewChange : la vue précédente est remontée', () => {
+      mounted.editor.setPageView?.({ layout: TWO_SECTIONS });
+      const handler = vi.fn();
+      mounted.editor.on('pageViewChange', handler);
+      const hostile: DocumentLayout = {
+        get sections(): readonly never[] {
+          throw new Error('sections hostiles');
+        },
+      };
+      expect(() => mounted.editor.setPageView?.({ layout: hostile })).toThrow('sections hostiles');
+      expect(handler).not.toHaveBeenCalled();
+      expect(mounted.editor.getLayout?.()).toBe(TWO_SECTIONS);
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+    });
+
+    it('pageView dans les options émet pendant la construction, avant tout abonnement', () => {
+      const other = mountEditor({ pageView: { layout: TWO_SECTIONS } });
+      try {
+        const handler = vi.fn();
+        other.editor.on('pageViewChange', handler);
+        expect(handler).not.toHaveBeenCalled();
+        expect(other.editor.getLayout?.()).toBe(TWO_SECTIONS);
+      } finally {
+        other.cleanup();
+      }
     });
   });
 

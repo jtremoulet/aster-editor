@@ -1,16 +1,16 @@
 import { createEditor } from '@aster-editor/core';
 import type { AsterTheme, Unsubscribe } from '@aster-editor/core';
-import { getFullscreen } from './components/fullscreen';
-import { createImageBubble } from './components/image-bubble';
-import { createLinkBubble } from './components/link-bubble';
-import { createSlashMenu, type SlashWidgetName } from './components/slash-menu';
-import { releaseSourceView, retainSourceView } from './components/source-view';
-import { createTableContextMenu } from './components/table-context-menu';
-import { createVariableDialog } from './components/variable-dialog';
-import { createVariableSuggestion } from './components/variable-suggestion';
-import { createToolbar, registerUiTranslations } from './toolbar/create-toolbar';
-import type { AsterInstance, AsterUiOptions, Toolbar } from './types';
-import { el } from './utils/dom';
+import { getFullscreen } from './components/fullscreen.js';
+import { createImageBubble } from './components/image-bubble.js';
+import { createLinkBubble } from './components/link-bubble.js';
+import { createSlashMenu, type SlashWidgetName } from './components/slash-menu.js';
+import { releaseSourceView, retainSourceView } from './components/source-view.js';
+import { createTableContextMenu } from './components/table-context-menu.js';
+import { createVariableDialog } from './components/variable-dialog.js';
+import { createVariableSuggestion } from './components/variable-suggestion.js';
+import { createToolbar, registerUiTranslations } from './toolbar/create-toolbar.js';
+import type { AsterInstance, AsterUiOptions, Toolbar } from './types.js';
+import { el } from './utils/dom.js';
 
 /** Classe du panneau de chaque dialogue de la toolbar que le menu `/` sait ouvrir. */
 const WIDGET_PANEL_CLASSES: Readonly<Record<SlashWidgetName, string>> = {

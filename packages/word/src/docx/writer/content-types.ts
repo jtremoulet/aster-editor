@@ -1,4 +1,4 @@
-import type { PartStore } from './xml-io';
+import type { PartStore } from './xml-io.js';
 
 /**
  * `[Content_Types].xml` du gabarit : on y **ajoute** les types par défaut des extensions

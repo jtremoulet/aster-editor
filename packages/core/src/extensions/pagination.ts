@@ -1,15 +1,15 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { DecorationSet } from '@tiptap/pm/view';
-import type { AsterEditor } from '../api';
+import type { AsterEditor } from '../api/index.js';
 import {
   PaginationController,
   initPaginationDecorations,
   mapPaginationDecorations,
   paginationControllerOf,
   paginationPluginKey,
-} from './pagination-controller';
-import { EMPTY_PAGINATION, type PaginationResult } from './pagination-layout';
+} from './pagination-controller.js';
+import { EMPTY_PAGINATION, type PaginationResult } from './pagination-layout.js';
 
 /**
  * Extension `pagination` (session 3, L30) et son API publique. Le travail est réparti en
@@ -29,14 +29,32 @@ export {
   paginationPluginKey,
   type PaginatedPageViewOptions,
   type PaginationDecorations,
-} from './pagination-controller';
+} from './pagination-controller.js';
 export {
   PAGE_GAP_CLASS,
   measureBlocks,
   measurePagination,
+  readPageVariables,
+  sectionSegments,
+  usableHeightOf,
   usablePageHeightPx,
   type MeasuredBlocks,
-} from './pagination-measure';
+  type MeasuredSectionBreak,
+  type SectionSegment,
+} from './pagination-measure.js';
+// Sections dans les coupures (session 4, L44).
+export {
+  PAGE_GAP_FOOTER_CLASS,
+  PAGE_GAP_HEADER_CLASS,
+  PAGE_GAP_SECTION_CLASS,
+  PAGE_GAP_SECTION_LABEL_CLASS,
+  PAGE_HEIGHT_TOTAL_CSS_VARIABLE,
+  PAGE_SECTION_ATTRIBUTE,
+  gapCssVariables,
+  pageHeightTotalMm,
+  previousPageSection,
+  sectionLabel,
+} from './pagination-sections.js';
 
 /** Nom de l'extension. */
 export const PAGINATION_EXTENSION_NAME = 'pagination';

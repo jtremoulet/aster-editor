@@ -1,12 +1,13 @@
 import { CellSelection } from '@tiptap/pm/tables';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { STANDARD_COMMAND_IDS } from '../api';
-import { FORMAT_PAINTER_COMMAND_IDS } from './format-painter';
-import { TEXT_LAYOUT_COMMAND_IDS, hasLayoutBlockInSelection } from './layout';
-import { SEARCH_COMMAND_IDS } from './search';
-import { en } from '../i18n/en';
-import { fr } from '../i18n/fr';
-import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount';
+import { STANDARD_COMMAND_IDS } from '../api/index.js';
+import { FORMAT_PAINTER_COMMAND_IDS } from './format-painter.js';
+import { TAB_COMMAND_IDS, TEXT_LAYOUT_COMMAND_IDS, hasLayoutBlockInSelection } from './layout.js';
+import { SEARCH_COMMAND_IDS } from './search.js';
+import { SECTION_COMMAND_IDS } from './sections.js';
+import { en } from '../i18n/en.js';
+import { fr } from '../i18n/fr.js';
+import { bodyHtml, findNodePos, mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** Table 2×2 de la preuve R23-02 : cellules `a`, `b`, `c`, `d`. */
 const TABLE_2X2 =
@@ -68,6 +69,9 @@ describe('commandes de mise en page : enregistrement et i18n', () => {
       ...SEARCH_COMMAND_IDS,
       ...FORMAT_PAINTER_COMMAND_IDS,
       ...TEXT_LAYOUT_COMMAND_IDS,
+      // Session 4 (L41) : tabulation et sections, hors contrat elles aussi.
+      ...TAB_COMMAND_IDS,
+      ...SECTION_COMMAND_IDS,
     ];
     expect(
       mounted.editor.commands

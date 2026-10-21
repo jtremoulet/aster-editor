@@ -1,12 +1,20 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { run as runXml } from '../preprocess/minimal-docx';
-import { childNamed } from '../preprocess/xml-utils';
-import { convertRuns, hyperlinkTarget, PAGE_BREAK, renderRunTags, safeHref } from './runs';
-import { createStyleResolver } from './styles';
-import { createTestContext, fakePackage, paragraphOf, relsXml, stylesXml } from './test-support';
-import type { ConverterContext, DocxPackage, StyleResolver } from './types';
+import { run as runXml } from '../preprocess/minimal-docx.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import type { DocxParagraphProps } from './properties.js';
+import {
+  convertRuns,
+  hyperlinkTarget,
+  PAGE_BREAK,
+  renderRunTags,
+  safeHref,
+  tabHtml,
+} from './runs.js';
+import { createStyleResolver } from './styles.js';
+import { createTestContext, fakePackage, paragraphOf, relsXml, stylesXml } from './test-support.js';
+import type { ConverterContext, DocxPackage, StyleResolver } from './types.js';
 
-const TAB = String.fromCharCode(0x2003);
+const TAB = tabHtml();
 
 const STYLES = stylesXml(
   '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>' +
@@ -134,12 +142,50 @@ describe('convertRuns', () => {
   });
 
   describe('caractères spéciaux et sauts', () => {
-    it('tabulation → espace cadratin, w:br et w:cr → <br>', async () => {
+    it('tabulation → nœud tab du contrat (sans taquet), w:br et w:cr → <br>', async () => {
       expect(
         await convert(
           '<w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>c</w:t><w:cr/><w:t>d</w:t></w:r>',
         ),
       ).toBe(`a${TAB}b<br>c<br>d`);
+      expect(TAB).toBe('<span data-tab=""></span>');
+      expect(tabHtml({ positionPt: 36 })).toBe('<span data-tab="" data-stop="36pt"></span>');
+      // Session 4 (R43-05) : `data-align` puis `data-leader`, après `data-stop`, seulement s'ils sont connus.
+      expect(tabHtml({ positionPt: 36, align: 'right', leader: 'dot' })).toBe(
+        '<span data-tab="" data-stop="36pt" data-align="right" data-leader="dot"></span>',
+      );
+      expect(tabHtml({ positionPt: 0, leader: 'underscore' })).toBe(
+        '<span data-tab="" data-stop="0pt" data-leader="underscore"></span>',
+      );
+    });
+
+    it('la n-ième tabulation prend le n-ième taquet du paragraphe, dans les balises du run', async () => {
+      const stops: DocxParagraphProps = {
+        runDefaults: {},
+        tabStops: [{ positionPt: 56.7 }, { positionPt: 113.4 }],
+      };
+      const html = await convertRuns(
+        paragraphOf(
+          '<w:r><w:rPr><w:b/></w:rPr><w:t>a</w:t><w:tab/><w:t>b</w:t></w:r><w:r><w:tab/><w:t>c</w:t><w:tab/><w:t>d</w:t></w:r>',
+        ),
+        ctx,
+        stops,
+      );
+      expect(html).toBe(
+        '<strong>a<span data-tab="" data-stop="56.7pt"></span>b</strong>' +
+          '<span data-tab="" data-stop="113.4pt"></span>c<span data-tab=""></span>d',
+      );
+      // `w:ptab` : tabulation sans taquet, hors du décompte ; dans une instruction de champ : rien.
+      expect(
+        await convertRuns(
+          paragraphOf(
+            '<w:r><w:ptab w:alignment="right" w:relativeTo="margin" w:leader="none"/><w:tab/><w:t>x</w:t></w:r>' +
+              '<w:r><w:fldChar w:fldCharType="begin"/><w:instrText>PAGE</w:instrText><w:tab/><w:fldChar w:fldCharType="separate"/><w:t>1</w:t><w:fldChar w:fldCharType="end"/></w:r>',
+          ),
+          ctx,
+          stops,
+        ),
+      ).toBe('<span data-tab=""></span><span data-tab="" data-stop="56.7pt"></span>x1');
     });
 
     it('w:br type="page" → marqueur PAGE_BREAK hors des balises de run', async () => {

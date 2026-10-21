@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../../testing/html-compare';
-import { normalizeWhitespace } from './normalize-whitespace';
+import { runPass } from '../../testing/html-compare.js';
+import { normalizeWhitespace } from './normalize-whitespace.js';
 
 const NBSP = String.fromCharCode(160);
 

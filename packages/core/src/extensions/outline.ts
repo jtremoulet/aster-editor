@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import type { AsterEditor } from '../api';
+import type { AsterEditor } from '../api/index.js';
 
 /** Nom de l'extension. */
 export const OUTLINE_EXTENSION_NAME = 'outline';

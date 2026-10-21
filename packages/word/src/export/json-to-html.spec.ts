@@ -1,6 +1,6 @@
 import type { AsterDocument } from '@aster-editor/core';
 import { describe, expect, it } from 'vitest';
-import { jsonToHtml } from './json-to-html';
+import { jsonToHtml } from './json-to-html.js';
 
 function text(value: string, marks: AsterDocument['marks'] = []): AsterDocument {
   return { type: 'text', text: value, marks };

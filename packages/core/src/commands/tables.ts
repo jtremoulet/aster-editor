@@ -1,5 +1,5 @@
-import type { AsterCommand } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 /**
  * Tables. Toutes les commandes d'édition de table s'appuient sur `can()` : hors

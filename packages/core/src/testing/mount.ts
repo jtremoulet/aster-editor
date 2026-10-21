@@ -1,5 +1,5 @@
-import type { AsterEditor, AsterOptions } from '../api';
-import { createEditor } from '../editor/create-editor';
+import type { AsterEditor, AsterOptions } from '../api/index.js';
+import { createEditor } from '../editor/create-editor.js';
 
 /** Éditeur monté dans un hôte jeté après le test. */
 export interface MountedEditor {

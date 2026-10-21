@@ -1,8 +1,8 @@
 import type { AsterEditor, OutlineEntry } from '@aster-editor/core';
 import { getOutline, scrollToHeading } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { clear, el } from '../utils/dom';
-import { createDropdown, createMenuItem } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { clear, el } from '../utils/dom.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
 
 /** Sommaire de l'éditeur, tolérant si la vue manque (éditeur de test sans Tiptap). */
 function readOutline(editor: AsterEditor): readonly OutlineEntry[] {

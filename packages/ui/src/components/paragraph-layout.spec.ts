@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import * as publicApi from '../index';
-import { createMockEditor } from '../testing/mock-editor';
+import * as publicApi from '../index.js';
+import { createMockEditor } from '../testing/mock-editor.js';
 import {
   MAX_BORDER_WIDTH_PT,
   MAX_LINE_HEIGHT_MULTIPLE,
@@ -18,7 +18,7 @@ import {
   readNumber,
   setBlockLayout,
   unsetBlockLayout,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
 
 describe('paragraph-layout (helpers partagés)', () => {
   it('currentBlockLayout lit le paragraphe ou le titre sous le curseur, rien sinon', () => {

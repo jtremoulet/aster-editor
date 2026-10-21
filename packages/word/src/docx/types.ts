@@ -59,9 +59,10 @@ export interface DocxVariableOptions {
 }
 
 /**
- * Options de `importDocx`. Toutes facultatives : sans option, l'import produit du HTML
- * avec images en base64 et notes de bas de page conservées, en parsant avec le
- * `DOMParser` de l'environnement.
+ * Options de `importDocx`. Toutes facultatives : sans option, l'import lit avec le lecteur
+ * stylé d'Aster (`fidelity: 'styled'`, défaut depuis la 0.6) et produit du HTML stylé avec
+ * images en base64 et notes de bas de page conservées, en parsant avec le `DOMParser` de
+ * l'environnement.
  */
 export interface DocxImportOptions {
   /**
@@ -71,7 +72,7 @@ export interface DocxImportOptions {
   upload?: UploadHandler;
   /** Conserver les notes de bas de page sous forme de liste en fin de document. Vrai par défaut. */
   footnotes?: boolean;
-  /** Style map mammoth additionnelle, ajoutée après celle d'Aster. */
+  /** Style map mammoth additionnelle, ajoutée après celle d'Aster. Mode `semantic` seulement. */
   styleMap?: readonly string[];
   /** Parseur HTML utilisé par les post-traitements. `new DOMParser()` par défaut. */
   parse?: HtmlParser;
@@ -85,10 +86,12 @@ export interface DocxImportOptions {
    */
   emptyParagraphs?: 'keep' | 'drop';
   /**
-   * Chemin de lecture. `styled` (défaut du composant Angular, de la démo et du playground ; défaut de la lib prévu en 0.6) : lecteur OOXML d'Aster, HTML
-   * stylé (polices, interlignes, bordures, tableaux complets, listes fidèles), `layout`
-   * renseigné. `semantic` : mammoth, HTML sémantique sans mise en forme, comportement
-   * des versions 0.4.x.
+   * Chemin de lecture. `styled` (**défaut depuis la 0.6**, déjà celui du composant Angular,
+   * de la démo et du playground depuis la 0.5) : lecteur OOXML d'Aster, HTML stylé
+   * (polices, interlignes, bordures, tableaux complets, listes fidèles), `layout`, `lost`
+   * et gabarit renseignés. `semantic` : mammoth, HTML sémantique sans mise en forme,
+   * comportement des versions 0.4.x ; `styleMap` n'a d'effet que sur ce chemin. Migration
+   * depuis la 0.5 : `importDocx(file, { fidelity: 'semantic' })` retrouve l'ancien défaut.
    */
   fidelity?: 'styled' | 'semantic';
 }

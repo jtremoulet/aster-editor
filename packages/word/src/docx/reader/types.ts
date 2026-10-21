@@ -6,7 +6,7 @@ import type {
   OrderedListType,
   UploadHandler,
 } from '@aster-editor/core';
-import type { DocxImportWarning, DocxLostObject, DocxLostWhere } from '../types';
+import type { DocxImportWarning, DocxLostObject, DocxLostWhere } from '../types.js';
 
 /**
  * Types du lecteur OOXML (session 3). Figés en phase 0 : `index.ts` orchestre, chaque

@@ -1,4 +1,4 @@
-import type { AsterDictionary } from '../api';
+import type { AsterDictionary } from '../api/index.js';
 
 /** Dictionnaire anglais, locale de repli. Clés des commandes standard : `command.<id>`. */
 export const en: AsterDictionary = {
@@ -67,10 +67,18 @@ export const en: AsterDictionary = {
   'command.text.setLetterSpacing': 'Letter spacing',
   'command.text.setCaps': 'Capitalization',
   'command.text.unsetCaps': 'Normal case',
+  'command.text.insertTab': 'Insert tab',
+  'command.section.insertBreak': 'Insert section break',
+  'command.section.removeBreak': 'Remove section break',
+  'command.section.renumber': 'Renumber sections',
   'editor.placeholder': 'Start writing…',
   'editor.words': '{count} words',
   'editor.characters': '{count} characters',
   // Page view, approximate pagination (L30): "Page n of N" label of each gap.
   'pageView.page': 'Page',
   'pageView.of': 'of',
+  // Sections in page view (L44): "Section 2 · Letter landscape" label of a section's first gap.
+  'pageView.section': 'Section',
+  'pageView.portrait': 'portrait',
+  'pageView.landscape': 'landscape',
 };

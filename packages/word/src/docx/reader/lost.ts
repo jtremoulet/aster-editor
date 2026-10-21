@@ -1,6 +1,6 @@
-import { allNamed, childNamed, textOf, wordAttribute } from '../preprocess/xml-utils';
-import type { DocxLostKind, DocxLostObject } from '../types';
-import type { ConverterContext } from './types';
+import { allNamed, childNamed, textOf, wordAttribute } from '../preprocess/xml-utils.js';
+import type { DocxLostKind, DocxLostObject } from '../types.js';
+import type { ConverterContext } from './types.js';
 
 /**
  * Détection des objets Word que l'éditeur ne représente pas. Deux points d'entrée, même

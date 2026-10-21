@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseHtml, runPass } from '../../testing/html-compare';
+import { parseHtml, runPass } from '../../testing/html-compare.js';
 import {
   stripConditionalComments,
   stripConditionalCommentsText,
-} from './strip-conditional-comments';
+} from './strip-conditional-comments.js';
 
 describe('stripConditionalCommentsText', () => {
   it('jette le contenu des commentaires conditionnels cachés', () => {

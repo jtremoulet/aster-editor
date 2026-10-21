@@ -1,6 +1,6 @@
-import type { AsterCommand, AsterEditor } from '../api';
-import { SEARCH_EXTENSION_NAME, type SearchStorage } from '../extensions/search';
-import { iconIdFor } from './define';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
+import { SEARCH_EXTENSION_NAME, type SearchStorage } from '../extensions/search.js';
+import { iconIdFor } from './define.js';
 
 /** Nom de l'événement DOM émis sur `editor.element` par `search.open` ; `ui` l'écoute pour ouvrir son panneau. */
 export const SEARCH_OPEN_EVENT = 'aster:search-open';

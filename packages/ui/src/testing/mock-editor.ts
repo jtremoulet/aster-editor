@@ -16,7 +16,7 @@ import type {
   Unsubscribe,
 } from '@aster-editor/core';
 import { STANDARD_COMMAND_IDS, en, fr } from '@aster-editor/core';
-import { createMockVariables, type MockVariablesOptions } from './mock-variables';
+import { createMockVariables, type MockVariablesOptions } from './mock-variables.js';
 
 /** Appel de commande enregistré par le mock, pour les assertions. */
 export interface RecordedCall {
@@ -58,6 +58,14 @@ export interface MockEditorOptions extends MockVariablesOptions {
   layout?: DocumentLayout | null;
   /** Vue page active au montage (classe `aster--page-view` sur l'hôte). */
   pageView?: boolean;
+  /**
+   * Sections du document (L44) : `tiptap.state` minimal dont le document alterne un
+   * paragraphe et un `sectionBreak` par section (`count` sections) et dont la tête de
+   * sélection (`$head`) est dans le paragraphe de la section `current` (1-based) ; `anchor`
+   * (R44-06) place l'ancre dans une autre section (sélection à cheval), `current` par
+   * défaut. Absent : pas de `state`.
+   */
+  sections?: { readonly count: number; readonly current: number; readonly anchor?: number };
 }
 
 /**
@@ -109,6 +117,52 @@ function interpolate(template: string, params?: TranslateParams): string {
     const value = params[name];
     return value === undefined ? match : String(value);
   });
+}
+
+/** Un bloc de premier niveau du document simulé : juste un nom de type. */
+interface MockTopLevelNode {
+  readonly type: { readonly name: string };
+}
+
+/** Position résolue minimale : dans un paragraphe (profondeur 1) d'index donné. */
+function mockResolvedPos(childIndex: number): { depth: number; index: () => number } {
+  return { depth: 1, index: () => childIndex };
+}
+
+/**
+ * `EditorState` minimal pour les sections (L44) : `doc.forEach` énumère, par section, un
+ * paragraphe puis un `sectionBreak` (sauf pour la dernière) ; `$head` est dans le
+ * paragraphe de la section courante, `$anchor` dans celui de `anchor` (R44-06), `$from` /
+ * `$to` en sont le min et le max. Suffit à `sectionOfSelection`.
+ */
+function createMockSectionsState(sections: {
+  count: number;
+  current: number;
+  anchor?: number;
+}): unknown {
+  const nodes: MockTopLevelNode[] = [];
+  for (let section = 1; section <= sections.count; section += 1) {
+    nodes.push({ type: { name: 'paragraph' } });
+    if (section < sections.count) nodes.push({ type: { name: 'sectionBreak' } });
+  }
+  const paragraphIndex = (section: number): number =>
+    (Math.min(Math.max(section, 1), sections.count) - 1) * 2;
+  const head = paragraphIndex(sections.current);
+  const anchor = paragraphIndex(sections.anchor ?? sections.current);
+  return {
+    doc: {
+      childCount: nodes.length,
+      forEach: (callback: (node: MockTopLevelNode, offset: number, index: number) => void) => {
+        nodes.forEach((node, index) => callback(node, index, index));
+      },
+    },
+    selection: {
+      $head: mockResolvedPos(head),
+      $anchor: mockResolvedPos(anchor),
+      $from: mockResolvedPos(Math.min(head, anchor)),
+      $to: mockResolvedPos(Math.max(head, anchor)),
+    },
+  };
 }
 
 /** Crée un `MockEditor` prêt à l'emploi. */
@@ -212,6 +266,7 @@ export function createMockEditor(options: MockEditorOptions = {}): MockEditor {
   };
 
   const tiptap = {
+    ...(options.sections ? { state: createMockSectionsState(options.sections) } : {}),
     getAttributes: (name: string): Record<string, unknown> => attributes.get(name) ?? {},
     isActive: (name: string): boolean => activeNodes.has(name),
     registerPlugin: (plugin: Plugin): void => {

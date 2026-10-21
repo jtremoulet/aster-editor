@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mountEditor, type MountedEditor } from '../testing/mount';
-import { AUTOSAVE_DEFAULT_INTERVAL, createAutosave, type Autosave } from './autosave';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
+import { AUTOSAVE_DEFAULT_INTERVAL, createAutosave, type Autosave } from './autosave.js';
 
 /** Laisse les promesses de sauvegarde se résoudre sans faire avancer les minuteurs. */
 const settle = async (): Promise<void> => {

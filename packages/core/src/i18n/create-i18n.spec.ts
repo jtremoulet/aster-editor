@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FALLBACK_LOCALE, interpolate } from './create-i18n';
-import { en } from './en';
-import { fr } from './fr';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { FALLBACK_LOCALE, interpolate } from './create-i18n.js';
+import { en } from './en.js';
+import { fr } from './fr.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 describe('i18n', () => {
   describe('interpolate', () => {

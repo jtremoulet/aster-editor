@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterEditor, AsterVariable } from '@aster-editor/core';
 import { createEditor } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { getFullscreen } from './fullscreen';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { getFullscreen } from './fullscreen.js';
 import {
   VARIABLE_SUGGESTION_PLUGIN_KEY,
   buildSuggestionItems,
@@ -14,7 +14,7 @@ import {
   type VariableSuggestion,
   type VariableSuggestionItem,
   type VariableSuggestionPanel,
-} from './variable-suggestion';
+} from './variable-suggestion.js';
 
 const LIST: readonly AsterVariable[] = [
   { name: 'client.name', label: 'Client name' },

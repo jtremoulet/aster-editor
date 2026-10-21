@@ -5,14 +5,14 @@ import type {
   ToolbarItem,
   Unsubscribe,
 } from '@aster-editor/core';
-import { TOOLBAR_ITEM_ATTR, createCommandButton } from '../components/button';
-import { createCommandDropdown } from '../components/dropdown';
-import { uiEn } from '../i18n/ui-en';
-import { uiFr } from '../i18n/ui-fr';
-import type { Toolbar, ToolbarWidget } from '../types';
-import { clear, el, enabledElements, rovingIndexFor } from '../utils/dom';
-import { resolveToolbarConfig } from './presets';
-import { createWidget } from './widgets';
+import { TOOLBAR_ITEM_ATTR, createCommandButton } from '../components/button.js';
+import { createCommandDropdown } from '../components/dropdown.js';
+import { uiEn } from '../i18n/ui-en.js';
+import { uiFr } from '../i18n/ui-fr.js';
+import type { Toolbar, ToolbarWidget } from '../types.js';
+import { clear, el, enabledElements, rovingIndexFor } from '../utils/dom.js';
+import { resolveToolbarConfig } from './presets.js';
+import { createWidget } from './widgets.js';
 
 const ITEM_SELECTOR = `[${TOOLBAR_ITEM_ATTR}]`;
 

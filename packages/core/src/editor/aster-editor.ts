@@ -1,5 +1,5 @@
 import { Editor, type FocusPosition } from '@tiptap/core';
-import { history } from '@tiptap/pm/history';
+import { closeHistory, history } from '@tiptap/pm/history';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorProps } from '@tiptap/pm/view';
 import type {
@@ -14,24 +14,31 @@ import type {
   DocumentLayout,
   GetHtmlOptions,
   PageViewOptions,
+  SectionLayout,
   VariableStore,
   I18n,
   Unsubscribe,
-} from '../api';
-import { createCommandRegistry } from '../commands/registry';
-import { createStandardCommands } from '../commands/standard';
-import { createAsterExtensions } from '../extensions/aster-extensions';
-import { createImageUploadProps } from '../extensions/image-upload';
-import { resolveLinkPolicy } from '../extensions/link-safety';
-import { applyPageView, type PageViewHandle } from '../extensions/page-view';
-import { createPastePipelineProps } from '../extensions/paste-pipeline';
-import { collectShortcutBindings } from '../extensions/shortcuts';
-import { normalizeOutputHtml } from '../html/normalize-output';
-import { resolveVariablesHtml } from '../html/resolve-variables';
-import { serializeDocumentHtml } from '../html/serialize-html';
-import { createI18n } from '../i18n/create-i18n';
-import { createEventEmitter, type AsterEventEmitter } from './event-emitter';
-import { VARIABLE_NODE_NAME, createVariableStore, variableText } from './variable-store';
+} from '../api/index.js';
+import { createCommandRegistry } from '../commands/registry.js';
+import { createStandardCommands } from '../commands/standard.js';
+import { createAsterExtensions } from '../extensions/aster-extensions.js';
+import { createImageUploadProps } from '../extensions/image-upload.js';
+import { resolveLinkPolicy } from '../extensions/link-safety.js';
+import {
+  applyPageView,
+  resolveSectionLayout,
+  type PageViewHandle,
+} from '../extensions/page-view.js';
+import { createPastePipelineProps } from '../extensions/paste-pipeline.js';
+import { SET_CONTENT_META } from '../extensions/section-break.js';
+import { collectShortcutBindings } from '../extensions/shortcuts.js';
+import { TAB_NODE_NAME, TAB_TEXT, normalizeTabsInCodeBlocks } from '../extensions/tab.js';
+import { normalizeOutputHtml } from '../html/normalize-output.js';
+import { resolveVariablesHtml } from '../html/resolve-variables.js';
+import { serializeDocumentHtml } from '../html/serialize-html.js';
+import { createI18n } from '../i18n/create-i18n.js';
+import { createEventEmitter, type AsterEventEmitter } from './event-emitter.js';
+import { VARIABLE_NODE_NAME, createVariableStore, variableText } from './variable-store.js';
 
 /** Classe CSS du conteneur créé dans `options.element`. */
 export const CONTENT_CLASS = 'aster-content';
@@ -51,6 +58,15 @@ const HISTORY_OPTIONS = { depth: 100, newGroupDelay: 500 } as const;
  */
 const CAN_MEASURE_SELECTION =
   typeof Range !== 'undefined' && typeof Range.prototype.getClientRects === 'function';
+
+/**
+ * Contenu prêt pour le parseur : un HTML passe par `normalizeTabsInCodeBlocks` (une
+ * tabulation dans un bloc de code devient le texte `\t` au lieu de scinder le bloc,
+ * R41-04) ; un document JSON passe tel quel.
+ */
+function normalizeContent(content: string | AsterDocument): string | AsterDocument {
+  return typeof content === 'string' ? normalizeTabsInCodeBlocks(content) : content;
+}
 
 /**
  * Implémentation de `AsterEditor`.
@@ -112,7 +128,7 @@ export class AsterEditorImpl implements AsterEditor {
 
     this.tiptap = new Editor({
       element: this.container,
-      content: options.content ?? '',
+      content: normalizeContent(options.content ?? ''),
       editable: !options.readOnly,
       injectCSS: false,
       autofocus: options.autofocus ? 'end' : false,
@@ -153,27 +169,67 @@ export class AsterEditorImpl implements AsterEditor {
     queueMicrotask(() => this.emit('ready', { editor: this }));
   }
 
-  // --- Vue page (hors contrat `AsterEditor`, proposée en session 3) -------
+  // --- Vue page (contrat `AsterEditor` depuis L45b, après proposition en session 3) ---
 
   /**
    * Active, remplace ou désactive la vue page : classe `aster--page-view` et variables
    * `--aster-page-*` sur l'hôte, conteneurs d'en-tête et de pied autour du corps. `true`
    * vaut `{}` (A4 portrait, marges 25,4 mm), `false` retire tout. Indépendante de la
-   * lecture seule. Hors contrat : à proposer dans `api/editor.ts`.
+   * lecture seule. Si la nouvelle mise en page lève (entrée hostile), la vue précédente
+   * est remontée à l'identique avant de relayer l'erreur : l'appelant retrouve l'état
+   * d'avant l'appel, jamais un éditeur sans vue page (R41-05).
+   *
+   * `pageViewChange` (contrat) est émis une fois `this.pageView` à jour : un abonné qui
+   * relit `getLayout()` voit la nouvelle mise en page, là où l'événement DOM
+   * `aster:page-view-change` (émis par `applyPageView` et `remove`, conservé pour les
+   * plugins du core et les intégrateurs vanilla) part avant l'affectation. Pas d'émission
+   * si rien n'a changé (`false` sans vue active) ni si la vue précédente a été remontée
+   * après une erreur : l'état observable est celui d'avant l'appel.
    */
   setPageView(options: boolean | PageViewOptions): void {
-    this.pageView?.remove();
+    const previous = this.pageView;
+    previous?.remove();
     this.pageView = null;
     if (options === false || this.destroyed) {
+      if (previous) {
+        this.emitPageViewChange();
+      }
       return;
     }
     const resolved: PageViewOptions = options === true ? {} : options;
-    this.pageView = applyPageView(this.element, this.contentElement, resolved);
+    try {
+      this.pageView = applyPageView(this.element, this.contentElement, resolved);
+    } catch (error) {
+      if (previous) {
+        this.pageView = applyPageView(this.element, this.contentElement, previous.options);
+      }
+      throw error;
+    }
+    this.emitPageViewChange();
   }
 
-  /** Mise en page de la vue page active, `null` si elle est inactive. Hors contrat. */
+  /** Mise en page de la vue page active (`options.layout`, ou `{}` pour `true`), `null` si elle est inactive. */
   getLayout(): DocumentLayout | null {
     return this.pageView?.layout ?? null;
+  }
+
+  /**
+   * Mise en page de la section `section` (numéro 1-based, celui de `data-section-break`
+   * et de `getSections`) dans la vue page active : `layout.sections[section - 1]`, sinon
+   * les champs de premier niveau (`resolveSectionLayout`). `null` hors vue page.
+   */
+  getSectionLayout(section: number): SectionLayout | null {
+    const layout = this.getLayout();
+    return layout ? resolveSectionLayout(layout, section) : null;
+  }
+
+  /** `pageViewChange` avec l'état courant : `active` et `layout` sont relus, pas recopiés des options. */
+  private emitPageViewChange(): void {
+    this.emit('pageViewChange', {
+      editor: this,
+      active: this.pageView !== null,
+      layout: this.getLayout(),
+    });
   }
 
   // --- Contenu -------------------------------------------------------------
@@ -236,20 +292,37 @@ export class AsterEditorImpl implements AsterEditor {
    * L'historique antérieur est ensuite vidé : ses étapes visaient l'ancien document, et
    * un `undo` les rejouerait, remappées, sur le nouveau (annulation fantôme). Le plugin
    * `history` ne s'efface pas, on le remplace par un neuf aux mêmes options.
+   *
+   * La méta `SET_CONTENT_META` signale aux plugins un chargement complet (le saut de
+   * section garde alors la numérotation reçue), ce qu'un collage de tout le document ne
+   * doit pas obtenir (R41-02).
+   *
+   * Avec `emit`, le remplacement reste annulable mais ferme son groupe d'historique
+   * (L50) : `prosemirror-history` regroupe toute édition qui suit dans les 500 ms
+   * (`newGroupDelay`) et adjacente au pas précédent, or un remplacement complet est
+   * adjacent à tout. Sans fermeture, `setHTML(a)` puis une édition immédiate et `undo`
+   * revenaient au document d'avant `setHTML`. `closeHistory` posé sur la transaction de
+   * remplacement elle-même ne suffirait pas : il ne ferme que le groupe **précédent**
+   * (il remet le compteur à zéro avant d'ajouter la transaction). On dispatche donc une
+   * transaction sans pas juste après : ni `change` (document inchangé) ni entrée
+   * d'historique, seul le compteur de groupe est remis à zéro.
    */
   private replaceContent(content: string | AsterDocument, emit: boolean): void {
     this.assertAlive();
     this.tiptap
       .chain()
-      .setContent(content, { emitUpdate: emit })
+      .setContent(normalizeContent(content), { emitUpdate: emit })
       .command(({ tr }) => {
+        tr.setMeta(SET_CONTENT_META, true);
         if (!emit) {
           tr.setMeta('addToHistory', false);
         }
         return true;
       })
       .run();
-    if (!emit) {
+    if (emit) {
+      this.tiptap.view.dispatch(closeHistory(this.tiptap.state.tr));
+    } else {
       this.clearHistory();
     }
   }
@@ -279,6 +352,9 @@ export class AsterEditorImpl implements AsterEditor {
           if (leaf.type.name === 'hardBreak') {
             return '\n';
           }
+          if (leaf.type.name === TAB_NODE_NAME) {
+            return TAB_TEXT;
+          }
           return leaf.type.name === VARIABLE_NODE_NAME ? variableText(leaf, values) : '';
         }),
       );
@@ -289,7 +365,7 @@ export class AsterEditorImpl implements AsterEditor {
 
   insertHTML(html: string): void {
     this.assertAlive();
-    this.tiptap.chain().focus().insertContent(html).run();
+    this.tiptap.chain().focus().insertContent(normalizeTabsInCodeBlocks(html)).run();
   }
 
   isEmpty(): boolean {

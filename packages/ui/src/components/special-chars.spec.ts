@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createWidget } from '../toolbar/widgets';
-import type { ToolbarWidget } from '../types';
-import { SPECIAL_CHARS_COLUMNS, SPECIAL_CHAR_GROUPS, createSpecialChars } from './special-chars';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { createWidget } from '../toolbar/widgets.js';
+import type { ToolbarWidget } from '../types.js';
+import { SPECIAL_CHARS_COLUMNS, SPECIAL_CHAR_GROUPS, createSpecialChars } from './special-chars.js';
 
 describe('createSpecialChars', () => {
   let editor: MockEditor;

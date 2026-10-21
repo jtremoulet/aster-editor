@@ -5,21 +5,21 @@ import {
   createVariablesPass,
   resolveDocxVariableOptions,
   variablePatterns,
-} from './postprocess/variables';
-import { runPostprocess } from './postprocess/run-postprocess';
-import { stripEmptyParagraphs } from './postprocess/strip-empty-paragraphs';
-import { readDocx } from './reader';
-import { defaultXmlParse } from './reader/package';
-import type { CollectedVariable } from './preprocess/variables';
-import { preprocessVariables } from './preprocess/variables';
-import { buildStyleMap } from './style-map';
+} from './postprocess/variables.js';
+import { runPostprocess } from './postprocess/run-postprocess.js';
+import { stripEmptyParagraphs } from './postprocess/strip-empty-paragraphs.js';
+import { readDocx } from './reader/index.js';
+import { defaultXmlParse } from './reader/package.js';
+import type { CollectedVariable } from './preprocess/variables.js';
+import { preprocessVariables } from './preprocess/variables.js';
+import { buildStyleMap } from './style-map.js';
 import type {
   DocxImportOptions,
   DocxImportResult,
   DocxImportWarning,
   DocxInput,
   HtmlParser,
-} from './types';
+} from './types.js';
 
 type Mammoth = typeof mammothTypes;
 type MammothInput = Parameters<Mammoth['convertToHtml']>[0];
@@ -30,8 +30,9 @@ type MammothImage = Parameters<Parameters<Mammoth['images']['imgElement']>[0]>[0
  * Vrai si l'entrée est un `File`/`Blob` (jsdom et navigateurs exposent `arrayBuffer()`).
  * Pas d'`instanceof` : en test, le `File` de jsdom et l'`ArrayBuffer` de Node vivent dans
  * des realms différents. `null` et les primitives sont écartés avant tout accès (W-4).
+ * Partagé avec l'ouverture du gabarit (`writer/template.ts`).
  */
-function isBlobLike(input: unknown): input is File {
+export function isBlobLike(input: unknown): input is File {
   return (
     typeof input === 'object' &&
     input !== null &&
@@ -45,12 +46,12 @@ function describeError(error: unknown): string {
 }
 
 /** Détection d'`ArrayBuffer` robuste aux realms (jsdom vs Node), contrairement à `instanceof`. */
-function isArrayBuffer(input: unknown): input is ArrayBuffer {
+export function isArrayBuffer(input: unknown): input is ArrayBuffer {
   return Object.prototype.toString.call(input) === '[object ArrayBuffer]';
 }
 
 /** Les 4 premiers octets d'un .docx valide sont la signature zip `PK\x03\x04`. */
-function hasZipSignature(buffer: ArrayBuffer): boolean {
+export function hasZipSignature(buffer: ArrayBuffer): boolean {
   const bytes = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
   return (
     bytes.length === 4 &&
@@ -61,11 +62,21 @@ function hasZipSignature(buffer: ArrayBuffer): boolean {
   );
 }
 
-/** Erreur typée pour les entrées illisibles, message stable pour les intégrateurs. */
-function invalidDocx(detail: string): Error {
-  const error = new Error(`invalid-docx: ${detail}`);
-  error.name = 'DocxImportError';
-  return error;
+/**
+ * Erreur typée pour les entrées illisibles : nom `DocxImportError` et message
+ * `invalid-docx: …` stables pour les intégrateurs, qui distinguent ainsi un document
+ * hostile d'un bug (R30-12). Levée par l'import et par le comparateur (`compare-docx.ts`).
+ */
+export class DocxImportError extends Error {
+  constructor(detail: string) {
+    super(`invalid-docx: ${detail}`);
+    this.name = 'DocxImportError';
+  }
+}
+
+/** `DocxImportError` pour un détail donné (`invalid-docx: <détail>`). */
+export function invalidDocx(detail: string): DocxImportError {
+  return new DocxImportError(detail);
 }
 
 /**
@@ -185,12 +196,14 @@ function resolveParser(parse: HtmlParser | undefined): HtmlParser {
 }
 
 /**
- * Convertit un document Word (.docx) en HTML sémantique prêt pour `AsterEditor.setHTML`
- * ou `insertHTML`. Accepte un `File`, un `ArrayBuffer` ou une vue typée (`Uint8Array`,
- * `Buffer` Node). Ne lève jamais pour un document Word valide : les éléments non
- * convertis fidèlement sont signalés dans `warnings`. Rejette avec une erreur
- * `DocxImportError` (message `invalid-docx: …`) si l'entrée n'est ni l'un de ces types,
- * ni une archive .docx lisible.
+ * Convertit un document Word (.docx) en HTML prêt pour `AsterEditor.setHTML` ou
+ * `insertHTML`. Sans option, c'est le lecteur OOXML d'Aster qui lit (`fidelity: 'styled'`,
+ * défaut depuis la 0.6) : HTML stylé, mise en page, gabarit et objets perdus renseignés ;
+ * `fidelity: 'semantic'` retrouve le chemin mammoth des versions 0.4.x (HTML sémantique).
+ * Accepte un `File`, un `ArrayBuffer` ou une vue typée (`Uint8Array`, `Buffer` Node). Ne
+ * lève jamais pour un document Word valide : les éléments non convertis fidèlement sont
+ * signalés dans `warnings`. Rejette avec une erreur `DocxImportError` (message
+ * `invalid-docx: …`) si l'entrée n'est ni l'un de ces types, ni une archive .docx lisible.
  */
 export async function importDocx(
   input: DocxInput,
@@ -216,7 +229,8 @@ export async function importDocx(
     });
   }
 
-  if (options.fidelity === 'styled') {
+  // Défaut `styled` depuis la 0.6 : seul `fidelity: 'semantic'` emprunte encore mammoth.
+  if (options.fidelity !== 'semantic') {
     return importStyled(
       buffer,
       mammothBuffer,

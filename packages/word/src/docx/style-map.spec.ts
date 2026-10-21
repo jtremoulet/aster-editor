@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASTER_STYLE_MAP, buildStyleMap } from './style-map';
+import { ASTER_STYLE_MAP, buildStyleMap } from './style-map.js';
 
 const RULE = /^(p|r|u|strike|highlight)(\[style-name='[^']+'\]|\.\w+)?\s=>\s[\w\s>:'()\\]+$/;
 

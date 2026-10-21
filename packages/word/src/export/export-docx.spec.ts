@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DOCX_MIME_TYPE, exportDocx } from './export-docx';
-import { RED_PNG_DATA_URL, SAMPLE_HTML, parseFragment, roundTrip } from './testing/sample';
-import type { DocxExportWarning } from './types';
+import { DOCX_MIME_TYPE, exportDocx } from './export-docx.js';
+import { RED_PNG_DATA_URL, SAMPLE_HTML, parseFragment, roundTrip } from './testing/sample.js';
+import type { DocxExportWarning } from './types.js';
 
 function count(doc: Document, selector: string): number {
   return doc.querySelectorAll(selector).length;
@@ -90,7 +90,7 @@ describe('exportDocx', () => {
         },
       ],
     });
-    const { importDocx } = await import('../docx/import-docx');
+    const { importDocx } = await import('../docx/import-docx.js');
     const doc = parseFragment((await importDocx(await blob.arrayBuffer())).html);
     expect(doc.querySelector('h1')?.textContent).toBe('JSON');
     expect(doc.querySelector('p > strong')?.textContent).toBe('gras');

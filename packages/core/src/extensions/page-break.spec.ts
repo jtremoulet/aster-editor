@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 describe('AsterHorizontalRule : saut de page', () => {
   let mounted: MountedEditor;

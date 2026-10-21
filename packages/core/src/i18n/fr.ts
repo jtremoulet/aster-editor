@@ -1,4 +1,4 @@
-import type { AsterDictionary } from '../api';
+import type { AsterDictionary } from '../api/index.js';
 
 /** Dictionnaire français. Clés des commandes standard : `command.<id>`. */
 export const fr: AsterDictionary = {
@@ -67,10 +67,18 @@ export const fr: AsterDictionary = {
   'command.text.setLetterSpacing': 'Espacement des caractères',
   'command.text.setCaps': 'Casse',
   'command.text.unsetCaps': 'Casse normale',
+  'command.text.insertTab': 'Insérer une tabulation',
+  'command.section.insertBreak': 'Insérer un saut de section',
+  'command.section.removeBreak': 'Supprimer le saut de section',
+  'command.section.renumber': 'Renuméroter les sections',
   'editor.placeholder': 'Commence à écrire…',
   'editor.words': '{count} mots',
   'editor.characters': '{count} caractères',
   // Vue page, pagination approximative (L30) : libellé « Page n sur N » des coupures.
   'pageView.page': 'Page',
   'pageView.of': 'sur',
+  // Sections en vue page (L44) : libellé « Section 2 · Letter paysage » de la première coupure d'une section.
+  'pageView.section': 'Section',
+  'pageView.portrait': 'portrait',
+  'pageView.landscape': 'paysage',
 };

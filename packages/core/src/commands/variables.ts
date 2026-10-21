@@ -1,7 +1,7 @@
 import { NodeSelection, type EditorState } from '@tiptap/pm/state';
-import type { AsterCommand, AsterEditor } from '../api';
-import { VARIABLE_NODE_NAME, canInsertVariable, variableName } from '../editor/variable-store';
-import { defineStandardCommand } from './define';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
+import { VARIABLE_NODE_NAME, canInsertVariable, variableName } from '../editor/variable-store.js';
+import { defineStandardCommand } from './define.js';
 
 /** Puce visée par `variable.remove` : sa plage de positions et son nom. */
 export interface VariableRange {

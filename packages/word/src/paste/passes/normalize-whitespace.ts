@@ -1,5 +1,5 @@
-import { collectTextNodes, isBlank, isBlockElement, selectAll } from '../dom-utils';
-import type { PastePass } from '../types';
+import { collectTextNodes, isBlank, isBlockElement, selectAll } from '../dom-utils.js';
+import type { PastePass } from '../types.js';
 
 /** On respecte les espaces dans le code préformaté, et seulement là. */
 const PRESERVED_TAGS: ReadonlySet<string> = new Set(['pre']);

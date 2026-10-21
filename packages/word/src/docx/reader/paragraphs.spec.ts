@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createEditor } from '@aster-editor/core';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { importDocx } from '../import-docx';
-import { buildDocx, run as runXml } from '../preprocess/minimal-docx';
-import { normalizeHtml, parseFragment } from '../testing/dom';
-import { convertParagraph, paragraphAttributes } from './paragraphs';
-import { createStyleResolver } from './styles';
-import { createTestContext, fakePackage, paragraphOf, stylesXml } from './test-support';
-import type { ConverterContext, StyleResolver } from './types';
+import { importDocx } from '../import-docx.js';
+import { buildDocx, run as runXml } from '../preprocess/minimal-docx.js';
+import { normalizeHtml, parseFragment } from '../testing/dom.js';
+import { convertParagraph, paragraphAttributes } from './paragraphs.js';
+import { createStyleResolver } from './styles.js';
+import { createTestContext, fakePackage, paragraphOf, stylesXml } from './test-support.js';
+import type { ConverterContext, StyleResolver } from './types.js';
 
 const STYLES = stylesXml(
   '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>' +
@@ -62,6 +62,125 @@ describe('convertParagraph', () => {
     expect(
       await html(runXml('x'), '<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>'),
     ).toBe('<p data-docx-style="Normal">x</p>');
+  });
+
+  it('w:space des bordures → padding-<côté> après les border-*, seulement s’il est présent', async () => {
+    expect(
+      await html(
+        runXml('x'),
+        '<w:pBdr><w:top w:val="single" w:sz="4" w:space="1"/><w:bottom w:val="single" w:sz="8" w:space="4" w:color="BFBFBF"/><w:left w:val="single" w:sz="4"/><w:between w:val="single" w:sz="4" w:space="2"/></w:pBdr>',
+      ),
+    ).toBe(
+      '<p style="border-top: 0.5pt solid #000000; border-bottom: 1pt solid #bfbfbf; border-left: 0.5pt solid #000000; padding-top: 1pt; padding-bottom: 4pt" data-docx-style="Normal" data-border-between="0.5pt solid #000000">x</p>',
+    );
+    // `w:space="0"` explicite est écrit, une valeur négative ou illisible ignorée.
+    expect(
+      await html(
+        runXml('x'),
+        '<w:pBdr><w:top w:val="single" w:sz="4" w:space="0"/><w:bottom w:val="single" w:sz="4" w:space="-3"/><w:left w:val="single" w:sz="4" w:space="abc"/></w:pBdr>',
+      ),
+    ).toBe(
+      '<p style="border-top: 0.5pt solid #000000; border-bottom: 0.5pt solid #000000; border-left: 0.5pt solid #000000; padding-top: 0pt" data-docx-style="Normal">x</p>',
+    );
+  });
+
+  it('taquets : ceux du style puis les directs, w:clear retire, n-ième tabulation = n-ième taquet', async () => {
+    const tabbed = fakePackage({
+      'word/styles.xml': stylesXml(
+        '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>' +
+          '<w:style w:type="paragraph" w:styleId="Tabbed"><w:name w:val="Tabbed"/><w:basedOn w:val="Normal"/><w:pPr><w:tabs><w:tab w:val="left" w:pos="1134"/><w:tab w:val="right" w:pos="8504"/></w:tabs></w:pPr></w:style>',
+      ),
+    });
+    const tabbedCtx = createTestContext(await createStyleResolver(tabbed), tabbed);
+    const three =
+      '<w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:tab/><w:t>c</w:t><w:tab/><w:t>d</w:t></w:r>';
+    // Session 4 : l'alignement du taquet (`right`) suit en `data-align`, après `data-stop`.
+    expect(await html(three, '<w:pStyle w:val="Tabbed"/>', tabbedCtx)).toBe(
+      '<p data-docx-style="Tabbed">a<span data-tab="" data-stop="56.7pt"></span>b<span data-tab="" data-stop="425.2pt" data-align="right"></span>c<span data-tab=""></span>d</p>',
+    );
+    // Direct : `clear` du premier taquet du style, nouveau taquet à 2 cm trié par position.
+    expect(
+      await html(
+        three,
+        '<w:pStyle w:val="Tabbed"/><w:tabs><w:tab w:val="clear" w:pos="1134"/><w:tab w:val="center" w:pos="2268"/></w:tabs>',
+        tabbedCtx,
+      ),
+    ).toBe(
+      '<p data-docx-style="Tabbed">a<span data-tab="" data-stop="113.4pt" data-align="center"></span>b<span data-tab="" data-stop="425.2pt" data-align="right"></span>c<span data-tab=""></span>d</p>',
+    );
+    // Sans taquet : aucun `data-stop` ; une tabulation seule n'est pas un paragraphe vide.
+    expect(await html('<w:r><w:t>a</w:t><w:tab/><w:t>b</w:t></w:r>')).toBe(
+      '<p data-docx-style="Normal">a<span data-tab=""></span>b</p>',
+    );
+    const lone = await convertParagraph(paragraphOf('<w:r><w:tab/></w:r>'), ctx);
+    expect(lone.html).toBe('<p data-docx-style="Normal"><span data-tab=""></span></p>');
+    expect(lone.isEmpty).toBe(false);
+  });
+
+  it('taquets alignés (R43-05) : w:val et w:leader → data-align puis data-leader ; left, bar, start et leader none → rien', async () => {
+    const tabs = (inner: string): string => `<w:tabs>${inner}</w:tabs>`;
+    const one = '<w:r><w:tab/><w:t>x</w:t></w:r>';
+    const stop = async (tab: string): Promise<string> =>
+      (await html(one, tabs(tab))).replace(/^<p[^>]*>|x<\/p>$/g, '');
+    expect(await stop('<w:tab w:val="decimal" w:pos="720" w:leader="dot"/>')).toBe(
+      '<span data-tab="" data-stop="36pt" data-align="decimal" data-leader="dot"></span>',
+    );
+    expect(await stop('<w:tab w:val="end" w:pos="720" w:leader="hyphen"/>')).toBe(
+      '<span data-tab="" data-stop="36pt" data-align="right" data-leader="hyphen"></span>',
+    );
+    expect(await stop('<w:tab w:val="left" w:pos="720" w:leader="underscore"/>')).toBe(
+      '<span data-tab="" data-stop="36pt" data-leader="underscore"></span>',
+    );
+    // `heavy` → `underscore`, `middleDot` → `dot` (approximations vers le contrat).
+    expect(await stop('<w:tab w:val="center" w:pos="720" w:leader="heavy"/>')).toBe(
+      '<span data-tab="" data-stop="36pt" data-align="center" data-leader="underscore"></span>',
+    );
+    expect(await stop('<w:tab w:val="start" w:pos="720" w:leader="middleDot"/>')).toBe(
+      '<span data-tab="" data-stop="36pt" data-leader="dot"></span>',
+    );
+    for (const tab of [
+      '<w:tab w:val="bar" w:pos="720"/>',
+      '<w:tab w:val="num" w:pos="720" w:leader="none"/>',
+      '<w:tab w:pos="720" w:leader="zzz"/>',
+    ]) {
+      expect(await stop(tab), tab).toBe('<span data-tab="" data-stop="36pt"></span>');
+    }
+    // Un taquet direct à la même position remplace celui du style, alignement compris.
+    expect(await stop('<w:tab w:val="right" w:pos="720"/><w:tab w:val="left" w:pos="720"/>')).toBe(
+      '<span data-tab="" data-stop="36pt"></span>',
+    );
+  });
+
+  it('R42-03 : un taquet à position négative est ignoré, jamais data-stop="-36pt"', async () => {
+    const negative = await html(
+      '<w:r><w:tab/><w:t>x</w:t></w:r>',
+      '<w:tabs><w:tab w:val="left" w:pos="-720"/><w:tab w:val="clear" w:pos="-1"/></w:tabs>',
+    );
+    expect(negative).toBe('<p data-docx-style="Normal"><span data-tab=""></span>x</p>');
+    expect(negative).not.toContain('-36pt');
+    // `pos="0"` reste dans le domaine du core (≥ 0).
+    expect(
+      await html(
+        '<w:r><w:tab/><w:t>x</w:t></w:r>',
+        '<w:tabs><w:tab w:val="left" w:pos="0"/></w:tabs>',
+      ),
+    ).toBe('<p data-docx-style="Normal"><span data-tab="" data-stop="0pt"></span>x</p>');
+  });
+
+  it('R42-05 : w:sz="0" sur une bordure de paragraphe donne le filet fin, comme sur une cellule', async () => {
+    expect(await html(runXml('p'), '<w:pBdr><w:bottom w:val="single" w:sz="0"/></w:pBdr>')).toBe(
+      '<p style="border-bottom: 0.5pt solid #000000" data-docx-style="Normal">p</p>',
+    );
+    // Même entrée dans un `.docx` : paragraphe et cellule reçoivent la même largeur.
+    const docx = await importDocx(
+      await buildDocx(
+        `<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="0"/></w:pBdr></w:pPr>${runXml('p')}</w:p>` +
+          `<w:tbl><w:tr><w:tc><w:tcPr><w:tcBorders><w:bottom w:val="single" w:sz="0"/></w:tcBorders></w:tcPr><w:p>${runXml('c')}</w:p></w:tc></w:tr></w:tbl>`,
+      ),
+      { fidelity: 'styled' },
+    );
+    const widths = docx.html.match(/border-bottom: ([\d.]+pt)/g) ?? [];
+    expect(widths).toEqual(['border-bottom: 0.5pt', 'border-bottom: 0.5pt']);
   });
 
   it('bordure between → data-border-between', async () => {
@@ -189,6 +308,29 @@ describe('convertParagraph', () => {
       const inTable: ConverterContext = { ...ctx, tableStyle: { borders: [] } };
       expect(await html(runXml('x'), '', inTable)).toBe('<p data-docx-style="Normal">x</p>');
     });
+
+    it('R42-07 : les taquets du w:pPr du style de tableau valent pour les cellules, sauf si le paragraphe en pose', async () => {
+      const pkg = fakePackage({
+        'word/styles.xml': stylesXml(
+          '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/></w:style>' +
+            '<w:style w:type="table" w:styleId="G"><w:name w:val="G"/><w:pPr><w:tabs><w:tab w:val="right" w:pos="1440"/></w:tabs></w:pPr></w:style>',
+        ),
+      });
+      const resolver = await createStyleResolver(pkg);
+      const inTable = createTestContext(resolver, pkg, { tableStyle: resolver.tableStyle('G') });
+      const one = '<w:r><w:tab/><w:t>x</w:t></w:r>';
+      expect(await html(one, '', inTable)).toBe(
+        '<p data-docx-style="Normal"><span data-tab="" data-stop="72pt" data-align="right"></span>x</p>',
+      );
+      // Le paragraphe pose ses propres taquets : ceux du style de tableau ne s'ajoutent pas.
+      expect(await html(one, '<w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs>', inTable)).toBe(
+        '<p data-docx-style="Normal"><span data-tab="" data-stop="36pt"></span>x</p>',
+      );
+      // Hors tableau : aucun taquet.
+      expect(await html(one, '', createTestContext(resolver, pkg))).toBe(
+        '<p data-docx-style="Normal"><span data-tab=""></span>x</p>',
+      );
+    });
   });
 
   it('paragraphAttributes : identifiant de style échappé, bordures identiques à la base omises', () => {
@@ -262,12 +404,15 @@ describe('fixtures 11-13 (chemin styled)', () => {
     expect(out).toContain(
       '<p style="margin-left: 14.15pt; text-indent: -14.15pt" data-docx-style="Normal">',
     );
-    expect(out).toContain('<p style="border-bottom: 1pt solid #000000" data-docx-style="Normal">');
+    expect(out).toContain(
+      '<p style="border-bottom: 1pt solid #000000; padding-bottom: 1pt" data-docx-style="Normal">',
+    );
     expect(out).toContain('<p style="background-color: #eeeeee" data-docx-style="Normal">');
     expect(out).toContain('data-keep-next=""');
     expect(out).toContain('data-page-break-before=""');
+    // Tabulation avec le taquet par défaut de la fixture (4 cm = 113,4 pt).
     expect(out).toContain(
-      `Tabulation dans un paragraphe${String.fromCharCode(0x2003)}texte après la tabulation`,
+      'Tabulation dans un paragraphe<span data-tab="" data-stop="113.4pt"></span>texte après la tabulation',
     );
     expect(out).toContain('première ligne<br>seconde ligne');
     expect(out).toContain(
@@ -280,14 +425,15 @@ describe('fixtures 11-13 (chemin styled)', () => {
       fidelity: 'styled',
     });
     expect(layout.defaultFont).toEqual({ family: 'Calibri', sizePt: 11 });
-    expect(out).toContain(
-      '<p style="line-height: 1.15; margin-bottom: 8pt" data-docx-style="Normal">Paragraphe Normal',
-    );
+    // `Normal` (1,15 / après 8 pt) est `layout.defaultParagraph` : plus rien sur les
+    // paragraphes qui le portent, ni sur les styles qui en héritent (R53-01).
+    expect(layout.defaultParagraph).toEqual({ lineHeight: 1.15, spacingAfterPt: 8 });
+    expect(out).toContain('<p data-docx-style="Normal">Paragraphe Normal');
     expect(out).toMatch(
-      /<h1 style="line-height: 1.15; margin-top: 12pt; margin-bottom: 4pt" data-docx-style="Heading1" data-keep-next=""><span style="color: #2f5496; font-size: 16pt"><strong>Titre 1/,
+      /<h1 style="margin-top: 12pt; margin-bottom: 4pt" data-docx-style="Heading1" data-keep-next=""><span style="color: #2f5496; font-size: 16pt"><strong>Titre 1/,
     );
     expect(out).toContain(
-      '<p style="line-height: 1.15; margin-bottom: 8pt; margin-left: 28.35pt; border-left: 1.5pt solid #808080" data-docx-style="Citation"><em>Paragraphe Citation',
+      '<p style="margin-left: 28.35pt; border-left: 1.5pt solid #808080; padding-left: 4pt" data-docx-style="Citation"><em>Paragraphe Citation',
     );
     expect(out).toContain(
       'data-docx-style="Important"><span style="color: #c00000"><strong><em>Paragraphe Important',

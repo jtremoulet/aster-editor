@@ -624,11 +624,17 @@ describe('AsterEditorComponent', () => {
       expect(editor.getHTML()).toContain('data-docx-style');
 
       // La mise en page est appliquée à la vue page par un effet : au prochain rendu.
+      // Depuis la feuille par section (L44), l'hôte porte la section 1 (A4, en-tête
+      // « Première page » sur la page 1, `titlePage`) ; la section 2 est portée par le saut.
       TestBed.tick();
-      expect(pageWidth(editor)).toBe('279.4mm');
+      expect(component.layout()?.sections?.length).toBe(2);
+      expect(pageWidth(editor)).toBe('210mm');
       expect(editor.element.querySelector('.aster-page-header')?.textContent).toContain(
-        'Section 2',
+        'Première page',
       );
+      expect(
+        editor.element.querySelector('hr[data-section-break]')?.getAttribute('style'),
+      ).toContain('279.4mm');
       expect(layoutChanged).toHaveBeenCalledTimes(1);
       expect(layoutChanged).toHaveBeenCalledWith(result.layout);
     }, 20_000);
@@ -720,6 +726,41 @@ describe('AsterEditorComponent', () => {
       expect(next?.element.classList.contains('aster--page-view')).toBe(false);
     });
 
+    it('suit pageViewChange du contrat : une vue posée sans layout n’adopte rien, une mise en page explicite oui (L45b)', async () => {
+      const { fixture, component, editor } = await mount({ toolbar: 'minimal' });
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+      expect(component.layout()).toBeNull();
+
+      // `pageView: true` à chaud : le core résout `{}` mais le composant n'adopte pas une
+      // mise en page vide (même comportement que la relecture sur l'événement DOM).
+      fixture.componentRef.setInput('pageView', true);
+      fixture.detectChanges();
+      expect(editor.element.classList.contains('aster--page-view')).toBe(true);
+      expect(editor.getLayout?.()).toEqual({});
+      expect(component.layout()).toBeNull();
+      expect(layoutChanged).not.toHaveBeenCalled();
+
+      // Appel direct par le contrat (plus de duck typing) : la mise en page est adoptée.
+      const fromContract = { page: { size: 'A5' as const } };
+      editor.setPageView?.({ layout: fromContract });
+      expect(component.layout()).toBe(fromContract);
+      // `layoutChanged` part de l'effet sur `layout()` : au prochain rendu.
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+      expect(layoutChanged).toHaveBeenCalledWith(fromContract);
+
+      // L'événement DOM seul (intégrateur vanilla) ne pilote plus le composant.
+      editor.contentElement.dispatchEvent(new CustomEvent('aster:page-view-change'));
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+
+      editor.setPageView?.(false);
+      fixture.detectChanges();
+      expect(component.layout()).toBe(fromContract);
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+    });
+
     it('config.pageView est honoré et l’input dédié prime', async () => {
       const { fixture, editor } = await mount({ config: { pageView: true } });
       expect(editor.element.classList.contains('aster--page-view')).toBe(true);
@@ -734,17 +775,19 @@ describe('AsterEditorComponent', () => {
       component.layoutChanged.subscribe(layoutChanged);
       const result = await component.importDocx(await fixtureFile('16-sections.docx'));
       TestBed.tick();
-      expect(pageWidth(editor)).toBe('279.4mm');
+      expect(pageWidth(editor)).toBe('210mm');
 
+      // Sans `sections`, la mise en page imposée vaut pour tout le document.
       const imposed = {
         ...result.layout,
-        page: { size: 'A4', orientation: 'portrait' },
+        sections: undefined,
+        page: { size: 'Letter', orientation: 'landscape' },
         headers: { default: { html: '<p>En-tête imposé</p>' } },
       };
       fixture.componentRef.setInput('layout', imposed);
       fixture.detectChanges();
       expect(component.layout()).toBe(imposed);
-      expect(pageWidth(editor)).toBe('210mm');
+      expect(pageWidth(editor)).toBe('279.4mm');
       expect(editor.element.querySelector('.aster-page-header')?.textContent).toBe(
         'En-tête imposé',
       );
@@ -754,7 +797,7 @@ describe('AsterEditorComponent', () => {
       fixture.componentRef.setInput('layout', undefined);
       fixture.detectChanges();
       expect(component.layout()).toBe(result.layout);
-      expect(pageWidth(editor)).toBe('279.4mm');
+      expect(pageWidth(editor)).toBe('210mm');
     }, 20_000);
 
     it('le dialogue « Mise en page » (setPageView du core) est relu : layout() suit et layoutChanged est émis', async () => {
@@ -791,6 +834,42 @@ describe('AsterEditorComponent', () => {
       api?.setPageView(false);
       expect(component.layout()).toBe(other);
       expect(editor.element.classList.contains('aster--page-view')).toBe(false);
+    });
+
+    it('L54 : un en-tête saisi dans le dialogue « Mise en page » est relayé par layoutChanged', async () => {
+      // Le widget `pageLayout` est dans la toolbar `full` (pas dans `standard`).
+      const { fixture, component, editor } = await mount({ pageView: true, toolbar: 'full' });
+      const layoutChanged = vi.fn();
+      component.layoutChanged.subscribe(layoutChanged);
+      const host = fixture.nativeElement as HTMLElement;
+      const trigger = host.querySelector<HTMLButtonElement>(
+        '.aster-dropdown__trigger[aria-label="Mise en page"]',
+      );
+      expect(trigger, 'déclencheur « Mise en page »').not.toBeNull();
+      expect(trigger?.disabled).toBe(false);
+      trigger?.click();
+      const dialog = host.querySelector<HTMLElement>('.aster-page-layout');
+      expect(dialog?.hasAttribute('hidden'), 'dialogue ouvert').toBe(false);
+      const field = dialog?.querySelector<HTMLElement>('.aster-page-layout__headers-default');
+      expect(field?.getAttribute('contenteditable')).toBe('true');
+      if (!dialog || !field) throw new Error('dialogue « Mise en page » attendu');
+      field.innerHTML = '<p onclick="x()">En-tête du <b>dialogue</b></p>';
+      // Comme une saisie réelle : sans événement `input`, le champ n'est pas « modifié »
+      // et « Appliquer » conserve le jeu d'origine (F52, R52-02).
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      Array.from(dialog.querySelectorAll<HTMLButtonElement>('.aster-dialog__button'))
+        .find((button) => button.textContent === 'Appliquer')
+        ?.click();
+      // Le core relit la vue page (`pageViewChange`) : `layout()` suit, assaini et normalisé.
+      expect(component.layout()?.headers?.default?.html).toBe(
+        '<p>En-tête du <strong>dialogue</strong></p>',
+      );
+      expect(editor.element.querySelector('.aster-page-header')?.textContent).toBe(
+        'En-tête du dialogue',
+      );
+      fixture.detectChanges();
+      expect(layoutChanged).toHaveBeenCalledTimes(1);
+      expect(layoutChanged).toHaveBeenCalledWith(component.layout());
     });
 
     it('compareWithTemplate rend null sans gabarit, puis un rapport après import', async () => {

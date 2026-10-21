@@ -1,8 +1,13 @@
 import JSZip from 'jszip';
-import { replaceContentControls } from './content-controls';
-import { replaceComplexFields, replaceSimpleFields } from './fields';
-import { DEFAULT_VARIABLE_PATTERN, isVariableName } from './names';
-import { allNamed, PartCollector, stripXmlDeclaration, type CollectedVariable } from './xml-utils';
+import { replaceContentControls } from './content-controls.js';
+import { replaceComplexFields, replaceSimpleFields } from './fields.js';
+import { DEFAULT_VARIABLE_PATTERN, isVariableName } from './names.js';
+import {
+  allNamed,
+  PartCollector,
+  stripXmlDeclaration,
+  type CollectedVariable,
+} from './xml-utils.js';
 
 /**
  * Prétraitement du .docx **avant** mammoth : mammoth perd les champs de fusion
@@ -15,8 +20,8 @@ import { allNamed, PartCollector, stripXmlDeclaration, type CollectedVariable } 
  * (`_rels/.rels`, puis `word/_rels/<corps>.rels`), avec repli sur les noms usuels.
  */
 
-export type { CollectedVariable } from './xml-utils';
-export { mergeFieldName } from './fields';
+export type { CollectedVariable } from './xml-utils.js';
+export { mergeFieldName } from './fields.js';
 
 /** Ce que le prétraitement doit détecter. Sans aucune détection, le zip n'est pas ouvert. */
 export interface PreprocessVariablesOptions {

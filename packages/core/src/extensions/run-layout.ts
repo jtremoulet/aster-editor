@@ -13,7 +13,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Underline } from '@tiptap/extension-underline';
 import { StarterKit } from '@tiptap/starter-kit';
 import type { TagParseRule } from '@tiptap/pm/model';
-import type { DecorationStyle } from '../api';
+import type { DecorationStyle } from '../api/index.js';
 import {
   formatPt,
   isLayoutNumber,
@@ -21,7 +21,7 @@ import {
   parsePt,
   parseStyleDeclarations,
   readStyleProperty,
-} from './layout-css';
+} from './layout-css.js';
 
 /** Nom de l'extension qui porte les attributs de run de mise en page. */
 export const RUN_LAYOUT_EXTENSION_NAME = 'runLayout';

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { normalizeHtmlForCompare } from '../testing/html-compare';
-import { normalizeGoogleDocsHtml } from './normalize-google-docs-html';
+import { normalizeHtmlForCompare } from '../testing/html-compare.js';
+import { normalizeGoogleDocsHtml } from './normalize-google-docs-html.js';
 
 const fixture = (name: string): string =>
   readFileSync(`${import.meta.env.ASTER_FIXTURES}word-html/${name}.html`, 'utf8');

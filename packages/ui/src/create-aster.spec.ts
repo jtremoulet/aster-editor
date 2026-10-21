@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterOptions } from '@aster-editor/core';
 import type * as Core from '@aster-editor/core';
 import { createEditor } from '@aster-editor/core';
-import { createAster, openToolbarWidget } from './create-aster';
-import { createMockEditor, type MockEditor } from './testing/mock-editor';
+import { createAster, openToolbarWidget } from './create-aster.js';
+import { createMockEditor, type MockEditor } from './testing/mock-editor.js';
 
 vi.mock('@aster-editor/core', async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();

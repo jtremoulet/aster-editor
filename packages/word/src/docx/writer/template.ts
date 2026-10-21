@@ -1,25 +1,27 @@
 import type { HeaderFooterSet } from '@aster-editor/core';
-import type { DocxExportWarning } from '../../export/types';
-import { transformVariablesXml } from '../preprocess/variables';
-import { childNamed, childrenNamed } from '../preprocess/xml-utils';
-import { readHeadersFooters, type HeadersFootersResult } from '../reader/headers';
-import { createImageConverter } from '../reader/images';
-import { createNumberingResolver, registerListItem, renderBlocks } from '../reader/lists';
-import { createNoteRegistry } from '../reader/notes';
-import { openPackage } from '../reader/package';
-import { convertParagraph } from '../reader/paragraphs';
-import { createStyleResolver, type DocxStyleResolver } from '../reader/styles';
-import { convertTable } from '../reader/tables';
+import type { DocxExportWarning } from '../../export/types.js';
+import { hasZipSignature, isArrayBuffer, isBlobLike } from '../import-docx.js';
+import { transformVariablesXml } from '../preprocess/variables.js';
+import { childNamed, childrenNamed } from '../preprocess/xml-utils.js';
+import { convertBlocks } from '../reader/index.js';
+import { readHeadersFooters, type HeadersFootersResult } from '../reader/headers.js';
+import { createImageConverter } from '../reader/images.js';
+import { createNumberingResolver, renderBlocks } from '../reader/lists.js';
+import { createNoteRegistry } from '../reader/notes.js';
+import { openPackage } from '../reader/package.js';
+import { convertParagraph } from '../reader/paragraphs.js';
+import { createStyleResolver, type DocxStyleResolver } from '../reader/styles.js';
+import { convertTable } from '../reader/tables.js';
 import type {
-  Block,
   ConverterContext,
   DocxPackage,
   NumberingResolver,
   ReaderOptions,
-} from '../reader/types';
-import type { DocxInput } from '../types';
-import { headerFooterParts } from './header-footer-variables';
-import { wordAttr, xmlDeclarationOf, type XmlCodec } from './xml-io';
+} from '../reader/types.js';
+import type { DocxInput } from '../types.js';
+import { allSectPrs } from './graft-sections.js';
+import { headerFooterParts } from './header-footer-variables.js';
+import { wordAttr, xmlDeclarationOf, type XmlCodec } from './xml-io.js';
 
 /**
  * Ouverture du gabarit de `exportDocx({ template })` : octets, paquet en lecture, partie
@@ -54,35 +56,18 @@ export interface TemplateContext {
   /** En-têtes et pieds du gabarit en HTML stylé, lus seulement si `readHeadersFooters` est demandé. */
   readonly headers?: HeaderFooterSet;
   readonly footers?: HeaderFooterSet;
+  /**
+   * En-têtes et pieds **effectifs** de chaque `w:sectPr` du gabarit (héritage compris),
+   * dans l'ordre du corps, lus avec `headers` / `footers` : la greffe section par section
+   * compare `layout.sections[n]` à l'entrée correspondante.
+   */
+  readonly sections?: readonly HeadersFootersResult[];
 }
 
-/** Détection d'`ArrayBuffer` robuste aux realms (jsdom vs Node), contrairement à `instanceof`. */
-function isArrayBuffer(input: unknown): input is ArrayBuffer {
-  return Object.prototype.toString.call(input) === '[object ArrayBuffer]';
-}
-
-/** Vrai si l'entrée est un `File`/`Blob` (`arrayBuffer()` disponible). */
-function isBlobLike(input: unknown): input is Blob {
-  return (
-    typeof input === 'object' &&
-    input !== null &&
-    typeof (input as { arrayBuffer?: unknown }).arrayBuffer === 'function'
-  );
-}
-
-/** Les 4 premiers octets d'un .docx valide sont la signature zip `PK\x03\x04`. */
-function hasZipSignature(buffer: ArrayBuffer): boolean {
-  const bytes = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
-  return (
-    bytes.length === 4 &&
-    bytes[0] === 0x50 &&
-    bytes[1] === 0x4b &&
-    bytes[2] === 0x03 &&
-    bytes[3] === 0x04
-  );
-}
-
-/** Octets d'une entrée `DocxInput`, `null` si elle n'en est pas une. Une vue typée est copiée. */
+/**
+ * Octets d'une entrée `DocxInput`, `null` si elle n'en est pas une (mêmes détections que
+ * l'import : `isArrayBuffer`, `isBlobLike`). Une vue typée est copiée.
+ */
 async function toArrayBuffer(input: DocxInput): Promise<ArrayBuffer | null> {
   if (isArrayBuffer(input)) return input;
   if (ArrayBuffer.isView(input)) {
@@ -194,8 +179,9 @@ export async function openTemplate(
     const read = await readTemplateHeadersFooters(pkg, body, codec, resolver, numbering);
     return {
       ...context,
-      ...(read.headers ? { headers: read.headers } : {}),
-      ...(read.footers ? { footers: read.footers } : {}),
+      ...(read.last.headers ? { headers: read.last.headers } : {}),
+      ...(read.last.footers ? { footers: read.last.footers } : {}),
+      sections: read.sections,
     };
   } catch {
     return context;
@@ -235,59 +221,19 @@ async function preprocessedView(pkg: DocxPackage, codec: XmlCodec): Promise<Docx
   };
 }
 
-/**
- * Enfants bloc d'un en-tête ou d'un pied (`w:hdr`, `w:ftr`, `w:tc`, `w:sdtContent`) :
- * paragraphes (enregistrés pour les listes), tableaux, contrôles de contenu et balises
- * personnalisées traversés. Même parcours que le lecteur pour le corps, sans la détection
- * des objets perdus de premier niveau (inexistants dans un en-tête : les dessins y sont
- * dans les runs).
- */
-async function convertHeaderBlocks(container: Element, ctx: ConverterContext): Promise<Block[]> {
-  const blocks: Block[] = [];
-  for (const child of Array.from(container.children)) {
-    switch (child.localName) {
-      case 'p': {
-        const block = await ctx.convert.paragraph(child, ctx);
-        registerListItem(block, ctx);
-        blocks.push(block);
-        break;
-      }
-      case 'tbl':
-        blocks.push(await ctx.convert.table(child, ctx));
-        break;
-      case 'sdt': {
-        const content = childNamed(child, 'sdtContent');
-        if (content) blocks.push(...(await convertHeaderBlocks(content, ctx)));
-        break;
-      }
-      case 'customXml':
-        blocks.push(...(await convertHeaderBlocks(child, ctx)));
-        break;
-      default:
-        break;
-    }
-  }
-  return blocks;
-}
-
-/** Tous les `w:sectPr` du corps dans l'ordre : ceux des `w:pPr` (fins de section) puis le final. */
-function allSectPrs(body: Element): Element[] {
-  const result: Element[] = [];
-  for (const paragraph of childrenNamed(body, 'p')) {
-    const pPr = childNamed(paragraph, 'pPr');
-    const sectPr = pPr ? childNamed(pPr, 'sectPr') : null;
-    if (sectPr) result.push(sectPr);
-  }
-  const last = childNamed(body, 'sectPr');
-  if (last) result.push(last);
-  return result;
+/** En-têtes et pieds effectifs de chaque section du gabarit, et ceux de la dernière. */
+interface TemplateHeadersFooters {
+  readonly sections: readonly HeadersFootersResult[];
+  readonly last: HeadersFootersResult;
 }
 
 /**
- * En-têtes et pieds effectifs du gabarit, lus par le lecteur stylé (`reader/headers.ts`)
- * sur le paquet déjà ouvert : seules les parties d'en-tête et de pied sont converties,
- * pas le corps. Comme à l'import, chaque section hérite des références de la précédente,
- * les plus récentes recouvrant les plus anciennes type par type.
+ * En-têtes et pieds effectifs du gabarit, lus par le lecteur stylé (`reader/headers.ts`,
+ * blocs convertis par `convertBlocks` du lecteur, comme à l'import) sur le paquet déjà
+ * ouvert : seules les parties d'en-tête et de pied sont converties, pas le corps. Comme
+ * à l'import, chaque section hérite des références de la précédente,
+ * les plus récentes recouvrant les plus anciennes type par type ; le résultat de chaque
+ * section est conservé pour la greffe section par section.
  */
 async function readTemplateHeadersFooters(
   pkg: DocxPackage,
@@ -295,7 +241,7 @@ async function readTemplateHeadersFooters(
   codec: XmlCodec,
   styles: DocxStyleResolver,
   numbering: NumberingResolver,
-): Promise<HeadersFootersResult> {
+): Promise<TemplateHeadersFooters> {
   const options: ReaderOptions = {
     footnotes: false,
     emptyParagraphs: 'keep',
@@ -313,7 +259,7 @@ async function readTemplateHeadersFooters(
     convert: {
       paragraph: convertParagraph,
       table: convertTable,
-      blocks: convertHeaderBlocks,
+      blocks: convertBlocks,
       render: renderBlocks,
     },
     options,
@@ -322,10 +268,13 @@ async function readTemplateHeadersFooters(
     tableStyle: null,
   };
   const merged: { -readonly [K in keyof HeadersFootersResult]: HeadersFootersResult[K] } = {};
+  const sections: HeadersFootersResult[] = [];
   for (const sectPr of allSectPrs(body)) {
     const section = await readHeadersFooters(sectPr, ctx);
     if (section.headers) merged.headers = { ...merged.headers, ...section.headers };
     if (section.footers) merged.footers = { ...merged.footers, ...section.footers };
+    if (section.titlePage !== undefined) merged.titlePage = section.titlePage;
+    sections.push({ ...merged });
   }
-  return merged;
+  return { sections, last: merged };
 }

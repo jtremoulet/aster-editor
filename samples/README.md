@@ -16,7 +16,7 @@ Généré par le lot L16 avec **toutes** les options activées : mode `fields` a
 8. [ ] Table 3 colonnes à largeurs fixes (≈ 4 / 2,65 / 5,3 cm), en-tête gras répété, pas de redimensionnement automatique.
 9. [ ] Page 2 commence après la table (saut de page explicite), puis « Page suivante… » ouvre une page 3 avec le carré rouge 40×40.
 10. [ ] Mise en page : A4 portrait, marges 2 cm, langue « Français (France) », police Calibri 11.
-11. [ ] Enregistrer sous, puis réimporter dans la démo (`/import`) : variables, notes et table reviennent ; en-têtes, pieds et numéros de titres sont attendus perdus à l'import (limite mammoth).
+11. [ ] Enregistrer sous, puis réimporter dans la démo (`/import`) : variables, notes et table reviennent, et depuis la 0.6 (import `styled` par défaut) la mise en page, l'en-tête et le pied aussi (affichés en vue page, pas dans le corps) ; seuls les numéros de titres sont attendus perdus à l'import (champ de numérotation). En `semantic`, en-têtes, pieds et numéros restent perdus (limite mammoth).
 12. [ ] Optionnel : ouvrir dans LibreOffice pour comparer le rendu des champs.
 
 ### Ajouts après la revue de l'export (L22)
@@ -40,11 +40,29 @@ Aucun Word réel n'était disponible pendant la session 3 : la greffe du corps d
 24. [ ] **Modification locale** : changer un mot dans la démo, exporter dans le gabarit : seul ce mot diffère (comparer avec Révision → Comparer dans Word), rien d'autre n'a bougé.
 25. [ ] **En-tête modifié** dans le panneau En-tête / Pied de la page « Modèle » : la nouvelle valeur s'affiche sur toutes les pages, l'ancienne partie reste dans le zip (normal) sans gêner Word.
 26. [ ] **Variables** : export dans le gabarit en mode `fields` → Alt+F9 montre les `MERGEFIELD` dans le corps **et** dans le pied si le modèle en avait ; en mode `resolve` → les valeurs sont dans le corps et dans le pied, plus aucun champ de fusion.
-27. [ ] **Document multi-sections** (orientation ou marges changeantes) : constater la limite documentée (une seule section ressort, celle de la fin) et vérifier qu'il s'ouvre sans réparation.
+27. [ ] **Document multi-sections** (orientation ou marges changeantes) : depuis la session 4, toutes les sections ressortent (voir la checklist « Sections, tabulations et bordures » ci-dessous) ; vérifier qu'il s'ouvre sans réparation et que chaque section garde son format.
 28. [ ] **Objets non représentables** : un document avec une zone de texte, une forme et un commentaire dans le corps : la démo les liste ; le fichier exporté s'ouvre sans réparation, le texte de la zone est présent en paragraphe, la forme et le commentaire ont disparu ; les mêmes objets dans l'en-tête sont intacts.
 29. [ ] **Vue page** : comparer le nombre de pages affiché par la pagination approximative de la démo avec celui de Word sur le même document (écart attendu, à noter pour calibrer).
 30. [ ] Rapport de fidélité de la page « Modèle » sur ce même document : noter le score et les propriétés perdues dans `docs/JOURNAL.md` ; si des pertes ne correspondent à rien de visible dans Word, c'est le comparateur qu'il faut ajuster.
 31. [ ] Optionnel : ouvrir le fichier greffé dans LibreOffice et comparer.
+
+## Sections, tabulations et bordures (session 4)
+
+Aucun Word réel pendant la session 4 non plus : les sections, tabulations et bordures sont validées par le comparateur (fixtures 16, 18, client à 1 / 1 / 0,995 dans le gabarit, 19 à 0,998), par un validateur de paquet maison, par la relecture du zip en e2e (Chromium et WebKit) et par les revues R41 à R44 (`docs/reviews/`). Produis les fichiers depuis le playground (`npm run playground`, « Importer .docx » puis « Exporter .docx ») ou la démo (page « Modèle », « Télécharger dans le gabarit »), avec `fixtures/docx/18-sections-triple.docx`, `19-tabulations-bordures.docx` et un `.docx` **créé dans Word** à plusieurs sections (portrait puis paysage, un saut continu, un en-tête différent par section, une première page différente).
+
+32. [ ] **Fixture 18 sans modification** : trois sections dans Word (Mise en page → Sauts : A4 portrait, Letter paysage deux colonnes, A4 portrait en saut continu), en-têtes « Section 1 » / « Première page » / « Section 2 » / « Section 2 paire » (pages paires), section 3 qui hérite de l'en-tête de la section 2, pied `PAGE` puis « Pied 3 » ; aucune boîte « contenu illisible ».
+33. [ ] **Document Word réel multi-sections** : aller-retour sans modification, puis Révision → Comparer avec l'original : aucune différence de section, de marges, d'orientation ni d'en-tête ; même nombre de pages.
+34. [ ] **Saut inséré dans Aster** (`section.insertBreak` via `getHTML` / `setHTML` ou le playground) puis export dans le gabarit : la nouvelle section existe dans Word avec le format de la précédente (régénérée depuis `layout.sections`), les anciennes sont intactes.
+35. [ ] **Saut supprimé dans Aster** (fixture 18, saut 1 retiré) : la section 1 disparaît, la section suivante hérite de ses en-têtes `default` / `even` comme Word l'aurait fait, mais **pas** de sa première page différente (R43-06 : `w:titlePg` non hérité) ; vérifier que la première page n'affiche pas l'en-tête « Première page ».
+36. [ ] **Deux sauts consécutifs** (section vide, paragraphe porteur seul) : Word affiche une page blanche ; confirmer que c'est acceptable, sinon c'est l'éditeur qui doit refuser (il le refuse déjà au clavier, pas par `setHTML`).
+37. [ ] **Export neuf à trois sections** (`exportDocx(html, { layout })` sans gabarit, ou le playground sans import préalable) : section 2 en Letter paysage deux colonnes avec saut continu, en-têtes pairs affichés (`settings.xml` `w:evenAndOddHeaders`), section 3 en saut page impaire.
+38. [ ] **Fixture 19 dans le gabarit** : les quatre taquets (`left` 2 cm, `center` 8 cm, `right` 14 cm, `decimal` 10 cm) ressortent avec leur alignement : le texte après la tabulation est centré / aligné à droite / aligné sur la virgule comme dans l'original (R43-05 ; en 0.5 tout taquet devenait `left`). Les points de suite, s'il y en a, sont conservés (`w:leader`).
+39. [ ] **Bordures de paragraphe** : `w:space` 1 / 4 / 8 pt identiques à l'original (Révéler la mise en forme, Maj+F1 : « Bordures : distance du texte »). Un `padding-top: 40pt` posé à la main dans le HTML ressort plafonné à 31 pt (R43-07) : vérifier que Word l'accepte sans réparation, et ce qu'il fait d'une valeur `w:space="40"` écrite directement (tronquée ou refusée ?).
+40. [ ] **Bordures de cellule** : traits gris `#BFBFBF` restés gris, cellules « nil gauche » / « nil bas » sans trait réapparu depuis le style du tableau, tableau centré resté centré et tableau aligné à droite resté à droite (`w:jc`) ; `w:space` sur les `w:tcBorders` (1 / 4 pt écrits par l'export) sans décalage visible, Word l'ignore.
+41. [ ] **Tableau à style conditionnel** (fixture 19, style `AsterConditional`) : première ligne grasse sur fond bleu clair et bandes grises comme dans l'original ; constater que `w:tblLook` a été remis par Word à son défaut (`0x04A0` : première colonne activée en plus) et si la mise en forme change quand on modifie le style du tableau dans Word (elle ne suit plus le style : propriétés directes).
+42. [ ] **Tabulation dans un bloc de code** : un `<pre>` avec une tabulation ressort avec un caractère `\t` dans le paragraphe `HTML Preformatted`, pas un `w:tab` avec taquet.
+43. [ ] **Position de taquet énorme** (`data-stop="99999999999pt"` posé dans le HTML) : ressort plafonnée à 31 680 twips (R43-02), le fichier s'ouvre sans « contenu illisible ».
+44. [ ] **Vue page multi-sections vs Word** : comparer le nombre de pages de la démo (une feuille par section, une seule largeur de feuille) avec celui de Word sur le même document ; noter l'écart dans `docs/JOURNAL.md`.
 
 ## Produire d'autres échantillons
 

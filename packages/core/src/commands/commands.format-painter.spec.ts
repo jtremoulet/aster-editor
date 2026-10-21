@@ -5,8 +5,8 @@ import {
   mountEditor,
   selectRange,
   type MountedEditor,
-} from '../testing/mount';
-import { getOutline } from '../extensions/outline';
+} from '../testing/mount.js';
+import { getOutline } from '../extensions/outline.js';
 import {
   FORMAT_PAINTER_CHANGE_EVENT,
   FORMAT_PAINTER_COMMANDS,
@@ -17,7 +17,7 @@ import {
   hasFormatClipboard,
   readFormat,
   wordRangeAt,
-} from './format-painter';
+} from './format-painter.js';
 
 /** Simule une frappe sur le contenteditable. `Mod` = Ctrl hors macOS, ce que jsdom est. */
 function press(target: HTMLElement, key: string, modifiers: Partial<KeyboardEventInit> = {}): void {

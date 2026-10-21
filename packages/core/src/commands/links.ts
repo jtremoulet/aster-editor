@@ -1,6 +1,6 @@
-import type { AsterCommand, AsterEditor } from '../api';
-import { isAllowedHref, type ResolvedLinkPolicy } from '../extensions/link-safety';
-import { defineStandardCommand } from './define';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
+import { isAllowedHref, type ResolvedLinkPolicy } from '../extensions/link-safety.js';
+import { defineStandardCommand } from './define.js';
 
 /**
  * Commandes de lien, paramétrées par la politique de l'éditeur : `link.set` refuse

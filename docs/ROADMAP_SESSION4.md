@@ -48,3 +48,41 @@ Critères : score ≥ 0,98 sur le document client et la fixture 16 dans le gabar
 - Les retours du POC et au moins un `.docx` par écart constaté.
 - L'ouverture dans Word réel des exports de la session 3 (checklist), avant de lancer la session 4.
 - Le choix de l'ordre entre la session 4 (fidélité) et la dette, selon ce que le client remonte en premier.
+
+## 🌙 Déroulé de la session 4 (20 → 21 octobre 2026, 23:07 → 05:00)
+
+> GO de Joris à 23:07. Même rituel : contrat figé en phase 0, lots disjoints, revues adverses à l'intégration, correctifs au rapport, e2e, docs, bilan. Version cible **0.6.0** (bascule du défaut `styled`, sections, tabulations).
+
+### Phase 0 (orchestrateur)
+
+- Contrat additif dans `core/src/api/layout.ts` : `DocumentLayout.sections`, `SectionLayout`, `SectionStart`, `SectionBreakAttrs` (`<hr data-section-break="n">`), `TabAttrs` (`<span data-tab>`), `BlockBorder.spacePt` (`padding-<côté>`), `TableLayoutAttrs.align` (`data-align`).
+- Briefs L40-L48, relecteurs R41-R46, journal.
+
+### Vague 1 (5 agents, lots disjoints)
+
+| Lot                        | Paquet / dossier                 | Contenu                                                                                                                                                                                                                                         |
+| -------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **L40 fixtures sections**  | `scripts/`, `fixtures/docx/`     | `18-sections-triple.docx` (3 sections portrait / paysage / portrait, en-têtes différents, saut continu), `19-tabulations-bordures.docx` (taquets, `w:space`, `nil`, bordures grises, `w:jc` de tableau, styles conditionnels)                   |
+| **L41 core sections/tabs** | `core/src/extensions`, commands  | Nœud `sectionBreak` (atom bloc, `data-section-break`), nœud `tab` (atom inline), `spacePt` et `align` dans les extensions de mise en page, commandes `section.insertBreak` / `section.setLayout` (hors contrat), rendu CSS minimal, idempotence |
+| **L42 reader sections**    | `word/src/docx/reader`           | `layout.sections[]` avec en-têtes par section, `sectionBreak` dans le corps, `w:tab` → nœud `tab` avec taquets, bordures `nil` et couleurs exactes, `w:space`, `w:jc`, styles conditionnels de tableau approximés                               |
+| **L43 writer sections**    | `word/src/docx/writer`, `export` | `w:sectPr` par section (greffé depuis le gabarit section par section, régénéré sinon), `w:tab` depuis le nœud `tab`, `tcBorders nil`, couleurs, `w:space`, `w:jc`, export neuf multi-sections depuis `layout.sections`                          |
+| **L44 vue page sections**  | `core/pagination`, `ui/page.css` | Feuilles de tailles différentes par section dans la vue page, pagination par segment, en-têtes et pieds de chaque section, dialogue « Mise en page » appliqué à la section courante                                                             |
+
+### Vague 2 (après intégration de la vague 1)
+
+| Lot                       | Contenu                                                                                                                                                                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **L45 dette**             | Fusion `units.ts` / `units-blocks.ts`, helpers exportés (`parseMergeField`, `invalidDocx`, `convertBlocks`), fichiers > 400 lignes de `word/export`, propositions de contrat acceptées (`setPageView` / `getLayout` / `pageViewChange` dans `api/editor.ts`, `image.setAttributes.height`), test de performance 100 pages |
+| **L46 défaut styled 0.6** | `importDocx` en `styled` par défaut, `semantic` conservé en option, attendus et tests re-baselinés, comparateur : `w:jc` et styles conditionnels comparés, scores remesurés                                                                                                                                               |
+| **L47 e2e**               | Projets Firefox et WebKit, scénarios sections (import 18, vue page multi-feuilles, export gabarit avec 3 `sectPr`), tabulations, bordures                                                                                                                                                                                 |
+| **L48 docs**              | Guide, READMEs, API_CORE, THEMING, ARCHITECTURE, STRATEGIE_TESTS, CHANGELOG préparé                                                                                                                                                                                                                                       |
+
+### Critères
+
+- Document client et fixture 16 : score ≥ 0,98 dans le gabarit, 3 `w:sectPr` conservés à l'octet, pied présent sur chaque section.
+- Fixture 19 : tabulations et bordures restituées, score ≥ 0,98.
+- Aucune régression : 1 994 tests, 42 e2e, idempotence stricte conservée.
+
+### Ordre de sacrifice
+
+1. Dialogue « Mise en page » par section (L44). 2. Styles conditionnels de tableau (L42/L43). 3. e2e WebKit (L47). 4. Test de performance (L45). Le reste est le livrable.

@@ -113,7 +113,8 @@ Le monorepo résout ses paquets par les `paths` de `tsconfig.base.json`, jamais 
 2. installation dans un projet vierge avec les peers Angular aux versions du monorepo ;
 3. résolution des `exports` (dont `@aster-editor/ui/themes/aster.css`) par Node ;
 4. usage vanilla : typecheck strict puis bundle esbuild ;
-5. usage Angular : composant standalone avec `<aster-editor [formControl]>` compilé par `ngc` en `strictTemplates`.
+5. usage Angular : composant standalone avec `<aster-editor [formControl]>` compilé par `ngc` en `strictTemplates` ;
+6. import ESM en Node pur (sans bundler) des quatre paquets : attrape les spécificateurs relatifs sans extension `.js` que `tsc` émet tels quels (gardés à jour par `node scripts/add-js-extensions.mjs --check`, branché dans `npm run lint`).
 
 Dossier de sortie : `--out <dossier>` (défaut : `aster-smoke` dans le temporaire du système). Compte deux à trois minutes, l'essentiel dans l'installation d'Angular.
 

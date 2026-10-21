@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { Bubble } from './bubble';
-import { selectionReference, virtualReference } from './bubble';
-import { LINK_BUBBLE_URL_MAX_LENGTH, createLinkBubble, truncateUrl } from './link-bubble';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { Bubble } from './bubble.js';
+import { selectionReference, virtualReference } from './bubble.js';
+import { LINK_BUBBLE_URL_MAX_LENGTH, createLinkBubble, truncateUrl } from './link-bubble.js';
 
 describe('truncateUrl', () => {
   it('laisse une URL courte intacte et tronque au milieu une URL longue', () => {

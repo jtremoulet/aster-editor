@@ -1,8 +1,8 @@
-import type { DocxExportWarning } from '../../export/types';
-import { allNamed, childNamed, childrenNamed } from '../preprocess/xml-utils';
-import type { DocxStyleResolver } from '../reader/styles';
-import type { ResolvedParagraphProps } from '../reader/types';
-import { reconcileParagraph, reconcileRun } from './style-reconcile';
+import type { DocxExportWarning } from '../../export/types.js';
+import { allNamed, childNamed, childrenNamed } from '../preprocess/xml-utils.js';
+import { paragraphBaseOf, type DocxStyleResolver } from '../reader/styles.js';
+import type { ResolvedParagraphProps } from '../reader/types.js';
+import { reconcileParagraph, reconcileRun } from './style-reconcile.js';
 import {
   directParagraphKeys,
   directRunKeys,
@@ -12,8 +12,8 @@ import {
   styleOnly,
   type ParagraphKey,
   type RunKey,
-} from './style-strip';
-import { wordAttr, type PartStore } from './xml-io';
+} from './style-strip.js';
+import { wordAttr, type PartStore } from './xml-io.js';
 
 /**
  * Styles du corps greffé. Un style référencé par le corps (`w:pStyle`, `w:rStyle`,
@@ -217,6 +217,13 @@ export async function createStyleMerger(input: StyleMergerInput): Promise<StyleM
   };
 
   const resolver = input.resolver;
+  /**
+   * Base de réconciliation des paragraphes : la même que celle du lecteur (R53-01), les
+   * `docDefaults` sauf interligne et espacements avant / après, pris dans le `Normal`
+   * résolu du gabarit. Un paragraphe `Normal` sans `line-height` dans le HTML signifie
+   * « l'interligne du document », pas « l'interligne simple ».
+   */
+  const paragraphBase = paragraphBaseOf(resolver);
 
   return {
     ids,
@@ -233,7 +240,7 @@ export async function createStyleMerger(input: StyleMergerInput): Promise<StyleM
       const base = resolver.paragraph(pPr ? styleOnly(pPr, 'pStyle') : null);
       const direct = pPr ? directParagraphKeys(pPr) : new Set<ParagraphKey>();
       if (pPr) stripParagraphProperties(pPr, full, base);
-      pPr = reconcileParagraph(paragraph, pPr, direct, base, defaults.paragraph);
+      pPr = reconcileParagraph(paragraph, pPr, direct, base, paragraphBase);
       if (pPr && pPr.children.length === 0) pPr.remove();
       for (const run of allNamed(paragraph, 'r')) {
         let rPr = childNamed(run, 'rPr');

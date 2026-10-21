@@ -1,9 +1,9 @@
 import type { AsterEditor, Unsubscribe } from '@aster-editor/core';
 import { computePosition, flip, offset, shift } from '@floating-ui/dom';
 import type { Placement, ReferenceElement } from '@floating-ui/dom';
-import type { ToolbarWidget } from '../types';
-import { clear, el } from '../utils/dom';
-import { isRecord } from '../utils/guards';
+import type { ToolbarWidget } from '../types.js';
+import { clear, el } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
 
 /** Espace entre l'élément de référence et la bulle, en pixels. */
 const BUBBLE_OFFSET = 6;

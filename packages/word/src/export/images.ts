@@ -1,7 +1,7 @@
 import type { ImageRun } from 'docx';
-import { warn, type ExportContext } from './context';
-import { parsePixels } from './css';
-import { sanitizeXmlText } from './sanitize';
+import { warn, type ExportContext } from './context.js';
+import { parsePixels } from './css.js';
+import { sanitizeXmlText } from './sanitize.js';
 
 /** Formats raster que Word embarque sans repli. */
 export type RasterType = 'png' | 'jpg' | 'gif' | 'bmp';

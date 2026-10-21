@@ -5,7 +5,7 @@ import {
   selectFirstBlock,
   selectRange,
   type MountedEditor,
-} from '../testing/mount';
+} from '../testing/mount.js';
 
 describe('commandes de marques et de style', () => {
   let mounted: MountedEditor;

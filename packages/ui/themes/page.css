@@ -28,6 +28,19 @@
  * Aucune pagination : `hr[data-page-break]` est rendu comme une coupure de feuille, les
  * en-têtes et pieds `default` (conteneurs posés par le core) sont affichés une fois, en
  * lecture seule, dans les marges haute et basse.
+ *
+ * Sections (session 4, lot L44) : avec `layout.sections`, l'hôte porte les variables de
+ * la section 1 et, en plus :
+ *
+ *   --aster-page-width-max       largeur de la plus large section (mm) : la feuille la
+ *                                garde sur tout le document (une seule feuille, pas de
+ *                                changement de largeur visible en cours de document)
+ *   --aster-page-height-total    somme des hauteurs de toutes les pages (mm), posée par la
+ *                                pagination, pour étirer la feuille à des pages inégales
+ *
+ * Chaque `hr[data-section-break]` (nœud `sectionBreak` du core) porte en style inline les
+ * variables de la section qui le suit ; la pagination les lit et les reporte sur ses
+ * coupures (voir la section « Pagination » plus bas).
  */
 
 /* ---------- Bureau et feuille -------------------------------------------- */
@@ -40,7 +53,7 @@
 }
 
 .aster--page-view .aster-content .ProseMirror {
-  width: var(--aster-page-width, 210mm);
+  width: var(--aster-page-width-max, var(--aster-page-width, 210mm));
   max-width: 100%;
   min-height: var(--aster-page-height, 297mm);
   margin: 0 auto;
@@ -63,15 +76,16 @@
 .aster--page-view .aster-page-footer {
   position: absolute;
   left: 50%;
-  width: var(--aster-page-width, 210mm);
+  width: var(--aster-page-width-max, var(--aster-page-width, 210mm));
   max-width: calc(100% - 2 * var(--aster-space-4));
   padding: 0 var(--aster-page-margin-right, 25.4mm) 0 var(--aster-page-margin-left, 25.4mm);
   transform: translateX(-50%);
   overflow: hidden;
   color: var(--aster-text);
-  font-family: var(--aster-font-content);
-  font-size: var(--aster-font-size-content);
-  line-height: var(--aster-line-height);
+  /* Police et interligne du document quand il les donne (L52), sinon ceux du thème. */
+  font-family: var(--aster-page-font-family, var(--aster-font-content));
+  font-size: var(--aster-page-font-size, var(--aster-font-size-content));
+  line-height: var(--aster-page-default-line-height, var(--aster-line-height));
   /* 0,7 et non 0,55 : texte clair sur feuille blanche à 6,1 : 1 (AA), 3,75 : 1 à 0,55. */
   opacity: 0.7;
   user-select: none;
@@ -79,15 +93,27 @@
   pointer-events: none;
 }
 
+/*
+ * Bande d'en-tête et de pied (retour POC n° 4, L52) : la hauteur disponible est la marge
+ * moins la distance du bord à l'en-tête, mais quand les deux sont proches (Word : marge
+ * haute 12,7 mm, en-tête à 12,49 mm) elle tombe à zéro et la bande disparaissait. Plancher
+ * d'une ligne de texte (`1.4em`) : l'en-tête peut alors empiéter sur le corps, comme dans
+ * Word qui, lui, pousse le corps. Pousser le corps demanderait de mesurer l'en-tête en JS
+ * (le `padding-top` de la feuille ne connaît pas sa hauteur) : approximation documentée.
+ */
 .aster--page-view .aster-page-header {
   top: calc(var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-header, 12.7mm));
-  max-height: calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm));
+  max-height: max(
+    calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm)),
+    1.4em
+  );
 }
 
 .aster--page-view .aster-page-footer {
   bottom: calc(var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-footer, 12.7mm));
-  max-height: calc(
-    var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)
+  max-height: max(
+    calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)),
+    1.4em
   );
 }
 
@@ -116,7 +142,35 @@
     inset 0 -1px 0 var(--aster-border);
 }
 
+/* ---------- Saut de section (session 4, lot L44) ------------------------- */
+
+/*
+ * Un saut de section est un filet fin pointillé (comme le repère « Saut de section » de
+ * Word) : la coupure calculée qui le suit dessine la bande de bureau et l'efface, comme
+ * pour un saut de page. Une section `continuous` n'a pas de coupure : le filet reste.
+ * Sans pagination, le filet est le seul repère (approximation documentée).
+ */
+.aster--page-view .aster-content .ProseMirror hr[data-section-break] {
+  height: 0;
+  margin: var(--aster-space-3) 0;
+  border: 0;
+  border-top: 1px dashed var(--aster-border);
+  background: transparent;
+}
+
+.aster--page-view .aster-content .ProseMirror hr[data-section-break]:has(+ .aster-page-gap) {
+  margin: 0;
+  border-top: 0;
+}
+
 /* ---------- Dialogues de mise en page ------------------------------------ */
+
+/* Mise en page par section : « Section n sur N » en tête du dialogue. */
+.aster-page-layout__section {
+  margin: 0 0 var(--aster-space-2);
+  color: var(--aster-text-muted);
+  font-size: var(--aster-font-size-ui);
+}
 
 .aster-dialog__row {
   display: flex;
@@ -263,10 +317,14 @@
  * bureau, est dessinée par `::before`. Approximation assumée : rien n'est exact à Word.
  */
 
-/* Feuille étirée au nombre de pages : N pages et N - 1 bandes de bureau. */
+/*
+ * Feuille étirée au nombre de pages : N pages et N - 1 bandes de bureau. Avec des sections
+ * (L44), `--aster-page-height-total` remplace N × hauteur : les pages n'ont plus toutes la
+ * même hauteur.
+ */
 .aster--page-view .aster-content .ProseMirror {
   min-height: calc(
-    var(--aster-page-count, 1) * var(--aster-page-height, 297mm) +
+    var(--aster-page-height-total, var(--aster-page-count, 1) * var(--aster-page-height, 297mm)) +
       (var(--aster-page-count, 1) - 1) * var(--aster-page-desk-padding, 24px)
   );
 }
@@ -323,6 +381,178 @@
   box-shadow: none;
 }
 
+/*
+ * Sections (L44). Chaque coupure porte `data-section` (section de la page qui commence)
+ * et, en style inline, les variables de ses deux sections : `--aster-page-margin-bottom`
+ * et `-footer` de celle qui se termine, `--aster-page-height`, `-width`, `-margin-top` et
+ * `-margin-header` de celle qui commence. Les règles de hauteur ci-dessus les consomment
+ * telles quelles ; les marges gauche et droite restent celles de l'hôte (la feuille ne
+ * change pas de largeur). La première coupure d'une section (`aster-page-gap--section`)
+ * porte en plus un libellé « Section n · Format orientation » dans la marge haute, à
+ * gauche du numéro de page, l'en-tête de la section qui commence et le pied de celle qui
+ * se termine, en lecture seule comme ceux de l'hôte.
+ */
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__section {
+  position: absolute;
+  left: var(--aster-page-margin-left, 25.4mm);
+  bottom: calc(var(--aster-page-margin-top, 25.4mm) / 2);
+  transform: translateY(50%);
+  color: var(--aster-text);
+  font-family: var(--aster-font-ui);
+  font-size: var(--aster-font-size-ui);
+  line-height: 1;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__header,
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__footer {
+  position: absolute;
+  right: var(--aster-page-margin-right, 25.4mm);
+  left: var(--aster-page-margin-left, 25.4mm);
+  overflow: hidden;
+  color: var(--aster-text);
+  font-family: var(--aster-page-font-family, var(--aster-font-content));
+  font-size: var(--aster-page-font-size, var(--aster-font-size-content));
+  line-height: var(--aster-page-default-line-height, var(--aster-line-height));
+  opacity: 0.7;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/* Pied de la page qui se termine : posé au-dessus de la bande, à `margin-footer` du bord bas (plancher d'une ligne, retour n° 4). */
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__footer {
+  bottom: calc(
+    var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-top, 25.4mm) +
+      var(--aster-page-margin-footer, 12.7mm)
+  );
+  max-height: max(
+    calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)),
+    1.4em
+  );
+}
+
+/* En-tête de la page qui commence : sous la bande, à `margin-header` du bord haut (même plancher). */
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__header {
+  top: calc(
+    var(--aster-page-gap-fill, 0px) + var(--aster-page-margin-bottom, 25.4mm) +
+      var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-header, 12.7mm)
+  );
+  max-height: max(
+    calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm)),
+    1.4em
+  );
+}
+
+/*
+ * Coupure avec un en-tête (R44-04, toutes les coupures depuis L52) : le libellé
+ * « Section n · … » et le numéro de page quittent le milieu de la marge haute (où commence
+ * l'en-tête, à `margin-header` du bord) pour la bande entre le bord haut de la page et
+ * l'en-tête : leur bas est posé 2px au-dessus du haut de l'en-tête, sans recentrage.
+ */
+.aster--page-view
+  .aster-content
+  .ProseMirror
+  .aster-page-gap:has(> .aster-page-gap__header)
+  .aster-page-gap__section,
+.aster--page-view
+  .aster-content
+  .ProseMirror
+  .aster-page-gap:has(> .aster-page-gap__header)
+  .aster-page-gap__number {
+  bottom: calc(
+    var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm) + 2px
+  );
+  transform: none;
+}
+
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__header p,
+.aster--page-view .aster-content .ProseMirror .aster-page-gap__footer p {
+  margin: 0;
+}
+
+/* ---------- Défauts du document (session 5, lot L52) --------------------- */
+
+/*
+ * Le core pose sur l'hôte, en vue page, les défauts du document (`DocumentLayout.defaultFont`
+ * et `defaultParagraph`, retour POC n° 2) :
+ *
+ *   --aster-page-font-family             police par défaut
+ *   --aster-page-font-size               corps par défaut (pt)
+ *   --aster-page-default-line-height     interligne : nombre (multiple) ou `Npt` (exact)
+ *   --aster-page-default-spacing-before  espacement avant (pt)
+ *   --aster-page-default-spacing-after   espacement après (pt)
+ *
+ * Elles s'appliquent **en repli** : un bloc qui porte sa propre valeur (`style="line-height:
+ * …"`, `margin-top: …`, posé par le lecteur quand le paragraphe diffère des défauts) la
+ * garde, l'inline l'emportant sur ces règles sans `!important`. Sans variable, les valeurs
+ * du thème restent ; hors vue page, rien ne change. L'espacement n'est appliqué qu'avec la
+ * classe `aster--page-defaults` (posée dès qu'un espacement par défaut est connu) : la
+ * feuille garde sinon son espacement web de 0,75 em entre blocs.
+ */
+.aster--page-view .aster-content {
+  font-family: var(--aster-page-font-family, var(--aster-font-content));
+  font-size: var(--aster-page-font-size, var(--aster-font-size-content));
+  line-height: var(--aster-page-default-line-height, var(--aster-line-height));
+}
+
+.aster--page-defaults .aster-content .ProseMirror > * + * {
+  margin-top: var(--aster-page-default-spacing-before, 0);
+}
+
+.aster--page-defaults .aster-content .ProseMirror p,
+.aster--page-defaults .aster-content .ProseMirror h1,
+.aster--page-defaults .aster-content .ProseMirror h2,
+.aster--page-defaults .aster-content .ProseMirror h3,
+.aster--page-defaults .aster-content .ProseMirror h4,
+.aster--page-defaults .aster-content .ProseMirror h5,
+.aster--page-defaults .aster-content .ProseMirror h6,
+.aster--page-defaults .aster-content .ProseMirror ul,
+.aster--page-defaults .aster-content .ProseMirror ol {
+  margin-top: var(--aster-page-default-spacing-before, 0);
+  margin-bottom: var(--aster-page-default-spacing-after, 0);
+}
+
+/* Les éléments d'une liste restent serrés (style `ListParagraph` de Word, « ne pas ajouter d'espace entre les paragraphes de même style »). */
+.aster--page-defaults .aster-content .ProseMirror li > p {
+  margin: 0;
+}
+
+.aster--page-defaults .aster-content .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+/*
+ * Cellules de tableau en vue page : marges de cellule de Word par défaut (0 en haut et en
+ * bas, 0,19 cm = 5,4 pt à gauche et à droite) à la place du rembourrage web ; une cellule
+ * qui porte `paddingPt` (`style="padding: …"`) garde le sien. Les paragraphes de cellule
+ * suivent l'interligne et l'espacement par défaut comme dans Word.
+ */
+.aster--page-view .aster-content .ProseMirror td,
+.aster--page-view .aster-content .ProseMirror th {
+  padding: 0 5.4pt;
+}
+
+/* ---------- Tabulations (session 4) -------------------------------------- */
+
+/*
+ * Points de suite d'une tabulation (`data-leader`, posé par le NodeView du core) : une
+ * bordure basse pointillée, en tirets ou pleine sur l'espace élastique. L'alignement
+ * (`data-align`) n'a pas de rendu propre : approximation documentée.
+ */
+.aster-content .ProseMirror .aster-tab[data-leader='dot'] {
+  border-bottom: 1px dotted currentColor;
+}
+
+.aster-content .ProseMirror .aster-tab[data-leader='hyphen'] {
+  border-bottom: 1px dashed currentColor;
+}
+
+.aster-content .ProseMirror .aster-tab[data-leader='underscore'] {
+  border-bottom: 1px solid currentColor;
+}
+
 /* Impression de la page hôte : la coupure devient un vrai saut de page, sans bande ni libellé. */
 @media print {
   /*
@@ -343,8 +573,18 @@
   }
 
   .aster--page-view .aster-content .ProseMirror .aster-page-gap::before,
-  .aster--page-view .aster-content .ProseMirror .aster-page-gap__number {
+  .aster--page-view .aster-content .ProseMirror .aster-page-gap__number,
+  .aster--page-view .aster-content .ProseMirror .aster-page-gap__section,
+  .aster--page-view .aster-content .ProseMirror .aster-page-gap__header,
+  .aster--page-view .aster-content .ProseMirror .aster-page-gap__footer {
     display: none;
+  }
+
+  /* Saut de section imprimé : la coupure calculée fait le saut, le filet disparaît. */
+  .aster--page-view .aster-content .ProseMirror hr[data-section-break] {
+    margin: 0;
+    border-top: 0;
+    visibility: hidden;
   }
 
   /*
@@ -363,4 +603,73 @@
     break-after: page;
     page-break-after: always;
   }
+}
+
+/* ---------- Dialogue « Mise en page » : en-têtes et pieds (L54) ---------- */
+
+/*
+ * Deux colonnes de champs riches : le dialogue s'élargit pour les loger, sans jamais
+ * dépasser la fenêtre (`min-width` l'emporte sur `max-width`, CSS 2.1 §10.4 : il est
+ * lui-même borné, R52-07) ; sur un écran étroit les colonnes passent à la ligne.
+ */
+.aster-page-layout {
+  min-width: min(520px, 90vw);
+  max-width: min(90vw, 720px);
+}
+
+.aster-page-layout__headers > .aster-dialog__row {
+  flex-wrap: wrap;
+}
+
+.aster-page-layout__headers > .aster-dialog__row > .aster-page-layout__column {
+  flex: 1 1 200px;
+}
+
+.aster-page-layout__hint {
+  margin: 0 0 var(--aster-space-2);
+  color: var(--aster-text-muted);
+  font-size: var(--aster-font-size-ui);
+}
+
+.aster-dialog__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--aster-space-3);
+  margin-bottom: var(--aster-space-2);
+}
+
+.aster-page-layout__rich-field[hidden] {
+  display: none;
+}
+
+/* Zone éditable minimale : hauteur de deux lignes, défilement au-delà de six. */
+.aster-page-layout__rich {
+  min-height: 2.6em;
+  max-height: 6.5em;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.aster-page-layout__rich p,
+.aster-page-layout__rich h1,
+.aster-page-layout__rich h2,
+.aster-page-layout__rich h3 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+.aster-page-layout__rich img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Les puces de variables d'un en-tête importé restent lisibles dans le champ. */
+.aster-page-layout__rich span[data-aster-variable] {
+  padding: 0 0.2em;
+  border-radius: var(--aster-radius);
+  background: var(--aster-surface-3);
 }

@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { STANDARD_COMMAND_IDS } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   CAPS_OPTIONS,
   CAPS_SET_COMMAND,
   CAPS_UNSET_COMMAND,
   createCapsMenu,
   currentCaps,
-} from './caps';
+} from './caps.js';
 
 /** Commandes standard plus les commandes additives de casse annoncées par L23. */
 const COMMANDS: readonly string[] = [...STANDARD_COMMAND_IDS, CAPS_SET_COMMAND, CAPS_UNSET_COMMAND];

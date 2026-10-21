@@ -4,7 +4,7 @@ import {
   type BlockBorder,
   type ParagraphLayoutAttrName,
   type ParagraphLayoutAttrs,
-} from '../api';
+} from '../api/index.js';
 import {
   betweenBorder,
   borderDeclarations,
@@ -20,7 +20,7 @@ import {
   parseStyleDeclarations,
   roundLayoutNumber,
   sanitizeBorders,
-} from './layout-css';
+} from './layout-css.js';
 
 /** Nom de l'extension, clé dans `editor.extensionManager`. */
 export const PARAGRAPH_LAYOUT_EXTENSION_NAME = 'paragraphLayout';

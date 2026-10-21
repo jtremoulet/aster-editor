@@ -19,15 +19,15 @@ export type {
   DocxImportWarningCode,
   DocxInput,
   HtmlParser,
-} from './docx/types';
-export { importDocx } from './docx/import-docx';
-export type { DocxVariableOptions, VariableDetection } from './docx/types';
-export type { PasteVariableOptions } from './paste/types';
-export type { WordPasteOptions, ListLevelFormat } from './paste/types';
-export { isWordHtml, isGoogleDocsHtml } from './paste/detectors';
-export { normalizeWordHtml } from './paste/normalize-word-html';
-export { normalizeGoogleDocsHtml } from './google/normalize-google-docs-html';
-export { wordPasteTransformer } from './extension/word-paste';
+} from './docx/types.js';
+export { importDocx } from './docx/import-docx.js';
+export type { DocxVariableOptions, VariableDetection } from './docx/types.js';
+export type { PasteVariableOptions } from './paste/types.js';
+export type { WordPasteOptions, ListLevelFormat } from './paste/types.js';
+export { isWordHtml, isGoogleDocsHtml } from './paste/detectors.js';
+export { normalizeWordHtml } from './paste/normalize-word-html.js';
+export { normalizeGoogleDocsHtml } from './google/normalize-google-docs-html.js';
+export { wordPasteTransformer } from './extension/word-paste.js';
 export type {
   DocxExportInput,
   DocxExportOptions,
@@ -36,7 +36,7 @@ export type {
   DocxImageFetcher,
   DocxPageSize,
   DocxWarning,
-} from './export/types';
+} from './export/types.js';
 export type {
   DocxDefaultFont,
   DocxExportVariableOptions,
@@ -51,9 +51,9 @@ export type {
   DocxPageOrientation,
   DocxTocOptions,
   DocxVariableMode,
-} from './export/types';
-export { exportDocx, DOCX_MIME_TYPE } from './export/export-docx';
-export { compareDocx } from './docx/compare/compare-docx';
+} from './export/types.js';
+export { exportDocx, DOCX_MIME_TYPE } from './export/export-docx.js';
+export { compareDocx } from './docx/compare/compare-docx.js';
 export type {
   CompareDocx,
   CompareDocxOptions,
@@ -61,6 +61,6 @@ export type {
   FidelityProperty,
   FidelityPropertyGroup,
   FidelityReport,
-} from './docx/compare/types';
-export { downloadDocx } from './export/download-docx';
-export { jsonToHtml } from './export/json-to-html';
+} from './docx/compare/types.js';
+export { downloadDocx } from './export/download-docx.js';
+export { jsonToHtml } from './export/json-to-html.js';

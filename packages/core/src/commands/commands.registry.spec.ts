@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STANDARD_COMMAND_IDS, type StandardCommandId } from '../api';
-import { iconIdFor } from './define';
-import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount';
+import { STANDARD_COMMAND_IDS, type StandardCommandId } from '../api/index.js';
+import { iconIdFor } from './define.js';
+import { mountEditor, selectFirstBlock, type MountedEditor } from '../testing/mount.js';
 
 /** Arguments minimaux pour que `canRun` d'une commande à arguments ait un sens. */
 const SAMPLE_ARGS: Partial<Record<StandardCommandId, unknown>> = {

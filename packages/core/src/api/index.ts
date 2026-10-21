@@ -11,13 +11,13 @@ export type {
   HeadingLevel,
   StandardCommandArgs,
   StandardCommandId,
-} from './commands';
-export { STANDARD_COMMAND_IDS } from './commands';
-export type { AsterCounts, AsterDocument } from './document';
-export type { AsterEditor } from './editor';
-export type { AsterEventName, AsterEvents, Unsubscribe } from './events';
-export type { AsterDictionary, AsterLocale, I18n, TranslateParams } from './i18n';
-export type { AsterOptions, LinkPolicy, UploadHandler } from './options';
+} from './commands.js';
+export { STANDARD_COMMAND_IDS } from './commands.js';
+export type { AsterCounts, AsterDocument } from './document.js';
+export type { AsterEditor } from './editor.js';
+export type { AsterEventName, AsterEvents, Unsubscribe } from './events.js';
+export type { AsterDictionary, AsterLocale, I18n, TranslateParams } from './i18n.js';
+export type { AsterOptions, LinkPolicy, UploadHandler } from './options.js';
 export type {
   BlockBorder,
   BorderSide,
@@ -26,6 +26,7 @@ export type {
   CellVerticalAlign,
   DecorationStyle,
   DefaultFont,
+  DefaultParagraph,
   DocumentLayout,
   HeaderFooterContent,
   HeaderFooterSet,
@@ -40,10 +41,18 @@ export type {
   ParagraphLayoutAttrName,
   ParagraphLayoutAttrs,
   RunLayoutAttrs,
+  SectionBreakAttrs,
+  SectionLayout,
+  SectionStart,
+  TabAlign,
+  TabAttrs,
+  TabLeader,
+  TableLook,
+  TableLookFlag,
   TableLayoutAttrs,
-} from './layout';
-export { PARAGRAPH_LAYOUT_ATTR_NAMES } from './layout';
-export type { PasteContext, PasteTransformer } from './paste';
+} from './layout.js';
+export { PARAGRAPH_LAYOUT_ATTR_NAMES } from './layout.js';
+export type { PasteContext, PasteTransformer } from './paste.js';
 export type {
   AsterVariable,
   GetHtmlOptions,
@@ -52,7 +61,7 @@ export type {
   VariableSource,
   VariableStore,
   VariableValues,
-} from './variables';
+} from './variables.js';
 export type {
   AsterTheme,
   ToolbarButtonItem,
@@ -62,4 +71,5 @@ export type {
   ToolbarItem,
   ToolbarPreset,
   ToolbarWidgetItem,
-} from './toolbar';
+} from './toolbar.js';
+export { TABLE_LOOK_FLAGS } from './layout.js';

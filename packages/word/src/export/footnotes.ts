@@ -1,8 +1,8 @@
 import type { IPropertiesOptions, Paragraph } from 'docx';
-import { convertChildren, type BlockScope } from './blocks';
-import { warn, type ExportContext } from './context';
-import { childElements, tagOf } from './dom';
-import { STYLE_IDS } from './styles';
+import { convertChildren, type BlockScope } from './blocks.js';
+import { warn, type ExportContext } from './context.js';
+import { childElements, tagOf } from './dom.js';
+import { STYLE_IDS } from './styles.js';
 
 /** Attribut de la liste de notes produite par l'import (`<ol data-footnotes>`). */
 export const FOOTNOTES_ATTRIBUTE = 'data-footnotes';

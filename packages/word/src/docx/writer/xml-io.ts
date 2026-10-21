@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { stripXmlDeclaration } from '../preprocess/xml-utils';
+import { stripXmlDeclaration } from '../preprocess/xml-utils.js';
 
 /**
  * Accès en lecture et en écriture aux parties d'un paquet `.docx` pour la greffe : les
@@ -70,6 +70,9 @@ export function basenameOf(partPath: string): string {
 export class PartStore {
   private readonly cache = new Map<string, Promise<CachedPart | null>>();
 
+  /** Parties créées par `create`, pas encore écrites dans l'archive (jusqu'au `commit`). */
+  private readonly created = new Set<string>();
+
   private constructor(
     private readonly zip: JSZip,
     private readonly codec: XmlCodec,
@@ -80,8 +83,9 @@ export class PartStore {
     return new PartStore(await JSZip.loadAsync(buffer), codec);
   }
 
+  /** Vrai si la partie existe dans l'archive ou a été créée pendant la greffe. */
   has(path: string): boolean {
-    return this.zip.file(path) !== null;
+    return this.zip.file(path) !== null || this.created.has(path);
   }
 
   /** Parse un XML avec le codec du paquet (documents neufs des parties créées). */
@@ -116,6 +120,7 @@ export class PartStore {
   /** Enregistre un document neuf pour une partie absente (numérotation, notes). */
   create(path: string, doc: Document, declaration: string): void {
     this.cache.set(path, Promise.resolve({ doc, declaration, changed: true }));
+    this.created.add(path);
   }
 
   /**

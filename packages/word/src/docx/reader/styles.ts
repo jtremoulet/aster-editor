@@ -1,7 +1,6 @@
-import type { BlockBorder, BorderSide } from '@aster-editor/core';
-import { allNamed, childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
+import type { DefaultParagraph } from '@aster-editor/core';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
 import {
-  applyBorders,
   applyParagraphProperties,
   applyRunProperties,
   cloneParagraph,
@@ -9,13 +8,19 @@ import {
   finalizeParagraph,
   finalizeRun,
   mergeRunDelta,
-  orderedBorders,
-  readBorder,
-  readShadingFill,
   type MutableParagraph,
   type MutableRun,
-  type ThemeFonts,
-} from './properties';
+} from './properties.js';
+import {
+  headingLevelOfName,
+  readStyle,
+  readStylesPart,
+  readThemeFonts,
+  type StyleDefinition,
+  type StyleType,
+} from './styles-part.js';
+import { resolveTableStyle, type DocxTableStyleProps } from './styles-table.js';
+import type { ConditionalFormats } from './table-conditional.js';
 import type {
   DocxPackage,
   HeadingLevel,
@@ -23,30 +28,18 @@ import type {
   ResolvedRunProps,
   StyleResolver,
   TableStyleProps,
-} from './types';
-import { fontName, numberAttr, twipsToPt } from './units';
+} from './types.js';
 
 /**
  * Résolution des styles Word : `docDefaults` → chaîne `basedOn` (garde anti-cycle) →
  * style de caractère → propriétés directes. Les polices du thème (`minorHAnsi`…) sont
  * lues dans `theme1.xml`. Le résolveur expose en plus du contrat `docDefaults()`, base
  * d'émission du HTML : `paragraphs.ts` et `runs.ts` n'écrivent que ce qui en diffère.
+ * La lecture de `styles.xml` (`styles-part.ts`) et la résolution des styles de tableau
+ * (`styles-table.ts`) sont des modules de celui-ci (découpage L45).
  */
 
-type StyleType = 'paragraph' | 'character' | 'table' | 'numbering';
-
-interface StyleDefinition {
-  readonly id: string;
-  readonly name: string;
-  readonly type: StyleType;
-  readonly basedOn?: string;
-  readonly link?: string;
-  readonly isDefault: boolean;
-  readonly pPr: Element | null;
-  readonly rPr: Element | null;
-  readonly tblPr: Element | null;
-  readonly tcPr: Element | null;
-}
+export type { DocxTableStyleProps } from './styles-table.js';
 
 /** Défauts du document (`w:docDefaults`), sans aucun style appliqué. */
 export interface DocDefaults {
@@ -57,11 +50,94 @@ export interface DocDefaults {
 /** Résolveur d'Aster : le contrat plus les défauts du document. */
 export interface DocxStyleResolver extends StyleResolver {
   docDefaults(): DocDefaults;
+  /**
+   * Défauts de paragraphe du document (session 5, retour POC n° 2) : `docDefaults` puis
+   * style de paragraphe par défaut (`Normal`) résolu, ramenés au contrat
+   * `DocumentLayout.defaultParagraph`. Vide quand tout vaut le défaut de Word.
+   */
+  defaultParagraph(): DefaultParagraph;
 }
 
-/** Style de tableau d'Aster : le contrat plus les défauts de paragraphe du style (`pPr`). */
-export interface DocxTableStyleProps extends TableStyleProps {
-  readonly paragraphDefaults?: Omit<ResolvedParagraphProps, 'runDefaults' | 'styleId'>;
+/**
+ * Accumulateur de paragraphe résolu → `DefaultParagraph` du contrat : interligne multiple
+ * (`w:lineRule="auto"`) ou exact (`lineHeightPt`, qui l'emporte), espacements avant et
+ * après en points. Rien n'est écrit pour le défaut de Word (interligne simple, 0 pt) : un
+ * objet vide signifie « les défauts d'Aster ». Un interligne « au moins » (`atLeast`)
+ * n'est **pas** transporté (R53-04) : le contrat ne connaît que l'exact, et un `exact` à
+ * la place d'un `atLeast` dans les `docDefaults` de l'export neuf tronquerait toute ligne
+ * plus haute (image inline, police plus grande) dans tout le document ; les paragraphes
+ * continuent de le porter en `lineHeightPt` (comportement figé, voir `README.md`).
+ * Les valeurs irrecevables (`lineHeightPt <= 0`, espacements négatifs) sont déjà
+ * écartées par `applySpacing` (R53-03) ; la garde reste ici pour un accumulateur tiers.
+ */
+function toDefaultParagraph(paragraph: MutableParagraph): DefaultParagraph {
+  const out: { -readonly [K in keyof DefaultParagraph]: DefaultParagraph[K] } = {};
+  if (paragraph.lineHeightPt !== undefined) {
+    if (paragraph.lineRule !== 'atLeast' && paragraph.lineHeightPt > 0) {
+      out.lineHeightPt = paragraph.lineHeightPt;
+    }
+  } else if (
+    paragraph.lineHeight !== undefined &&
+    paragraph.lineHeight > 0 &&
+    paragraph.lineHeight !== 1
+  ) {
+    out.lineHeight = paragraph.lineHeight;
+  }
+  if (paragraph.spacingBeforePt !== undefined && paragraph.spacingBeforePt > 0) {
+    out.spacingBeforePt = paragraph.spacingBeforePt;
+  }
+  if (paragraph.spacingAfterPt !== undefined && paragraph.spacingAfterPt > 0) {
+    out.spacingAfterPt = paragraph.spacingAfterPt;
+  }
+  return out;
+}
+
+/**
+ * Défauts de paragraphe d'un résolveur quelconque : ceux d'Aster s'il les expose, sinon
+ * un objet vide (résolveur tiers ou stub, qui n'en connaît pas).
+ */
+export function defaultParagraphOf(styles: StyleResolver): DefaultParagraph {
+  if ('defaultParagraph' in styles && typeof styles.defaultParagraph === 'function') {
+    return (styles as DocxStyleResolver).defaultParagraph();
+  }
+  return {};
+}
+
+/** Clés de `ResolvedParagraphProps` que `layout.defaultParagraph` gouverne. */
+const DEFAULT_PARAGRAPH_KEYS = [
+  'lineHeight',
+  'lineHeightPt',
+  'spacingBeforePt',
+  'spacingAfterPt',
+] as const;
+
+/**
+ * Base d'émission d'un paragraphe (R53-01) : les `docDefaults` du document pour toutes
+ * les propriétés, **sauf** l'interligne et les espacements avant / après, pris dans
+ * `defaultParagraph()` (`docDefaults` puis `Normal`). C'est ce que la vue page
+ * (`--aster-page-default-*`) et l'export neuf (`w:pPrDefault`) appliquent à un paragraphe
+ * sans valeur propre : le lecteur ne doit donc écrire que ce qui en diffère, et la greffe
+ * (`writer/styles-merge.ts`) réconcilie le corps greffé contre la même base. Le défaut de
+ * Word (interligne simple, 0 pt) y reste absent, comme dans `defaultParagraph()`.
+ */
+export function paragraphBaseOf(styles: StyleResolver): ResolvedParagraphProps {
+  const base: { -readonly [K in keyof ResolvedParagraphProps]?: ResolvedParagraphProps[K] } = {
+    ...docDefaultsOf(styles).paragraph,
+  };
+  for (const key of DEFAULT_PARAGRAPH_KEYS) delete base[key];
+  const paragraph = defaultParagraphOf(styles);
+  if (paragraph.lineHeightPt !== undefined) base.lineHeightPt = paragraph.lineHeightPt;
+  else if (paragraph.lineHeight !== undefined) base.lineHeight = paragraph.lineHeight;
+  if (paragraph.spacingBeforePt !== undefined) base.spacingBeforePt = paragraph.spacingBeforePt;
+  if (paragraph.spacingAfterPt !== undefined) base.spacingAfterPt = paragraph.spacingAfterPt;
+  return base as ResolvedParagraphProps;
+}
+
+/** Formats conditionnels d'un style de tableau, `undefined` pour un style tiers ou sans `w:tblStylePr`. */
+export function conditionalFormatsOf(
+  style: TableStyleProps | null,
+): ConditionalFormats | undefined {
+  return style && 'conditional' in style ? (style as DocxTableStyleProps).conditional : undefined;
 }
 
 /**
@@ -87,58 +163,6 @@ export function tableParagraphDefaultsOf(
   return style && 'paragraphDefaults' in style
     ? (style as DocxTableStyleProps).paragraphDefaults
     : undefined;
-}
-
-const HEADING_PATTERN = /^(?:heading|titre|überschrift|título|titolo)\s*([1-6])$/i;
-
-function headingLevelOfName(value: string): HeadingLevel | undefined {
-  const match = HEADING_PATTERN.exec(value.trim());
-  return match ? (Number(match[1]) as HeadingLevel) : undefined;
-}
-
-function readStyle(element: Element): StyleDefinition | null {
-  const id = wordAttribute(element, 'styleId');
-  const type = wordAttribute(element, 'type') || 'paragraph';
-  if (!id || !isStyleType(type)) return null;
-  const name = childNamed(element, 'name');
-  const basedOn = childNamed(element, 'basedOn');
-  const link = childNamed(element, 'link');
-  return {
-    id,
-    name: name ? wordAttribute(name, 'val') : '',
-    type,
-    basedOn: basedOn ? wordAttribute(basedOn, 'val') || undefined : undefined,
-    link: link ? wordAttribute(link, 'val') || undefined : undefined,
-    isDefault:
-      wordAttribute(element, 'default') === '1' || wordAttribute(element, 'default') === 'true',
-    pPr: childNamed(element, 'pPr'),
-    rPr: childNamed(element, 'rPr'),
-    tblPr: childNamed(element, 'tblPr'),
-    tcPr: childNamed(element, 'tcPr'),
-  };
-}
-
-function isStyleType(value: string): value is StyleType {
-  return (
-    value === 'paragraph' || value === 'character' || value === 'table' || value === 'numbering'
-  );
-}
-
-async function readThemeFonts(pkg: DocxPackage): Promise<ThemeFonts> {
-  const path = (await pkg.related(pkg.mainPart, '/theme')) ?? 'word/theme/theme1.xml';
-  const doc = await pkg.part(path);
-  if (!doc) return {};
-  const latin = (scheme: string): string | undefined => {
-    const element = allNamed(doc, scheme)[0];
-    const font = element ? childNamed(element, 'latin') : null;
-    return fontName(font?.getAttribute('typeface'));
-  };
-  return { major: latin('majorFont'), minor: latin('minorFont') };
-}
-
-async function readStylesPart(pkg: DocxPackage): Promise<Document | null> {
-  const path = (await pkg.related(pkg.mainPart, '/styles')) ?? 'word/styles.xml';
-  return pkg.part(path);
 }
 
 /** Crée le résolveur de styles du document. Signature figée par la phase 0. */
@@ -346,46 +370,6 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
 
   const tableStyles = new Map<string, DocxTableStyleProps | null>();
 
-  const resolveTableStyle = (styleId: string): DocxTableStyleProps | null => {
-    const { chain } = chainOf(styleId, 'table');
-    if (chain.length === 0) return null;
-    const borders = new Map<BorderSide, BlockBorder>();
-    const inside = new Map<BorderSide, BlockBorder>();
-    const cellBorders = new Map<BorderSide, BlockBorder>();
-    let cellShading: string | undefined;
-    let padding: [number, number, number, number] | undefined;
-    const run: MutableRun = { ...baseRun };
-    const paragraph = emptyParagraph();
-    for (const style of chain) {
-      if (style.rPr) applyRunProperties(style.rPr, run, theme);
-      if (style.pPr) applyParagraphProperties(style.pPr, paragraph);
-      const tblBorders = style.tblPr ? childNamed(style.tblPr, 'tblBorders') : null;
-      if (tblBorders) {
-        applyBorders(tblBorders, borders);
-        applyInsideBorders(tblBorders, inside);
-      }
-      const cellMar = style.tblPr ? childNamed(style.tblPr, 'tblCellMar') : null;
-      if (cellMar) padding = readCellMargins(cellMar, padding);
-      const tcBorders = style.tcPr ? childNamed(style.tcPr, 'tcBorders') : null;
-      if (tcBorders) applyBorders(tcBorders, cellBorders);
-      const shd = style.tcPr ? childNamed(style.tcPr, 'shd') : null;
-      if (shd) cellShading = readShadingFill(shd);
-    }
-    // Sans `tcBorders` propres, les traits intérieurs du tableau bordent chaque cellule.
-    const cells = cellBorders.size > 0 ? orderedBorders(cellBorders) : orderedBorders(inside);
-    const paragraphDefaults = finalizeParagraph(paragraph, {});
-    const { runDefaults: _ignored, ...paragraphOnly } = paragraphDefaults;
-    const outer = orderedBorders(borders);
-    return {
-      ...(outer.length > 0 ? { borders: outer } : {}),
-      ...(cells.length > 0 ? { cellBorders: cells } : {}),
-      ...(cellShading ? { cellShading } : {}),
-      ...(padding ? { cellPaddingPt: padding } : {}),
-      runDefaults: finalizeRun(run),
-      ...(Object.keys(paragraphOnly).length > 0 ? { paragraphDefaults: paragraphOnly } : {}),
-    };
-  };
-
   return {
     paragraph(pPr) {
       const pStyle = pPr ? childNamed(pPr, 'pStyle') : null;
@@ -427,7 +411,7 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
       if (!styleId) return null;
       let cached = tableStyles.get(styleId);
       if (cached === undefined) {
-        cached = resolveTableStyle(styleId);
+        cached = resolveTableStyle(chainOf(styleId, 'table').chain, baseRun, theme);
         tableStyles.set(styleId, cached);
       }
       return cached;
@@ -444,45 +428,9 @@ export async function createStyleResolver(pkg: DocxPackage): Promise<DocxStyleRe
     docDefaults() {
       return docDefaults;
     },
+
+    defaultParagraph() {
+      return toDefaultParagraph(resolveParagraphStyle(undefined).paragraph);
+    },
   };
-}
-
-/** `w:insideH` → haut et bas de cellule, `w:insideV` → gauche et droite. */
-function applyInsideBorders(tblBorders: Element, inside: Map<BorderSide, BlockBorder>): void {
-  const pairs: readonly (readonly [string, readonly BorderSide[]])[] = [
-    ['insideH', ['top', 'bottom']],
-    ['insideV', ['left', 'right']],
-  ];
-  for (const [name, sides] of pairs) {
-    const element = childNamed(tblBorders, name);
-    if (!element) continue;
-    for (const side of sides) {
-      const border = readBorder(element, side);
-      if (border) inside.set(side, border);
-      else inside.delete(side);
-    }
-  }
-}
-
-/** Marges de cellule `w:tblCellMar` en points `[haut, droite, bas, gauche]`, sur la base héritée. */
-function readCellMargins(
-  cellMar: Element,
-  inherited: [number, number, number, number] | undefined,
-): [number, number, number, number] {
-  const out: [number, number, number, number] = inherited ? [...inherited] : [0, 0, 0, 0];
-  const sides: readonly (readonly [string, 0 | 1 | 2 | 3])[] = [
-    ['top', 0],
-    ['right', 1],
-    ['end', 1],
-    ['bottom', 2],
-    ['left', 3],
-    ['start', 3],
-  ];
-  for (const [name, index] of sides) {
-    const element = childNamed(cellMar, name);
-    if (!element) continue;
-    const width = numberAttr(wordAttribute(element, 'w'));
-    if (width !== undefined) out[index] = twipsToPt(width);
-  }
-  return out;
 }

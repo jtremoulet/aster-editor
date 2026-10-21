@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from '../../export/export-docx';
-import { RED_PNG_DATA_URL } from '../../export/testing/sample';
+import { exportDocx } from '../../export/export-docx.js';
+import { RED_PNG_DATA_URL } from '../../export/testing/sample.js';
 import {
   alterTemplate,
   bodyOf,
@@ -15,7 +15,7 @@ import {
   partsOf,
   textOf,
   topLevelBlocks,
-} from './testing';
+} from './testing.js';
 
 /**
  * Correctifs de la relecture R27 (lot F27), suite : corps greffé (styles, identifiants,

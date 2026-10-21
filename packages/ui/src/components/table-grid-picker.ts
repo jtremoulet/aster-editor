@@ -1,8 +1,8 @@
 import type { AsterEditor, StandardCommandId } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { resolveIcon } from './button';
-import { createDropdown, createMenuItem } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { resolveIcon } from './button.js';
+import { createDropdown, createMenuItem } from './dropdown.js';
 
 /** Dimensions de la grille de sélection. */
 export const TABLE_GRID_COLS = 10;

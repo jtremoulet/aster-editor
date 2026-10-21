@@ -1,8 +1,8 @@
 import type { AsterEditor } from '@aster-editor/core';
 import { escapeHtml } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { createPlainButton } from './button';
-import { applyTooltip } from './tooltip';
+import type { ToolbarWidget } from '../types.js';
+import { createPlainButton } from './button.js';
+import { applyTooltip } from './tooltip.js';
 
 /** Classe du conteneur de contenu dans la fenêtre d'impression. */
 export const PRINT_CONTENT_CLASS = 'aster-print';

@@ -1,5 +1,5 @@
 import type { EditorView } from '@tiptap/pm/view';
-import type { AsterEditor, UploadHandler } from '../api';
+import type { AsterEditor, UploadHandler } from '../api/index.js';
 
 /** Vrai si le fichier est une image exploitable par `<img>`. SVG exclu : vecteur de script. */
 export function isImageFile(file: File): boolean {

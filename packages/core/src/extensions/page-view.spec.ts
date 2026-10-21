@@ -1,19 +1,30 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsterEditor, DocumentLayout, PageViewOptions } from '../api';
-import { AsterEditorImpl } from '../editor/aster-editor';
-import * as sanitizeModule from './header-footer-sanitize';
+import type { AsterEditor, DocumentLayout, PageViewOptions, SectionLayout } from '../api/index.js';
+import { AsterEditorImpl } from '../editor/aster-editor.js';
+import * as sanitizeModule from './header-footer-sanitize.js';
 import {
+  FIRST_PAGE,
   MAX_PAGE_MM,
   MAX_SANITIZE_DEPTH,
+  PAGE_DEFAULTS_CLASS,
+  PAGE_DEFAULT_CSS_VARIABLES,
   PAGE_FOOTER_CLASS,
   PAGE_HEADER_CLASS,
   PAGE_VIEW_CLASS,
   PAGE_VIEW_CSS_VARIABLES,
+  PAGE_WIDTH_MAX_CSS_VARIABLE,
+  bodySectionCount,
+  headerFooterHtmlFor,
+  isContinuousSection,
+  maxSectionWidthMm,
+  pageDefaultsCssValues,
   pageViewCssValues,
   resolvePageMetrics,
+  resolveSectionLayout,
   sanitizeHeaderFooterHtml,
-} from './page-view';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+  setHostLastPage,
+} from './page-view.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** L'implémentation interne, qui porte `setPageView` et `getLayout` (hors contrat). */
 function impl(editor: AsterEditor): AsterEditorImpl {
@@ -399,6 +410,146 @@ describe('vue page', () => {
       }
     });
 
+    it('L52 (retour n° 3) : l’en-tête de l’hôte est `first` sur une section 1 titlePage, le pied suit la dernière page connue', () => {
+      const layout: DocumentLayout = {
+        titlePage: true,
+        headers: { default: { html: '<p>Tête</p>' }, first: { html: '<p>Première</p>' } },
+        footers: {
+          default: { html: '<p>Pied</p>' },
+          first: { html: '<p>Pied première</p>' },
+          even: { html: '<p>Pied pair</p>' },
+        },
+      };
+      mounted = mountEditor({ pageView: { layout } });
+      const header = mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`);
+      const footer = mounted.element.querySelector(`.${PAGE_FOOTER_CLASS}`);
+      expect(header?.innerHTML).toBe('<p>Première</p>');
+      // Sans pagination connue, une seule section : la feuille est la page 1, première.
+      expect(footer?.innerHTML).toBe('<p>Pied première</p>');
+      const content = mounted.editor.contentElement;
+      setHostLastPage(content, { pageNumber: 2, firstOfSection: false });
+      expect(footer?.innerHTML).toBe('<p>Pied pair</p>');
+      setHostLastPage(content, { pageNumber: 3, firstOfSection: false });
+      expect(footer?.innerHTML).toBe('<p>Pied</p>');
+      setHostLastPage(content, null);
+      expect(footer?.innerHTML).toBe('<p>Pied première</p>');
+      // `titlePage` sans `first` : repli sur `default` (écart assumé avec Word, qui laisse vide).
+      impl(mounted.editor).setPageView({
+        layout: { titlePage: true, headers: { default: { html: '<p>Tête</p>' } } },
+      });
+      expect(mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête</p>');
+      // Sans `titlePage`, `first` est ignoré.
+      impl(mounted.editor).setPageView({ layout: { ...layout, titlePage: false } });
+      expect(mounted.element.querySelector(`.${PAGE_HEADER_CLASS}`)?.innerHTML).toBe('<p>Tête</p>');
+    });
+
+    it('L52 : headerFooterHtmlFor choisit first / even / default et assainit', () => {
+      const section: SectionLayout = {
+        titlePage: true,
+        headers: {
+          default: { html: '<p>D<script>x()</script></p>' },
+          first: { html: '<p>F</p>' },
+          even: { html: '<p>E</p>' },
+        },
+      };
+      expect(headerFooterHtmlFor(section, 'headers', FIRST_PAGE)).toBe('<p>F</p>');
+      expect(
+        headerFooterHtmlFor(section, 'headers', { pageNumber: 2, firstOfSection: false }),
+      ).toBe('<p>E</p>');
+      expect(
+        headerFooterHtmlFor(section, 'headers', { pageNumber: 3, firstOfSection: false }),
+      ).toBe('<p>D</p>');
+      // Page paire **et** première de sa section : `first` l'emporte.
+      expect(headerFooterHtmlFor(section, 'headers', { pageNumber: 2, firstOfSection: true })).toBe(
+        '<p>F</p>',
+      );
+      expect(headerFooterHtmlFor(section, 'footers', FIRST_PAGE)).toBe('');
+      expect(headerFooterHtmlFor({}, 'headers', FIRST_PAGE)).toBe('');
+      // `titlePage` sans `first` : `default` (repli), jamais `even`, même si la première page
+      // de la section est paire (R52-05) ; `even` sur les autres pages paires.
+      const noFirst: SectionLayout = {
+        titlePage: true,
+        headers: { default: { html: '<p>D</p>' }, even: { html: '<p>E</p>' } },
+      };
+      expect(headerFooterHtmlFor(noFirst, 'headers', FIRST_PAGE)).toBe('<p>D</p>');
+      expect(headerFooterHtmlFor(noFirst, 'headers', { pageNumber: 2, firstOfSection: true })).toBe(
+        '<p>D</p>',
+      );
+      expect(
+        headerFooterHtmlFor(noFirst, 'headers', { pageNumber: 2, firstOfSection: false }),
+      ).toBe('<p>E</p>');
+      // Sans `default` non plus : rien (Word laisse la page vide), pas `even`.
+      const evenOnly: SectionLayout = { titlePage: true, headers: { even: { html: '<p>E</p>' } } };
+      expect(
+        headerFooterHtmlFor(evenOnly, 'headers', { pageNumber: 2, firstOfSection: true }),
+      ).toBe('');
+      expect(isContinuousSection({ sections: [{}, { start: 'continuous' }] }, 2)).toBe(true);
+      expect(isContinuousSection({ sections: [{}, { start: 'nextPage' }] }, 2)).toBe(false);
+      expect(isContinuousSection({}, 1)).toBe(false);
+    });
+
+    it('L52 (retour n° 2) : defaultParagraph et defaultFont posent les variables de défauts, retirées avec la vue', () => {
+      const layout: DocumentLayout = {
+        defaultFont: { family: 'Times New Roman', sizePt: 11 },
+        defaultParagraph: { lineHeight: 1.15, spacingAfterPt: 8 },
+      };
+      mounted = mountEditor({ pageView: { layout } });
+      const host = mounted.element;
+      expect(host.style.getPropertyValue('--aster-page-font-family')).toBe('"Times New Roman"');
+      expect(host.style.getPropertyValue('--aster-page-font-size')).toBe('11pt');
+      expect(host.style.getPropertyValue('--aster-page-default-line-height')).toBe('1.15');
+      expect(host.style.getPropertyValue('--aster-page-default-spacing-before')).toBe('');
+      expect(host.style.getPropertyValue('--aster-page-default-spacing-after')).toBe('8pt');
+      expect(host.classList.contains(PAGE_DEFAULTS_CLASS)).toBe(true);
+      // Les huit variables de page restent celles d'avant, dans l'ordre.
+      expect(cssVariables(host)).toHaveLength(8);
+      // `lineHeightPt` l'emporte ; sans espacement, pas de classe ; valeurs absurdes ignorées.
+      impl(mounted.editor).setPageView({
+        layout: {
+          defaultFont: { family: '', sizePt: -2 },
+          defaultParagraph: { lineHeight: 1.5, lineHeightPt: 14, spacingBeforePt: Number.NaN },
+        },
+      });
+      expect(host.style.getPropertyValue('--aster-page-font-family')).toBe('');
+      expect(host.style.getPropertyValue('--aster-page-font-size')).toBe('');
+      expect(host.style.getPropertyValue('--aster-page-default-line-height')).toBe('14pt');
+      expect(host.style.getPropertyValue('--aster-page-default-spacing-after')).toBe('');
+      expect(host.classList.contains(PAGE_DEFAULTS_CLASS)).toBe(false);
+      // Nom de police hostile : guillemets, parenthèses et point-virgule retirés.
+      expect(
+        pageDefaultsCssValues({ defaultFont: { family: 'Arial"; color: red; url(x)' } }),
+      ).toEqual({ '--aster-page-font-family': '"Arial color: red urlx"' });
+      expect(pageDefaultsCssValues(undefined)).toEqual({});
+      expect(
+        pageDefaultsCssValues({ defaultParagraph: { spacingBeforePt: 0, spacingAfterPt: 6.004 } }),
+      ).toEqual({
+        '--aster-page-default-spacing-before': '0pt',
+        '--aster-page-default-spacing-after': '6pt',
+      });
+      // R52-06 : la borne est testée sur la valeur arrondie. `0.004` arrondit à `0` : un
+      // interligne, un interligne exact ou un corps nul sont rejetés ; un espacement nul
+      // reste permis ; `0.005` arrondit à `0.01`, accepté.
+      expect(pageDefaultsCssValues({ defaultParagraph: { lineHeight: 0.004 } })).toEqual({});
+      expect(pageDefaultsCssValues({ defaultParagraph: { lineHeightPt: 0.001 } })).toEqual({});
+      expect(pageDefaultsCssValues({ defaultFont: { sizePt: 0.004 } })).toEqual({});
+      expect(
+        pageDefaultsCssValues({ defaultParagraph: { lineHeightPt: 0.001, lineHeight: 1.5 } }),
+      ).toEqual({ '--aster-page-default-line-height': '1.5' });
+      expect(pageDefaultsCssValues({ defaultParagraph: { spacingBeforePt: 0.004 } })).toEqual({
+        '--aster-page-default-spacing-before': '0pt',
+      });
+      expect(pageDefaultsCssValues({ defaultFont: { sizePt: 0.005 } })).toEqual({
+        '--aster-page-font-size': '0.01pt',
+      });
+      // Retrait : plus de variable, plus de classe, `style` nettoyé.
+      impl(mounted.editor).setPageView(false);
+      for (const name of PAGE_DEFAULT_CSS_VARIABLES) {
+        expect(host.style.getPropertyValue(name)).toBe('');
+      }
+      expect(host.classList.contains(PAGE_DEFAULTS_CLASS)).toBe(false);
+      expect(host.getAttribute('style')).toBeNull();
+    });
+
     it('showHeadersFooters: false ne crée aucun conteneur', () => {
       mounted = mountEditor({ pageView: { layout: LAYOUT, showHeadersFooters: false } });
       expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
@@ -449,6 +600,92 @@ describe('vue page', () => {
       // Après destroy, setPageView est un no-op.
       editor.setPageView(true);
       expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(false);
+    });
+  });
+
+  describe('sections hostiles (R41-05)', () => {
+    const TWO_SECTIONS: DocumentLayout = {
+      sections: [{ page: { size: 'A5' } }, { page: { size: 'A3' } }],
+    };
+
+    it('resolveSectionLayout et maxSectionWidthMm ignorent un sections qui n’est pas un tableau', () => {
+      const text: DocumentLayout = { page: { size: 'A5' }, sections: 'abc' as never };
+      expect(resolveSectionLayout(text, 1)).toEqual({ page: { size: 'A5' } });
+      expect(maxSectionWidthMm(text)).toBeNull();
+      const arrayLike: DocumentLayout = { sections: { length: 2, 0: {} } as never };
+      expect(resolveSectionLayout(arrayLike, 1)).toEqual({});
+      expect(maxSectionWidthMm(arrayLike)).toBeNull();
+      // Une entrée qui n'est pas un objet vaut une entrée absente : repli premier niveau.
+      const entries: DocumentLayout = { page: { size: 'Legal' }, sections: ['x', null] as never };
+      expect(resolveSectionLayout(entries, 1)).toEqual({ page: { size: 'Legal' } });
+      expect(resolveSectionLayout(entries, 2)).toEqual({ page: { size: 'Legal' } });
+      expect(maxSectionWidthMm(entries)).toBe(215.9);
+      expect(maxSectionWidthMm(TWO_SECTIONS)).toBe(297);
+    });
+
+    it('R44-05 : bodySectionCount compte les sauts de premier niveau du corps, borné par les sections', () => {
+      const three: DocumentLayout = { sections: [{}, {}, {}] };
+      const content = document.createElement('div');
+      expect(bodySectionCount(three, content)).toBe(1);
+      expect(bodySectionCount(three, null)).toBe(1);
+      content.innerHTML = '<p>a</p><hr data-section-break="1"><p>b</p>';
+      expect(bodySectionCount(three, content)).toBe(2);
+      // Un saut imbriqué ne compte pas ; au-delà des sections déclarées, borné.
+      content.innerHTML =
+        '<p>a</p><hr data-section-break="1"><blockquote><hr data-section-break="9"></blockquote><p>b</p><hr data-section-break="2"><p>c</p><hr data-section-break="3"><p>d</p>';
+      expect(bodySectionCount(three, content)).toBe(3);
+      expect(bodySectionCount({ page: { size: 'A5' } }, content)).toBe(1);
+      expect(bodySectionCount({ sections: 'x' as never }, content)).toBe(1);
+      // La largeur maximale suit la même borne.
+      const widths: DocumentLayout = {
+        sections: [{ page: { size: 'A5' } }, { page: { size: 'A3' } }, { page: { size: 'A4' } }],
+      };
+      expect(maxSectionWidthMm(widths, 1)).toBe(148);
+      expect(maxSectionWidthMm(widths, 2)).toBe(297);
+      expect(maxSectionWidthMm(widths, 9)).toBe(297);
+      expect(maxSectionWidthMm(widths, 0)).toBe(148);
+      expect(maxSectionWidthMm(widths)).toBe(297);
+    });
+
+    it('setPageView avec un sections texte ne lève pas et remplace la vue sans sections', () => {
+      mounted = mountEditor({ content: '<p>a</p><hr data-section-break="1"><p>b</p>' });
+      const editor = impl(mounted.editor);
+      editor.setPageView({ layout: TWO_SECTIONS });
+      expect(cssVariables(mounted.element)[0]).toBe('148mm');
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('297mm');
+      const text: DocumentLayout = { sections: 'abc' as never };
+      expect(() => editor.setPageView({ layout: text })).not.toThrow();
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+      expect(cssVariables(mounted.element)[0]).toBe('210mm');
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('');
+      expect(editor.getLayout()).toBe(text);
+      expect(editor.getSectionLayout(1)).toEqual({});
+      expect(mounted.element.querySelector('hr')?.getAttribute('style')).toBeNull();
+    });
+
+    it('une mise en page qui lève laisse la vue page précédente en place et relaie l’erreur', () => {
+      mounted = mountEditor({ content: '<p>a</p>' });
+      const editor = impl(mounted.editor);
+      editor.setPageView({ layout: TWO_SECTIONS });
+      const hostile: DocumentLayout = {
+        get sections(): readonly never[] {
+          throw new Error('sections hostiles');
+        },
+      };
+      expect(() => editor.setPageView({ layout: hostile })).toThrow('sections hostiles');
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(true);
+      expect(cssVariables(mounted.element)[0]).toBe('148mm');
+      // Corps sans saut : seule la section 1 (A5) compte pour la largeur maximale (R44-05).
+      expect(mounted.element.style.getPropertyValue(PAGE_WIDTH_MAX_CSS_VARIABLE)).toBe('148mm');
+      expect(mounted.element.querySelectorAll(`.${PAGE_HEADER_CLASS}`)).toHaveLength(1);
+      expect(mounted.element.querySelectorAll(`.${PAGE_FOOTER_CLASS}`)).toHaveLength(1);
+      expect(editor.getLayout()).toBe(TWO_SECTIONS);
+      // Sans vue page avant l'appel, l'erreur remonte et rien n'est posé.
+      editor.setPageView(false);
+      expect(() => editor.setPageView({ layout: hostile })).toThrow('sections hostiles');
+      expect(mounted.element.classList.contains(PAGE_VIEW_CLASS)).toBe(false);
+      expect(mounted.element.getAttribute('style')).toBeNull();
+      expect(editor.getLayout()).toBeNull();
     });
   });
 });

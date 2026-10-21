@@ -1,6 +1,6 @@
-import type { Tally } from './tally';
-import type { FidelityPropertyGroup } from './types';
-import { fmt } from './values';
+import type { Tally } from './tally.js';
+import type { FidelityPropertyGroup } from './types.js';
+import { fmt } from './values.js';
 
 /**
  * Contexte et primitives d'enregistrement partagés par les comparateurs de blocs et de

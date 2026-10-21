@@ -70,6 +70,8 @@ function mount(): void {
     locale: localeSelect.value,
     readOnly: readonlyInput.checked,
     placeholder: 'Écris quelque chose…',
+    // Édition type Word : la touche Tab insère une tabulation (défaut : 'focus').
+    tabKey: 'insert',
     pasteTransformers: [wordPasteTransformer()],
   };
   instance = createAster(host, options);
@@ -109,8 +111,9 @@ docxInput.addEventListener('change', async () => {
   const file = docxInput.files?.[0];
   if (!file || !instance) return;
   try {
-    // Chemin stylé (session 3) : polices, interlignes, bordures, tableaux, mise en page.
-    const result = await importDocx(file, { fidelity: 'styled' });
+    // Chemin stylé, défaut de la lib depuis la 0.6 : polices, interlignes, bordures,
+    // tableaux, mise en page (`{ fidelity: 'semantic' }` pour l'ancien chemin mammoth).
+    const result = await importDocx(file);
     instance.editor.setHTML(result.html);
     lastImport = result;
     // La mise en page lue (format, marges, en-têtes, pieds) alimente la vue page.

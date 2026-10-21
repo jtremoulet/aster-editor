@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { MAX_COLUMNS, convertTable } from './tables';
+import { importDocx } from '../import-docx.js';
+import { buildDocx, run as runXml, W_NS } from '../preprocess/minimal-docx.js';
+import { MAX_COLUMNS, convertTable } from './tables.js';
 import {
   buildPackage,
   createTestContext,
@@ -7,8 +9,8 @@ import {
   paragraphXml,
   renderBody,
   stubStyles,
-} from './testing-blocks';
-import type { ConverterContext, DocxPackage } from './types';
+} from './testing-blocks.js';
+import type { ConverterContext, DocxPackage, TableStyleProps } from './types.js';
 
 function cell(text: string, tcPr = ''): string {
   return `<w:tc>${tcPr ? `<w:tcPr>${tcPr}</w:tcPr>` : ''}${text === '' ? '<w:p/>' : paragraphXml(text)}</w:tc>`;
@@ -127,15 +129,15 @@ describe('convertTable', () => {
     expect(html).toContain(
       '<td style="border-top: 0.5pt dotted #222222; border-right: 0.5pt solid #000000; border-bottom: 0.5pt solid #000000; border-left: 0.5pt dotted #222222; background-color: #eeeeee; padding: 1pt 2pt 1pt 2pt"><p>A1</p></td>',
     );
-    // B1 : bottom direct dashed 2pt, left nil → omis.
+    // B1 : bottom direct dashed 2pt, left nil explicite qui annule le trait du style → transparent 0pt.
     expect(html).toContain(
-      '<td style="border-top: 0.5pt dotted #222222; border-bottom: 2pt dashed #ff0000; background-color: #eeeeee; padding: 1pt 2pt 1pt 2pt"><p>B1</p></td>',
+      '<td style="border-top: 0.5pt dotted #222222; border-bottom: 2pt dashed #ff0000; border-left: 0pt solid transparent; background-color: #eeeeee; padding: 1pt 2pt 1pt 2pt"><p>B1</p></td>',
     );
     // Style de tableau courant transmis au contexte des cellules.
     expect(styled.tableStyle).toBeNull();
   });
 
-  it('gridSpan → colspan, colwidth sur la première ligne depuis tblGrid', async () => {
+  it('gridSpan → colspan, colwidth sur toutes les lignes depuis tblGrid (comme le core, L49)', async () => {
     const html = await convert(
       '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="4800"/><w:gridCol w:w="2400"/></w:tblGrid>' +
         row(cell('AB1', '<w:gridSpan w:val="2"/>') + cell('C1')) +
@@ -145,7 +147,9 @@ describe('convertTable', () => {
     expect(html).toContain(
       '<td colspan="2" colwidth="160,320"><p>AB1</p></td><td colwidth="160"><p>C1</p></td>',
     );
-    expect(html).toContain('<tr><td><p>A2</p></td><td><p>B2</p></td><td><p>C2</p></td></tr>');
+    expect(html).toContain(
+      '<tr><td colwidth="160"><p>A2</p></td><td colwidth="320"><p>B2</p></td><td colwidth="160"><p>C2</p></td></tr>',
+    );
   });
 
   it('vMerge : restart ouvre, continuation fusionne et omet la cellule', async () => {
@@ -274,7 +278,7 @@ describe('convertTable', () => {
         '</w:tbl>',
     );
     expect(over).toContain(
-      '<tr><td colspan="2" colwidth="100,100"><p>A</p></td></tr><tr><td><p>B</p></td><td><p>C</p></td></tr>',
+      '<tr><td colspan="2" colwidth="100,100"><p>A</p></td></tr><tr><td colwidth="100"><p>B</p></td><td colwidth="100"><p>C</p></td></tr>',
     );
     const narrower = await convert(
       '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/></w:tblGrid>' +
@@ -288,8 +292,8 @@ describe('convertTable', () => {
     expect(narrower).toBe(
       '<table><tbody>' +
         '<tr><td colspan="2" colwidth="100,100"><p>A</p></td><td colwidth="100"><p>B</p></td></tr>' +
-        '<tr><td><p></p></td><td><p>X</p></td><td><p>Y</p></td></tr>' +
-        '<tr><td><p></p></td><td colspan="2"><p>Z</p></td></tr>' +
+        '<tr><td colwidth="100"><p></p></td><td colwidth="100"><p>X</p></td><td colwidth="100"><p>Y</p></td></tr>' +
+        '<tr><td colwidth="100"><p></p></td><td colspan="2" colwidth="100,100"><p>Z</p></td></tr>' +
         '</tbody></table>',
     );
   });
@@ -315,11 +319,260 @@ describe('convertTable', () => {
     );
   });
 
-  it('ignore `w:jc` (alignement du tableau hors contrat) sans planter', async () => {
+  it('`w:jc` → data-align center / right, left et start omis, après data-docx-style', async () => {
     const html = await convert(
       `<w:tbl><w:tblPr><w:jc w:val="center"/><w:tblW w:type="dxa" w:w="6000"/></w:tblPr>${row(cell('A'))}</w:tbl>`,
     );
-    expect(html).toContain('<table style="width: 300pt">');
+    expect(html).toContain('<table style="width: 300pt" data-align="center">');
     expect(html).not.toContain('margin');
+    expect(
+      await convert(`<w:tbl><w:tblPr><w:jc w:val="end"/></w:tblPr>${row(cell('A'))}</w:tbl>`),
+    ).toContain('<table data-align="right">');
+    expect(
+      await convert(
+        `<w:tbl><w:tblPr><w:tblStyle w:val="X"/><w:jc w:val="right"/></w:tblPr>${row(cell('A'))}</w:tbl>`,
+      ),
+    ).toContain('<table data-docx-style="X" data-align="right">');
+    for (const value of ['left', 'start', 'both', '']) {
+      expect(
+        await convert(
+          `<w:tbl><w:tblPr><w:jc w:val="${value}"/></w:tblPr>${row(cell('A'))}</w:tbl>`,
+        ),
+      ).toContain('<table><tbody>');
+    }
+  });
+
+  describe('bordures nil explicites et couleurs (session 4)', () => {
+    const GREY =
+      '<w:tblBorders><w:top w:val="single" w:sz="4" w:color="BFBFBF"/><w:left w:val="single" w:sz="4" w:color="BFBFBF"/>' +
+      '<w:bottom w:val="single" w:sz="4" w:color="BFBFBF"/><w:right w:val="single" w:sz="4" w:color="BFBFBF"/>' +
+      '<w:insideH w:val="single" w:sz="4" w:color="BFBFBF"/><w:insideV w:val="single" w:sz="4" w:color="BFBFBF"/></w:tblBorders>';
+
+    it('la couleur exacte est conservée, `auto` seul devient noir', async () => {
+      const html = await convert(
+        `<w:tbl><w:tblPr>${GREY}</w:tblPr>${row(cell('A') + cell('B', '<w:tcBorders><w:bottom w:val="single" w:sz="4" w:color="auto"/></w:tcBorders>'))}</w:tbl>`,
+      );
+      expect(html).toContain(
+        '<table style="border-top: 0.5pt solid #bfbfbf; border-right: 0.5pt solid #bfbfbf; border-bottom: 0.5pt solid #bfbfbf; border-left: 0.5pt solid #bfbfbf">',
+      );
+      expect(html).toContain('<td style="border-right: 0.5pt solid #bfbfbf"><p>A</p></td>');
+      expect(html).toContain(
+        '<td style="border-bottom: 0.5pt solid #000000; border-left: 0.5pt solid #bfbfbf"><p>B</p></td>',
+      );
+      expect(html).not.toContain('#000000; border-left: 0.5pt solid #000000');
+    });
+
+    it('nil explicite : transparent 0pt s’il annule un trait intérieur ou extérieur, omis sinon', async () => {
+      const html = await convert(
+        `<w:tbl><w:tblPr>${GREY}</w:tblPr>` +
+          row(
+            cell('nil gauche', '<w:tcBorders><w:left w:val="nil"/></w:tcBorders>') +
+              cell(
+                'nil bas',
+                '<w:tcBorders><w:bottom w:val="nil" w:color="auto" w:sz="0"/></w:tcBorders>',
+              ),
+          ) +
+          row(cell('A2') + cell('B2')) +
+          '</w:tbl>',
+      );
+      // Arête extérieure gauche : le `nil` annule la bordure gauche du tableau.
+      expect(html).toContain(
+        '<td style="border-right: 0.5pt solid #bfbfbf; border-bottom: 0.5pt solid #bfbfbf; border-left: 0pt solid transparent"><p>nil gauche</p></td>',
+      );
+      // Arête intérieure basse : le `nil` annule `insideH`.
+      expect(html).toContain(
+        '<td style="border-bottom: 0pt solid transparent; border-left: 0.5pt solid #bfbfbf"><p>nil bas</p></td>',
+      );
+      // Sans bordure à annuler (tableau nu) : rien n'est émis.
+      const bare = await convert(
+        `<w:tbl>${row(cell('A', '<w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/></w:tcBorders>'))}</w:tbl>`,
+      );
+      expect(bare).toBe('<table><tbody><tr><td><p>A</p></td></tr></tbody></table>');
+    });
+  });
+
+  describe('styles conditionnels (session 4)', () => {
+    const conditionalStyles = (): ReturnType<typeof stubStyles> =>
+      stubStyles({
+        tableStyle: (id) =>
+          id === 'Cond'
+            ? ({
+                cellBorders: [{ side: 'top', style: 'solid', widthPt: 0.5, color: '#bfbfbf' }],
+                runDefaults: { fontSizePt: 9 },
+                conditional: {
+                  firstRow: { cellShading: '#d9e2f3', run: { bold: true } },
+                  band1Horz: { cellShading: '#f2f2f2' },
+                  lastRow: {
+                    cellBorders: {
+                      top: { side: 'top', style: 'double', widthPt: 1.5, color: '#2f5496' },
+                    },
+                  },
+                  firstCol: { run: { italic: true } },
+                },
+              } as TableStyleProps)
+            : null,
+      });
+
+    async function conditional(tblLook: string, rows: string): Promise<string> {
+      const spying = await createTestContext(pkg, {}, { styles: conditionalStyles() });
+      return (
+        await convertTable(
+          fragment(`<w:tbl><w:tblPr><w:tblStyle w:val="Cond"/>${tblLook}</w:tblPr>${rows}</w:tbl>`),
+          spying,
+        )
+      ).html;
+    }
+
+    const THREE_ROWS =
+      row(cell('H1') + cell('H2')) + row(cell('A') + cell('B')) + row(cell('C') + cell('D'));
+
+    it('tblLook firstRow (true/1) : fond et gras sur la première ligne, band1Horz sur la ligne suivante', async () => {
+      for (const look of [
+        '<w:tblLook w:firstRow="true" w:lastRow="false" w:noHBand="false" w:noVBand="true"/>',
+        '<w:tblLook w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:noHBand="0" w:noVBand="1"/>',
+        '<w:tblLook w:val="0420"/>',
+      ]) {
+        const html = await conditional(look, THREE_ROWS);
+        expect(html, look).toContain(
+          '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #d9e2f3"><p>H1</p></td>',
+        );
+        expect(html, look).toContain(
+          '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #f2f2f2"><p>A</p></td>',
+        );
+        expect(html, look).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>C</p></td>');
+      }
+    });
+
+    it('lastRow prime sur band, firstCol applique ses runs, noHBand retire les bandes', async () => {
+      const html = await conditional(
+        '<w:tblLook w:firstRow="1" w:lastRow="1" w:firstColumn="1" w:noHBand="1" w:noVBand="1"/>',
+        THREE_ROWS,
+      );
+      expect(html).toContain('<td style="border-top: 1.5pt double #2f5496"><p>C</p></td>');
+      expect(html).not.toContain('#f2f2f2');
+      // Masque nul explicite : aucune première ligne, les bandes seules (band1Horz sur la ligne 0).
+      const none = await conditional('<w:tblLook w:val="0000"/>', THREE_ROWS);
+      expect(none).not.toContain('#d9e2f3');
+      expect(none).toContain('background-color: #f2f2f2"><p>H1</p></td>');
+    });
+
+    it('R42-02 : un nil conditionnel (bottom, insideV) de firstRow retire les traits du style sur la première ligne', async () => {
+      const styles =
+        `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="${W_NS}">` +
+        '<w:style w:type="table" w:styleId="G"><w:name w:val="G"/><w:tblPr><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="BFBFBF"/><w:insideV w:val="single" w:sz="4" w:color="BFBFBF"/></w:tblBorders></w:tblPr>' +
+        '<w:tblStylePr w:type="firstRow"><w:tcPr><w:tcBorders><w:bottom w:val="nil"/><w:insideV w:val="nil"/></w:tcBorders></w:tcPr></w:tblStylePr></w:style></w:styles>';
+      const p = (text: string): string => `<w:p>${runXml(text)}</w:p>`;
+      const body =
+        '<w:tbl><w:tblPr><w:tblStyle w:val="G"/><w:tblLook w:firstRow="1"/></w:tblPr>' +
+        `<w:tr><w:tc>${p('h1')}</w:tc><w:tc>${p('h2')}</w:tc></w:tr><w:tr><w:tc>${p('a')}</w:tc><w:tc>${p('b')}</w:tc></w:tr></w:tbl><w:p/>`;
+      const { html } = await importDocx(await buildDocx(body, { 'word/styles.xml': styles }), {
+        fidelity: 'styled',
+      });
+      // En-tête : seul le trait du haut du style reste ; corps : les quatre traits intérieurs.
+      expect(html).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>h1</p></td>');
+      expect(html).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>h2</p></td>');
+      expect(html).toContain(
+        '<td style="border-top: 0.5pt solid #bfbfbf; border-right: 0.5pt solid #bfbfbf; border-bottom: 0.5pt solid #bfbfbf; border-left: 0.5pt solid #bfbfbf"><p>a</p></td>',
+      );
+      // Un `nil` direct de cellule reste la bordure transparente du contrat (X8).
+      const direct = body.replace(
+        `<w:tc>${p('a')}</w:tc>`,
+        `<w:tc><w:tcPr><w:tcBorders><w:left w:val="nil"/></w:tcBorders></w:tcPr>${p('a')}</w:tc>`,
+      );
+      const withDirect = await importDocx(await buildDocx(direct, { 'word/styles.xml': styles }), {
+        fidelity: 'styled',
+      });
+      expect(withDirect.html).toContain('border-left: 0pt solid transparent"><p>a</p></td>');
+    });
+
+    it('R42-06 : tblLook absent ou vide → défaut de Word (première ligne, bandes horizontales), comme <w:tblLook/>', async () => {
+      const absent = await conditional('', THREE_ROWS);
+      const empty = await conditional('<w:tblLook/>', THREE_ROWS);
+      // Mêmes propriétés directes ; seul l'élément explicite, même vide, sérialise ses
+      // drapeaux effectifs (`data-docx-look`, L49), l'absence ne sérialise rien.
+      expect(empty).toBe(
+        absent.replace(
+          '<table data-docx-style="Cond">',
+          '<table data-docx-style="Cond" data-docx-look="firstRow firstColumn noVBand">',
+        ),
+      );
+      expect(absent).not.toContain('data-docx-look');
+      expect(absent).toContain(
+        '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #d9e2f3"><p>H1</p></td>',
+      );
+      expect(absent).toContain(
+        '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #f2f2f2"><p>A</p></td>',
+      );
+      expect(absent).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>C</p></td>');
+    });
+
+    it('L49 : data-docx-look sérialise les drapeaux effectifs d’un w:tblLook explicite, dans l’ordre du contrat, après data-align', async () => {
+      const opening = (html: string): string => html.slice(0, html.indexOf('<tbody>'));
+      for (const look of [
+        '<w:tblLook w:firstRow="true" w:lastRow="false" w:noHBand="false" w:noVBand="true"/>',
+        '<w:tblLook w:firstRow="1" w:noVBand="1"/>',
+        '<w:tblLook w:val="0420"/>',
+      ]) {
+        expect(opening(await conditional(look, THREE_ROWS)), look).toBe(
+          '<table data-docx-style="Cond" data-docx-look="firstRow noVBand">',
+        );
+      }
+      expect(
+        opening(
+          await conditional(
+            '<w:tblLook w:noVBand="1" w:lastColumn="1" w:firstRow="1" w:lastRow="1" w:noHBand="1" w:firstColumn="1"/>',
+            THREE_ROWS,
+          ),
+        ),
+      ).toBe(
+        '<table data-docx-style="Cond" data-docx-look="firstRow lastRow firstColumn lastColumn noHBand noVBand">',
+      );
+      // Masque nul : aucun drapeau, pas représentable par le contrat (`null` = pas de drapeau).
+      expect(opening(await conditional('<w:tblLook w:val="0000"/>', THREE_ROWS))).toBe(
+        '<table data-docx-style="Cond">',
+      );
+      // Sans style conditionnel, l'élément est sérialisé quand même : l'export le réécrit tel quel.
+      const plain = await convert(
+        '<w:tbl><w:tblPr><w:jc w:val="center"/><w:tblLook w:val="04A0"/></w:tblPr>' +
+          row(cell('A')) +
+          '</w:tbl>',
+      );
+      expect(opening(plain)).toBe(
+        '<table data-align="center" data-docx-look="firstRow firstColumn noVBand">',
+      );
+    });
+
+    it('le style conditionnel ne remplace pas un fond direct et transmet ses runs au contexte des cellules', async () => {
+      const seen: unknown[] = [];
+      const base = await createTestContext(pkg, {}, { styles: conditionalStyles() });
+      const spying: ConverterContext = {
+        ...base,
+        convert: {
+          ...base.convert,
+          blocks: async (container, inner) => {
+            seen.push(inner.tableStyle?.runDefaults);
+            return base.convert.blocks(container, inner);
+          },
+        },
+      };
+      const html = (
+        await convertTable(
+          fragment(
+            '<w:tbl><w:tblPr><w:tblStyle w:val="Cond"/><w:tblLook w:firstRow="1" w:firstColumn="1" w:noHBand="1" w:noVBand="1"/></w:tblPr>' +
+              row(cell('H1', '<w:shd w:val="clear" w:fill="FF0000"/>') + cell('H2')) +
+              row(cell('A') + cell('B')) +
+              '</w:tbl>',
+          ),
+          spying,
+        )
+      ).html;
+      expect(html).toContain('background-color: #ff0000"><p>H1</p>');
+      expect(seen).toEqual([
+        { fontSizePt: 9, italic: true, bold: true },
+        { fontSizePt: 9, bold: true },
+        { fontSizePt: 9, italic: true },
+        { fontSizePt: 9 },
+      ]);
+    });
   });
 });

@@ -1,8 +1,8 @@
 import type { AsterEditor, ParagraphLayoutAttrName } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { createPlainButton } from './button';
-import { createDropdown, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { createPlainButton } from './button.js';
+import { createDropdown, type Dropdown } from './dropdown.js';
 import {
   MAX_PARAGRAPH_PT,
   canEditBlockLayout,
@@ -19,7 +19,7 @@ import {
   setBlockLayout,
   submitOnEnter,
   unsetBlockLayout,
-} from './paragraph-layout';
+} from './paragraph-layout.js';
 
 /**
  * Champs numériques du dialogue, dans l'ordre d'affichage : attribut, clé i18n et bornes

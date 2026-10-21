@@ -1,10 +1,20 @@
-import type { DocxLostObject } from '../types';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { escapeAttr, escapeHtml, pt, styleAttr } from './html';
-import { detectLostInline } from './lost';
-import { docDefaultsOf } from './styles';
-import type { ConverterContext, ResolvedParagraphProps, ResolvedRunProps } from './types';
-import { cssFontFamily, fontName } from './units';
+import type { DocxLostObject } from '../types.js';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { escapeAttr, escapeHtml, pt } from './html.js';
+import { detectLostInline } from './lost.js';
+import { tabStopsOf, type TabStop } from './properties.js';
+import { hyperlinkHref, hyperlinkTarget, safeHref } from './runs-links.js';
+import { InlineWriter, renderRunTags } from './runs-tags.js';
+import { docDefaultsOf } from './styles.js';
+import type { ConverterContext, ResolvedParagraphProps } from './types.js';
+import { fontName } from './units.js';
+
+/**
+ * Les liens (`runs-links.ts`) et les balises de run (`runs-tags.ts`) sont ré-exportés
+ * d'ici : l'API du module est celle d'avant le découpage (L45).
+ */
+export { hyperlinkTarget, safeHref } from './runs-links.js';
+export { renderRunTags, type RunTags } from './runs-tags.js';
 
 /** Enfants d'un `w:p` sans contenu ni objet : jamais signalés. */
 const IGNORED_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([
@@ -56,8 +66,11 @@ function reportLost(element: Element, ctx: ConverterContext): void {
  * - les propriétés égales aux `docDefaults` du document ne sont pas écrites ; tout ce qui
  *   en diffère (y compris hérité du style de paragraphe) est posé sur chaque run, jamais
  *   sur le bloc ;
- * - `w:tab` → espace cadratin U+2003 (un seul caractère, non replié par HTML, réversible
- *   à l'export) ;
+ * - `w:tab` → nœud inline atomique `<span data-tab=""></span>` du contrat (session 4),
+ *   `data-stop="Npt"` quand le paragraphe définit un taquet pour cette tabulation (la
+ *   n-ième tabulation prend le n-ième taquet, approximation sans mesure du texte), puis
+ *   `data-align` et `data-leader` du taquet quand il en a ; émis dans les balises du run,
+ *   comme l'éditeur sérialise un atome inline portant des marques ;
  * - `w:br w:type="page"` → marqueur `PAGE_BREAK` dans le flux, que `paragraphs.ts` coupe
  *   en blocs frères ; dans un lien ou un champ, il dégénère en `<br>`.
  */
@@ -65,95 +78,19 @@ function reportLost(element: Element, ctx: ConverterContext): void {
 /** Marqueur de saut de page inséré dans le flux inline, extrait par `paragraphs.ts`. */
 export const PAGE_BREAK = '<hr data-page-break>';
 
-const TAB = String.fromCharCode(0x2003);
+/**
+ * Tabulation du contrat (`TabAttrs`) : `data-stop`, puis `data-align` (jamais `left`) et
+ * `data-leader`, dans cet ordre et seulement quand le taquet est connu et les porte.
+ */
+export function tabHtml(stop?: TabStop): string {
+  if (stop === undefined) return '<span data-tab=""></span>';
+  const align = stop.align ? ` data-align="${stop.align}"` : '';
+  const leader = stop.leader ? ` data-leader="${stop.leader}"` : '';
+  return `<span data-tab="" data-stop="${pt(stop.positionPt)}"${align}${leader}></span>`;
+}
+
 const NO_BREAK_HYPHEN = String.fromCharCode(0x2011);
 const SOFT_HYPHEN = String.fromCharCode(0xad);
-
-/** Balises ouvrantes et fermantes d'un run, dans l'ordre fixe du contrat. */
-export interface RunTags {
-  readonly open: string;
-  readonly close: string;
-}
-
-function decorationAttr(style: string): string {
-  return style === 'solid' ? '' : ` style="text-decoration-style: ${style}"`;
-}
-
-/**
- * Balises d'un run : `<strong><em><u><s><sup|sub><span style data-docx-run-style>`. Les
- * marques booléennes sont écrites dès qu'elles sont vraies ; les propriétés valuées
- * seulement si elles diffèrent de `baseline` (les `docDefaults`).
- */
-export function renderRunTags(props: ResolvedRunProps, baseline: ResolvedRunProps): RunTags {
-  const differs = <K extends keyof ResolvedRunProps>(key: K): ResolvedRunProps[K] | undefined =>
-    props[key] !== undefined && props[key] !== baseline[key] ? props[key] : undefined;
-  const fontSize = differs('fontSizePt');
-  const fontFamily = differs('fontFamily');
-  const spacing = differs('letterSpacingPt');
-  const caps = differs('caps');
-  const style = styleAttr([
-    // Ordre des déclarations = celui que le core sérialise (attributs de `textStyle`), pour
-    // que `setHTML(getHTML())` dans l'éditeur rende exactement ce HTML. La police est
-    // citée quand elle contient un espace (`"Wingdings 2"`) : le core relit la valeur
-    // telle quelle (`getStyleProperty`) et la ré-émet à l'identique, guillemets compris.
-    ['background-color', differs('highlight')],
-    ['color', differs('color')],
-    ['font-family', fontFamily === undefined ? undefined : cssFontFamily(fontFamily)],
-    ['font-size', fontSize === undefined ? undefined : pt(fontSize)],
-    ['letter-spacing', spacing === undefined ? undefined : pt(spacing)],
-    ['text-transform', caps === 'all' ? 'uppercase' : undefined],
-    ['font-variant', caps === 'small' ? 'small-caps' : undefined],
-  ]);
-  const runStyle = props.runStyle ? ` data-docx-run-style="${escapeAttr(props.runStyle)}"` : '';
-  const open: string[] = [];
-  const close: string[] = [];
-  const wrap = (tag: string, attrs = ''): void => {
-    open.push(`<${tag}${attrs}>`);
-    close.unshift(`</${tag}>`);
-  };
-  // Du plus extérieur au plus intérieur : l'imbrication est celle du schéma du core
-  // (`<span><strong><em><s><u><sup>`), sans quoi l'aller-retour dans l'éditeur réordonne.
-  if (style || runStyle) wrap('span', `${style}${runStyle}`);
-  if (props.bold) wrap('strong');
-  if (props.italic) wrap('em');
-  if (props.strike) wrap('s', decorationAttr(props.strike));
-  if (props.underline) wrap('u', decorationAttr(props.underline));
-  if (props.superscript) wrap('sup');
-  else if (props.subscript) wrap('sub');
-  return { open: open.join(''), close: close.join('') };
-}
-
-/** Accumule le HTML inline en fusionnant les textes voisins portés par les mêmes balises. */
-class InlineWriter {
-  private readonly out: string[] = [];
-  private current: { tags: RunTags; parts: string[] } | null = null;
-
-  text(tags: RunTags, html: string): void {
-    if (html === '') return;
-    if (!this.current || this.current.tags.open !== tags.open) {
-      this.flush();
-      this.current = { tags, parts: [] };
-    }
-    this.current.parts.push(html);
-  }
-
-  raw(html: string): void {
-    this.flush();
-    if (html !== '') this.out.push(html);
-  }
-
-  private flush(): void {
-    if (!this.current) return;
-    const { tags, parts } = this.current;
-    this.out.push(tags.open + parts.join('') + tags.close);
-    this.current = null;
-  }
-
-  result(): string {
-    this.flush();
-    return this.out.join('');
-  }
-}
 
 /** Champ complexe en cours (`w:fldChar begin` … `separate` … `end`). */
 interface FieldFrame {
@@ -167,84 +104,9 @@ interface WalkState {
   readonly fields: FieldFrame[];
   /** Profondeur de `<a>` ouverts : un saut de page y devient `<br>`. */
   linkDepth: number;
-}
-
-/** Jeton d'instruction de champ : chaîne entre guillemets ou mot. */
-const FIELD_TOKEN = /"([^"]*)"|(\S+)/g;
-
-/** Commutateurs de `HYPERLINK` qui prennent un argument, hors `\l` (traité à part). */
-const HYPERLINK_SWITCHES_WITH_ARGUMENT: ReadonlySet<string> = new Set(['o', 't']);
-
-/**
- * Cible d'une instruction `HYPERLINK` : la première chaîne (citée ou non) qui n'est pas
- * l'argument d'un commutateur est l'URL ; `\l "x"` ajoute le fragment `#x` (seul, c'est
- * un signet interne `#x`). `HYPERLINK "https://x.io/p" \l "sec2"` → `https://x.io/p#sec2`.
- * `null` pour un autre champ ou une instruction sans cible.
- */
-export function hyperlinkTarget(instr: string): string | null {
-  const tokens: { readonly value: string; readonly quoted: boolean }[] = [];
-  for (const match of instr.matchAll(FIELD_TOKEN)) {
-    tokens.push({ value: match[1] ?? match[2] ?? '', quoted: match[1] !== undefined });
-  }
-  const keyword = tokens[0];
-  if (!keyword || keyword.quoted || keyword.value.toUpperCase() !== 'HYPERLINK') return null;
-  let target: string | undefined;
-  let fragment: string | undefined;
-  for (let index = 1; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (!token) continue;
-    if (!token.quoted && token.value.startsWith('\\')) {
-      const name = token.value.slice(1).toLowerCase();
-      if (name === 'l') {
-        fragment = tokens[index + 1]?.value;
-        index += 1;
-      } else if (HYPERLINK_SWITCHES_WITH_ARGUMENT.has(name)) {
-        index += 1;
-      }
-      continue;
-    }
-    target ??= token.value;
-  }
-  if (fragment) return `${target ?? ''}#${fragment}`;
-  return target || null;
-}
-
-/** Protocoles autorisés dans un `href` produit par le lecteur. */
-const SAFE_PROTOCOLS: ReadonlySet<string> = new Set(['http', 'https', 'mailto', 'tel']);
-
-/**
- * `href` sûr hors de l'éditeur : `http`, `https`, `mailto`, `tel`, les ancres `#…` et les
- * URL relatives passent ; tout autre protocole (`javascript:`, `data:`, `vbscript:`…)
- * retire le lien, le texte est conservé. Le protocole est lu après suppression des
- * caractères de contrôle et espaces, comme un navigateur le ferait (`java\tscript:`).
- */
-export function safeHref(href: string | null): string | null {
-  if (href === null) return null;
-  const trimmed = href.trim();
-  if (trimmed === '') return null;
-  // eslint-disable-next-line no-control-regex -- les contrôles C0 sont précisément la cible.
-  const probe = trimmed.replace(/[\u0000- \u007f]/g, '').toLowerCase();
-  const scheme = /^([a-z][a-z0-9+.-]*):/.exec(probe);
-  if (scheme && !SAFE_PROTOCOLS.has(scheme[1] ?? '')) return null;
-  return trimmed;
-}
-
-/** Attribut par nom local quel que soit son préfixe (`r:id`, `w:anchor`). */
-function attrByLocalName(element: Element, localName: string): string {
-  for (const attr of Array.from(element.attributes)) {
-    if (attr.localName === localName) return attr.value;
-  }
-  return '';
-}
-
-async function hyperlinkHref(hyperlink: Element, ctx: ConverterContext): Promise<string | null> {
-  const id = attrByLocalName(hyperlink, 'id');
-  if (id) {
-    const rel = (await ctx.pkg.rels(ctx.part)).get(id);
-    if (rel?.external) return rel.target;
-  }
-  const anchor = wordAttribute(hyperlink, 'anchor');
-  return anchor ? `#${anchor}` : null;
+  /** Taquets du paragraphe et rang de la prochaine tabulation rendue. */
+  readonly tabStops: readonly TabStop[];
+  tabIndex: number;
 }
 
 /**
@@ -270,7 +132,13 @@ export async function convertRuns(
   props: ResolvedParagraphProps,
 ): Promise<string> {
   const baseline = docDefaultsOf(ctx.styles).run;
-  const state: WalkState = { writer: new InlineWriter(), fields: [], linkDepth: 0 };
+  const state: WalkState = {
+    writer: new InlineWriter(),
+    fields: [],
+    linkDepth: 0,
+    tabStops: tabStopsOf(props),
+    tabIndex: 0,
+  };
 
   const withAnchor = async (target: string | null, body: () => Promise<void>): Promise<void> => {
     const href = safeHref(target);
@@ -376,8 +244,13 @@ export async function convertRuns(
           fieldChar(child);
           break;
         case 'tab':
+          if (inInstruction()) break;
+          state.writer.text(tags, tabHtml(state.tabStops[state.tabIndex]));
+          state.tabIndex += 1;
+          break;
         case 'ptab':
-          if (!inInstruction()) state.writer.text(tags, TAB);
+          // Tabulation absolue (`w:ptab`) : tabulation sans taquet, hors du décompte.
+          if (!inInstruction()) state.writer.text(tags, tabHtml());
           break;
         case 'br':
           if (inInstruction()) break;

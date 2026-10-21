@@ -1,4 +1,4 @@
-import { formatShortcut, isMacPlatform } from '../utils/shortcut';
+import { formatShortcut, isMacPlatform } from '../utils/shortcut.js';
 
 /**
  * Texte d'infobulle d'un bouton : `libellé (raccourci)` avec le raccourci rendu lisible

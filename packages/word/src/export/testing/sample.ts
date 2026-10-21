@@ -1,10 +1,10 @@
 import { inflateRawSync } from 'node:zlib';
-import { importDocx } from '../../docx/import-docx';
-import type { DocxImportResult } from '../../docx/types';
-import { loadDocx } from '../docx-module';
-import { exportDocx } from '../export-docx';
-import { buildDocx } from '../html-to-docx';
-import type { DocxExportOptions, DocxExportWarning } from '../types';
+import { importDocx } from '../../docx/import-docx.js';
+import type { DocxImportResult } from '../../docx/types.js';
+import { loadDocx } from '../docx-module.js';
+import { exportDocx } from '../export-docx.js';
+import { buildDocx } from '../html-to-docx.js';
+import type { DocxExportOptions, DocxExportWarning } from '../types.js';
 
 /** PNG 2x2 rouge, le plus petit PNG valide, en base64 (même image que les fixtures). */
 export const RED_PNG_BASE64 =
@@ -60,13 +60,18 @@ const b = 2;</code></pre>
 <p>Ligne 1<br>Ligne 2</p>
 `;
 
-/** Exporte puis réimporte : le résultat d'`importDocx` sur le .docx produit. */
+/**
+ * Exporte puis réimporte : le résultat d'`importDocx` sur le .docx produit. Relecture en
+ * `fidelity: 'semantic'` (mammoth) : les tests de l'export assertent le HTML sémantique
+ * sans attributs de style, et plusieurs documentent des limites propres à mammoth
+ * (M-1, M-2, X-3). Le chemin stylé, défaut depuis la 0.6, est couvert par `layout.spec.ts`.
+ */
 export async function roundTrip(
   html: string,
   options: DocxExportOptions = {},
 ): Promise<DocxImportResult> {
   const blob = await exportDocx(html, options);
-  return importDocx(await blob.arrayBuffer());
+  return importDocx(await blob.arrayBuffer(), { fidelity: 'semantic' });
 }
 
 /** Parse un fragment HTML dans un `Document` jsdom isolé. */

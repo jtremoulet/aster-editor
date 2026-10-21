@@ -1,8 +1,8 @@
 import type { AsterEditor } from '@aster-editor/core';
 import { FORMAT_PAINTER_CHANGE_EVENT, clearFormatClipboard } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { BUTTON_CLASS, createPlainButton, setDisabled } from './button';
-import { applyTooltip } from './tooltip';
+import type { ToolbarWidget } from '../types.js';
+import { BUTTON_CLASS, createPlainButton, setDisabled } from './button.js';
+import { applyTooltip } from './tooltip.js';
 
 /** Classe posée sur le bouton quand le presse-papier est verrouillé (double-clic). */
 export const FORMAT_PAINTER_LOCKED_CLASS = 'aster-format-painter--locked';

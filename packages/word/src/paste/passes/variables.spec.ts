@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_VARIABLE_PATTERN } from '../../docx/preprocess/names';
-import { normalizeGoogleDocsHtml } from '../../google/normalize-google-docs-html';
-import { normalizeHtmlForCompare, parseHtml, runPass } from '../../testing/html-compare';
-import { normalizeWordHtml } from '../normalize-word-html';
-import { wrapVariablePlaceholders, wrapVariables } from './variables';
+import { DEFAULT_VARIABLE_PATTERN } from '../../docx/preprocess/names.js';
+import { normalizeGoogleDocsHtml } from '../../google/normalize-google-docs-html.js';
+import { normalizeHtmlForCompare, parseHtml, runPass } from '../../testing/html-compare.js';
+import { normalizeWordHtml } from '../normalize-word-html.js';
+import { wrapVariablePlaceholders, wrapVariables } from './variables.js';
 
 const chip = (name: string): string => `<span data-aster-variable="${name}">{{${name}}}</span>`;
 

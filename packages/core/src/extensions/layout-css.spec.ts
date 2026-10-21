@@ -16,8 +16,9 @@ import {
   parseStyleDeclarations,
   readStyleProperty,
   roundLayoutNumber,
+  sanitizeBorderSpace,
   sanitizeBorders,
-} from './layout-css';
+} from './layout-css.js';
 
 describe('layout-css', () => {
   it('formate les points avec au plus deux décimales', () => {
@@ -176,5 +177,69 @@ describe('layout-css', () => {
   it('joint les déclarations avec « ; » et rend null sans déclaration', () => {
     expect(joinDeclarations(['a: 1', 'b: 2'])).toBe('a: 1; b: 2');
     expect(joinDeclarations([])).toBeNull();
+  });
+
+  describe('spacePt (session 4, L41-C)', () => {
+    it('parseSideBorders lit padding-<côté> comme spacePt, seulement avec une bordure sur ce côté', () => {
+      const borders = parseSideBorders(
+        parseStyleDeclarations(
+          'border-top: 1pt solid #000000; border-bottom: 1pt solid #000000; padding-top: 4pt; padding-left: 2pt; padding-bottom: 0pt',
+        ),
+      );
+      expect(borders).toEqual([
+        { side: 'top', style: 'solid', widthPt: 1, color: '#000000', spacePt: 4 },
+        { side: 'bottom', style: 'solid', widthPt: 1, color: '#000000', spacePt: 0 },
+      ]);
+      // Un padding illisible, négatif ou en em n'est pas un spacePt ; le raccourci `padding` non plus.
+      expect(
+        parseSideBorders(
+          parseStyleDeclarations(
+            'border: 1pt solid #000; padding-top: -1pt; padding-right: 1em; padding: 3pt',
+          ),
+        ).map((border) => border.spacePt),
+      ).toEqual([undefined, undefined, undefined, undefined]);
+      expect(
+        parseSideBorders(parseStyleDeclarations('border-left: 1pt solid red; padding-left: 8px')),
+      ).toEqual([{ side: 'left', style: 'solid', widthPt: 1, color: 'red', spacePt: 6 }]);
+    });
+
+    it('borderDeclarations émet padding-<côté> juste après les border-*, dans l’ordre, pour les bordures à spacePt', () => {
+      expect(
+        borderDeclarations([
+          { side: 'left', style: 'solid', widthPt: 1, color: '#000000', spacePt: 2 },
+          { side: 'top', style: 'solid', widthPt: 1, color: '#000000', spacePt: 1 },
+          { side: 'bottom', style: 'dashed', widthPt: 0.5, color: '#ff0000' },
+          { side: 'between', style: 'solid', widthPt: 1, color: '#000000', spacePt: 3 },
+        ]),
+      ).toEqual([
+        'border-top: 1pt solid #000000',
+        'border-bottom: 0.5pt dashed #ff0000',
+        'border-left: 1pt solid #000000',
+        'padding-top: 1pt',
+        'padding-left: 2pt',
+      ]);
+      expect(
+        borderDeclarations([{ side: 'top', style: 'solid', widthPt: 1, color: '#000' }]),
+      ).toEqual(['border-top: 1pt solid #000000']);
+    });
+
+    it('sanitizeBorders garde un spacePt valide, arrondi, et retire le reste', () => {
+      expect(
+        sanitizeBorders([
+          { side: 'top', style: 'solid', widthPt: 1, color: '#000', spacePt: 1.126 },
+          { side: 'right', style: 'solid', widthPt: 1, color: '#000', spacePt: -2 },
+          { side: 'bottom', style: 'solid', widthPt: 1, color: '#000', spacePt: 'x' },
+          { side: 'left', style: 'solid', widthPt: 1, color: '#000', spacePt: 1e307 },
+        ]),
+      ).toEqual([
+        { side: 'top', style: 'solid', widthPt: 1, color: '#000000', spacePt: 1.13 },
+        { side: 'right', style: 'solid', widthPt: 1, color: '#000000' },
+        { side: 'bottom', style: 'solid', widthPt: 1, color: '#000000' },
+        { side: 'left', style: 'solid', widthPt: 1, color: '#000000' },
+      ]);
+      expect(sanitizeBorderSpace(0)).toBe(0);
+      expect(sanitizeBorderSpace(undefined)).toBeNull();
+      expect(sanitizeBorderSpace(Number.POSITIVE_INFINITY)).toBeNull();
+    });
   });
 });

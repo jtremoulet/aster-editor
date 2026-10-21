@@ -1,8 +1,8 @@
 import { setBlockType } from '@tiptap/pm/commands';
 import type { Attrs } from '@tiptap/pm/model';
 import type { Command, EditorState } from '@tiptap/pm/state';
-import type { AsterCommand, AsterEditor } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand, AsterEditor } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 /**
  * Commande ProseMirror `setBlockType` pour un type du schéma, `null` si le schéma ne

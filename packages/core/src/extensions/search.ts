@@ -1,7 +1,7 @@
 import { Extension } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 
 /** Nom de l'extension, clé de `editor.storage`. */
 export const SEARCH_EXTENSION_NAME = 'search';
@@ -54,11 +54,29 @@ declare module '@tiptap/core' {
   }
 }
 
+/**
+ * État du plugin de recherche : les décorations des correspondances et un compteur de
+ * demandes de défilement, incrémenté à chaque navigation (`setSearchQuery`, `nextMatch`,
+ * `previousMatch`, `replaceCurrent`) pour que la vue fasse défiler la correspondance
+ * courante à l'écran une fois le DOM à jour (voir `scrollCurrentIntoView`).
+ */
+export interface SearchPluginState {
+  readonly decorations: DecorationSet;
+  readonly scrollRequests: number;
+}
+
 /** Clé du plugin de décorations. La méta associée demande une resynchronisation depuis le storage. */
-export const searchPluginKey = new PluginKey<DecorationSet>('asterSearch');
+export const searchPluginKey = new PluginKey<SearchPluginState>('asterSearch');
 
 /** Méta posée sur une transaction dont le storage a déjà été mis à jour par une commande. */
 const SYNC_META = 'sync';
+/** Méta des commandes qui sélectionnent une correspondance : resynchronisation **et** défilement. */
+const SCROLL_META = 'sync-scroll';
+
+const EMPTY_PLUGIN_STATE: SearchPluginState = {
+  decorations: DecorationSet.empty,
+  scrollRequests: 0,
+};
 
 /** Échappe une chaîne pour l'utiliser littéralement dans une RegExp. */
 function escapeRegExp(value: string): string {
@@ -127,11 +145,56 @@ function buildDecorations(doc: ProseMirrorNode, storage: SearchStorage): Decorat
   return DecorationSet.create(doc, decorations);
 }
 
-/** Pose la sélection sur la correspondance courante et la fait défiler à l'écran. */
+/**
+ * Pose la sélection sur la correspondance courante et demande son défilement à l'écran.
+ * `tr.scrollIntoView()` ne suffit pas (retour POC n° 5b) : ProseMirror ne fait défiler que
+ * si la sélection du DOM est dans l'éditeur, or pendant une recherche le focus est dans le
+ * champ du panneau, la sélection n'est pas écrite dans le DOM et le défilement est ignoré.
+ * La méta `sync-scroll` fait défiler l'élément de la correspondance courante une fois le
+ * DOM à jour (`scrollCurrentIntoView`), avec ou sans focus, conteneur et fenêtre compris.
+ */
 function selectCurrent(tr: Transaction, storage: SearchStorage): void {
   const current = storage.matches[storage.currentIndex];
   if (!current) return;
   tr.setSelection(TextSelection.create(tr.doc, current.from, current.to)).scrollIntoView();
+  tr.setMeta(searchPluginKey, SCROLL_META);
+}
+
+/**
+ * Vrai si l'élément est entièrement visible : dans la fenêtre et dans chaque ancêtre qui
+ * défile (`overflow-y: auto | scroll` avec un débordement). Un élément sans dimensions
+ * (pas encore rendu, jsdom) compte pour invisible : on fait défiler dans le doute.
+ */
+function isFullyVisible(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return false;
+  if (rect.top < 0 || rect.bottom > window.innerHeight) return false;
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const overflow = getComputedStyle(parent).overflowY;
+    if (
+      (overflow === 'auto' || overflow === 'scroll') &&
+      parent.scrollHeight > parent.clientHeight
+    ) {
+      const box = parent.getBoundingClientRect();
+      if (rect.top < box.top || rect.bottom > box.bottom) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Fait défiler la correspondance courante (élément décoré `aster-search-match--current`)
+ * jusqu'au centre de l'écran quand elle n'est pas entièrement visible, et ne touche à rien
+ * sinon (enchaîner des correspondances visibles ne fait pas sauter la page). Tous les
+ * ancêtres défilants sont concernés (hôte en `overflow: auto` comme fenêtre). Sans effet
+ * quand le DOM ne la rend pas encore ou que l'environnement n'implémente pas
+ * `scrollIntoView` (jsdom).
+ */
+export function scrollCurrentIntoView(view: EditorView): void {
+  const element = view.dom.querySelector<HTMLElement>(`.${SEARCH_CURRENT_CLASS}`);
+  if (!element || typeof element.scrollIntoView !== 'function') return;
+  if (isFullyVisible(element)) return;
+  element.scrollIntoView({ block: 'center', inline: 'nearest' });
 }
 
 /** Cycle l'index courant de `delta` (±1) dans les correspondances. */
@@ -253,26 +316,45 @@ export const Search = Extension.create<Record<string, never>, SearchStorage>({
   addProseMirrorPlugins() {
     const storage = this.storage;
     return [
-      new Plugin<DecorationSet>({
+      new Plugin<SearchPluginState>({
         key: searchPluginKey,
         state: {
-          init: () => DecorationSet.empty,
+          init: () => EMPTY_PLUGIN_STATE,
           apply: (tr, previous) => {
-            if (tr.getMeta(searchPluginKey) === SYNC_META) {
-              return buildDecorations(tr.doc, storage);
+            const meta: unknown = tr.getMeta(searchPluginKey);
+            if (meta === SYNC_META || meta === SCROLL_META) {
+              return {
+                decorations: buildDecorations(tr.doc, storage),
+                scrollRequests: previous.scrollRequests + (meta === SCROLL_META ? 1 : 0),
+              };
             }
             if (!tr.docChanged) return previous;
-            if (storage.query.length === 0) return DecorationSet.empty;
+            if (storage.query.length === 0) {
+              return { decorations: DecorationSet.empty, scrollRequests: previous.scrollRequests };
+            }
             const current = storage.matches[storage.currentIndex];
             const anchor = current ? tr.mapping.map(current.from, -1) : 0;
             storage.matches = findMatches(tr.doc, storage.query, storage.caseSensitive);
             storage.currentIndex = indexFrom(storage.matches, anchor);
-            return buildDecorations(tr.doc, storage);
+            return {
+              decorations: buildDecorations(tr.doc, storage),
+              scrollRequests: previous.scrollRequests,
+            };
           },
         },
         props: {
-          decorations: (state) => searchPluginKey.getState(state) ?? DecorationSet.empty,
+          decorations: (state) =>
+            searchPluginKey.getState(state)?.decorations ?? DecorationSet.empty,
         },
+        // Le DOM est à jour quand les vues de plugin sont prévenues : la correspondance
+        // courante existe alors comme élément et peut défiler, focus ou pas.
+        view: () => ({
+          update: (view, prevState) => {
+            const before = searchPluginKey.getState(prevState)?.scrollRequests ?? 0;
+            const after = searchPluginKey.getState(view.state)?.scrollRequests ?? 0;
+            if (after !== before) scrollCurrentIntoView(view);
+          },
+        }),
       }),
     ];
   },

@@ -1,16 +1,16 @@
-import { cleanInlineStyles } from './passes/clean-inline-styles';
-import { collapseEmptyParagraphs } from './passes/collapse-empty-paragraphs';
-import { normalizeHeadings } from './passes/normalize-headings';
-import { normalizeTables } from './passes/normalize-tables';
-import { normalizeWhitespace } from './passes/normalize-whitespace';
-import { parseListFormats, rebuildLists } from './passes/rebuild-lists';
+import { cleanInlineStyles } from './passes/clean-inline-styles.js';
+import { collapseEmptyParagraphs } from './passes/collapse-empty-paragraphs.js';
+import { normalizeHeadings } from './passes/normalize-headings.js';
+import { normalizeTables } from './passes/normalize-tables.js';
+import { normalizeWhitespace } from './passes/normalize-whitespace.js';
+import { parseListFormats, rebuildLists } from './passes/rebuild-lists.js';
 import {
   stripConditionalComments,
   stripConditionalCommentsText,
-} from './passes/strip-conditional-comments';
-import { stripOfficeNamespaces } from './passes/strip-office-namespaces';
-import { wrapVariables } from './passes/variables';
-import { resolvePasteOptions, type PastePass, type WordPasteOptions } from './types';
+} from './passes/strip-conditional-comments.js';
+import { stripOfficeNamespaces } from './passes/strip-office-namespaces.js';
+import { wrapVariables } from './passes/variables.js';
+import { resolvePasteOptions, type PastePass, type WordPasteOptions } from './types.js';
 
 /**
  * Ordre des passes, celui documenté dans `docs/ARCHITECTURE.md`. `wrapVariables` ferme

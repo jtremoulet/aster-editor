@@ -1,10 +1,16 @@
 import type { BlockBorder } from '@aster-editor/core';
-import { highlightName } from '../../export/css';
-import { paragraphBorderSpace } from '../../export/styles';
-import { childNamed } from '../preprocess/xml-utils';
-import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types';
-import { sameBorders, type ParagraphKey, type RunKey } from './style-strip';
-import { createSibling, ensureChild, insertOrdered, setWordAttr, wordElement } from './xml-io';
+import { highlightName } from '../../export/css.js';
+import { paragraphBorderSpace } from '../../export/styles.js';
+import { childNamed } from '../preprocess/xml-utils.js';
+import type { ResolvedParagraphProps, ResolvedRunProps } from '../reader/types.js';
+import {
+  sameBorders,
+  sameLineHeight,
+  sameSpacing,
+  type ParagraphKey,
+  type RunKey,
+} from './style-strip.js';
+import { createSibling, ensureChild, insertOrdered, setWordAttr, wordElement } from './xml-io.js';
 
 /**
  * Réconciliation du corps greffé avec les styles du gabarit. Le lecteur n'écrit dans le
@@ -127,6 +133,9 @@ function borderAttributes(border: BlockBorder, sides: ReadonlySet<string>): Reco
 /**
  * Propriétés de paragraphe absentes du `w:pPr` dont le style résolu (`base`) diffère des
  * `docDefaults` : réécrites à la valeur des `docDefaults`. Rend le `w:pPr`, créé au besoin.
+ * `defaults` est la base d'émission du lecteur (`paragraphBaseOf`, R53-01) : pour
+ * l'interligne et les espacements avant / après, le `Normal` résolu du document, et les
+ * valeurs y sont comparées telles que Word les rend (absent = interligne simple, 0 pt).
  */
 export function reconcileParagraph(
   paragraph: Element,
@@ -159,16 +168,13 @@ export function reconcileParagraph(
     insertOrdered(container(), wordElement(paragraph, 'jc', { val: value }), PPR_ORDER);
   }
   const spacing: Record<string, string> = {};
-  if (missing('before') && base.spacingBeforePt !== defaults.spacingBeforePt) {
+  if (missing('before') && !sameSpacing(base.spacingBeforePt, defaults.spacingBeforePt)) {
     spacing.before = twips(defaults.spacingBeforePt);
   }
-  if (missing('after') && base.spacingAfterPt !== defaults.spacingAfterPt) {
+  if (missing('after') && !sameSpacing(base.spacingAfterPt, defaults.spacingAfterPt)) {
     spacing.after = twips(defaults.spacingAfterPt);
   }
-  if (
-    missing('line') &&
-    (base.lineHeight !== defaults.lineHeight || base.lineHeightPt !== defaults.lineHeightPt)
-  ) {
+  if (missing('line') && !sameLineHeight(base, defaults)) {
     if (defaults.lineHeightPt !== undefined) {
       spacing.line = twips(defaults.lineHeightPt);
       spacing.lineRule = 'exact';

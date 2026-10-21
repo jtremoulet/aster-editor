@@ -1,4 +1,4 @@
-import type { BlockBorder, BorderSide, BorderStyle } from '../api';
+import type { BlockBorder, BorderSide, BorderStyle } from '../api/index.js';
 
 /**
  * Helpers de sérialisation CSS partagés par les extensions de mise en page (paragraphe,
@@ -207,17 +207,33 @@ export function isBlockBorder(value: unknown): value is BlockBorder {
   );
 }
 
-/** Ne garde que les bordures valides d'une valeur d'attribut, `null` s'il n'en reste aucune. */
+/** Distance texte-bordure valide (`BlockBorder.spacePt`) : nombre de mise en page ≥ 0, arrondi ; sinon `null`. */
+export function sanitizeBorderSpace(value: unknown): number | null {
+  return isLayoutNumber(value) && value >= 0 ? roundLayoutNumber(value) : null;
+}
+
+/**
+ * Ne garde que les bordures valides d'une valeur d'attribut, `null` s'il n'en reste
+ * aucune. `spacePt` (session 4) n'est conservé que s'il est un nombre de mise en page
+ * positif ou nul ; absent ou invalide, la propriété n'est pas posée.
+ */
 export function sanitizeBorders(value: unknown): BlockBorder[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const borders = value.filter(isBlockBorder).map((border) => ({
-    side: border.side,
-    style: border.style,
-    widthPt: roundLayoutNumber(border.widthPt),
-    color: normalizeColor(border.color) ?? '#000000',
-  }));
+  const borders = value.filter(isBlockBorder).map((border): BlockBorder => {
+    const sanitized: { -readonly [K in keyof BlockBorder]: BlockBorder[K] } = {
+      side: border.side,
+      style: border.style,
+      widthPt: roundLayoutNumber(border.widthPt),
+      color: normalizeColor(border.color) ?? '#000000',
+    };
+    const spacePt = sanitizeBorderSpace(border.spacePt);
+    if (spacePt !== null) {
+      sanitized.spacePt = spacePt;
+    }
+    return sanitized;
+  });
   return borders.length > 0 ? borders : null;
 }
 
@@ -280,7 +296,9 @@ export function parseBorderValue(
 /**
  * Lit les bordures d'un élément depuis son `style` : `border` (raccourci, quatre côtés)
  * puis `border-<côté>` qui l'emporte côté par côté. Ordre de sortie : top, right, bottom,
- * left. `null` sans bordure.
+ * left. `null` sans bordure. Un `padding-<côté>: Npt` (session 4) devient le `spacePt`
+ * de la bordure du même côté ; sans bordure sur ce côté, il est ignoré (le raccourci
+ * `padding` n'est pas lu ici : c'est le `paddingPt` des cellules).
  */
 export function parseSideBorders(declarations: Map<string, string>): BlockBorder[] {
   const borders: BlockBorder[] = [];
@@ -289,7 +307,8 @@ export function parseSideBorders(declarations: Map<string, string>): BlockBorder
     const own = declarations.get(`border-${side}`);
     const border = parseBorderValue(side, own ?? shorthand);
     if (border) {
-      borders.push(border);
+      const spacePt = sanitizeBorderSpace(parsePt(declarations.get(`padding-${side}`)));
+      borders.push(spacePt === null ? border : { ...border, spacePt });
     }
   }
   return borders;
@@ -298,7 +317,9 @@ export function parseSideBorders(declarations: Map<string, string>): BlockBorder
 /**
  * Déclarations `border-<côté>` d'une liste de bordures, dans l'ordre top, right, bottom,
  * left ; la dernière bordure d'un même côté l'emporte. `between` est ignoré ici (il n'a
- * pas d'équivalent CSS, le paragraphe le porte en `data-border-between`).
+ * pas d'équivalent CSS, le paragraphe le porte en `data-border-between`). Juste après
+ * les `border-*`, les `padding-<côté>: Npt` des bordures qui portent un `spacePt`, dans
+ * le même ordre (session 4) ; une bordure sans `spacePt` n'émet rien.
  */
 export function borderDeclarations(borders: readonly BlockBorder[]): string[] {
   const bySide = new Map<CssBorderSide, BlockBorder>();
@@ -312,6 +333,12 @@ export function borderDeclarations(borders: readonly BlockBorder[]): string[] {
     const border = bySide.get(side);
     if (border) {
       declarations.push(`border-${side}: ${formatBorderValue(border)}`);
+    }
+  }
+  for (const side of CSS_BORDER_SIDES) {
+    const spacePt = sanitizeBorderSpace(bySide.get(side)?.spacePt);
+    if (spacePt !== null) {
+      declarations.push(`padding-${side}: ${formatPt(spacePt)}`);
     }
   }
   return declarations;

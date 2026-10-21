@@ -1,5 +1,5 @@
 import type { AsterDocument, DocumentLayout, VariableValues } from '@aster-editor/core';
-import type { DocxInput, HtmlParser } from '../docx/types';
+import type { DocxInput, HtmlParser } from '../docx/types.js';
 
 /**
  * Codes stables des avertissements d'export :
@@ -17,8 +17,11 @@ import type { DocxInput, HtmlParser } from '../docx/types';
  *   second appel vers une note déjà référencée (laissé en exposant `[n]`).
  * - `table-span-clamped` : `colspan`/`span` borné à 63 colonnes ou `rowspan` à 65 534
  *   lignes, plafonds de Word.
- * - `page-margins-clamped` : marge de page négative (défaut appliqué) ou somme des marges
- *   qui ne laisse pas 1 cm utile (marges réduites).
+ * - `page-margins-clamped` : valeur de mise en page bornée au plafond de Word : marge de
+ *   page négative (défaut appliqué) ou somme des marges qui ne laisse pas 1 cm utile
+ *   (marges réduites) ; depuis F43, aussi un taquet de tabulation (`data-stop`) au-delà de
+ *   22 pouces (ramené à 31 680 twips) et l'espace texte-trait d'une bordure de paragraphe
+ *   (`padding-<côté>`) au-delà de 31 pt (ramené à 31).
  * - `template-invalid` : `options.template` n'est pas un `.docx` lisible (archive ou
  *   partie principale absente) ; export neuf à la place, jamais d'exception.
  * - `template-numbering-fallback` : une liste portait `data-docx-num-id` mais cette
@@ -190,9 +193,14 @@ export interface DocxExportOptions {
   title?: string;
   /** Auteur inscrit dans les propriétés du document (`dc:creator`), gabarit compris. */
   creator?: string;
-  /** Format de page, `A4` par défaut. `page.size` prime. */
+  /** Format de page, `A4` par défaut. `page.size` prime. Même portée que `page`. */
   pageSize?: DocxPageSize;
-  /** Mise en page : format, orientation, marges. */
+  /**
+   * Mise en page : format, orientation, marges. Portée : **tout le document** (comme en
+   * 0.5). Avec des sections, prime champ par champ sur `layout.page` pour la dernière
+   * section et pour toute section sans `SectionLayout.page` ; une section qui déclare sa
+   * page la garde.
+   */
   page?: DocxPageOptions;
   /** Langue du document (`w:lang`, ex. `fr-FR`), utilisée par le correcteur de Word. */
   lang?: string;
@@ -200,9 +208,14 @@ export interface DocxExportOptions {
   defaultFont?: DocxDefaultFont;
   /** Rendu des variables, `placeholders` par défaut. */
   variables?: DocxExportVariableOptions;
-  /** En-tête de page, texte brut ou options. */
+  /**
+   * En-tête de page, texte brut ou options. Portée : **tout le document** (comme en 0.5).
+   * Avec des sections (`layout.sections`, `<hr data-section-break>`), c'est l'en-tête
+   * `default` de chaque section qui n'en déclare pas dans sa `SectionLayout.headers`, et
+   * celui de la dernière section, où il prime sur `layout.headers.default`.
+   */
   header?: string | DocxHeaderOptions;
-  /** Pied de page, texte brut ou options (numérotation des pages comprise). */
+  /** Pied de page, texte brut ou options (numérotation des pages comprise). Même portée que `header`. */
   footer?: string | DocxFooterOptions;
   /**
    * Table des matières en tête du document, préremplie depuis les titres. Word la met à

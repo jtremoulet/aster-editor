@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
 import {
   clampToViewport,
   createTableContextMenu,
   type TableContextMenu,
-} from './table-context-menu';
-import { TABLE_ACTIONS } from './table-grid-picker';
+} from './table-context-menu.js';
+import { TABLE_ACTIONS } from './table-grid-picker.js';
 
 describe('clampToViewport', () => {
   it('garde la position si le menu tient, sinon le ramène avec 8px de marge, jamais négatif', () => {

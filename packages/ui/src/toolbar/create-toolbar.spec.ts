@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { createToolbar } from './create-toolbar';
-import { FULL_PRESET, MINIMAL_PRESET, STANDARD_PRESET, resolveToolbarConfig } from './presets';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { createToolbar } from './create-toolbar.js';
+import { FULL_PRESET, MINIMAL_PRESET, STANDARD_PRESET, resolveToolbarConfig } from './presets.js';
 
 const BUTTON = '[data-toolbar-item]';
 

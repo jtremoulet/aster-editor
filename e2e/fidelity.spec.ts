@@ -58,7 +58,8 @@ function demoMain(page: Page): Locator {
  * document client.
  */
 test.describe('Fidélité Word — playground', () => {
-  test.skip(() => test.info().project.name !== 'playground', 'playground seulement');
+  // Projets `playground`, `playground-firefox` et `playground-webkit` (session 4, L47).
+  test.skip(() => !test.info().project.name.startsWith('playground'), 'playground seulement');
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -272,7 +273,8 @@ test.describe('Fidélité Word — démo', () => {
     const header = main.locator('.aster-page-header');
     const footer = main.locator('.aster-page-footer');
     await expect(header).toBeVisible();
-    await expect(header).toContainText('en-tête par défaut');
+    // Hôte = section 1, page 1 en `first` (« Première page »), pied = dernière section (L44, L52).
+    await expect(header).toContainText('Première page');
     await expect(footer).toBeVisible();
     await expect(footer).toContainText('pied par défaut');
     await expect(page.locator('.demo-layout-summary')).toContainText('Letter');
@@ -291,12 +293,13 @@ test.describe('Fidélité Word — démo', () => {
     const headerEditor = page
       .locator('.demo-header-footer .demo-field', { hasText: 'En-tête' })
       .locator('.ProseMirror');
-    await expect(headerEditor).toContainText('en-tête par défaut');
+    await expect(headerEditor).toContainText('Première page');
     await headerEditor.click();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' (édité)');
     await expect(headerEditor).toContainText('(édité)');
-    await expect(header).toContainText('en-tête par défaut (édité)');
+    await expect(header).toContainText('Première page');
+    await expect(header).toContainText('(édité)');
     await expect(footer).toContainText('pied par défaut');
 
     // Export dans le gabarit : un .docx non vide.

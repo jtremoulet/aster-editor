@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { bodyHtml, mountEditor, type MountedEditor } from '../testing/mount';
+import { bodyHtml, mountEditor, type MountedEditor } from '../testing/mount.js';
 import {
   HEADING_ID_PREFIX,
   ensureHeadingIds,
   getOutline,
   headingIdNumber,
   scrollToHeading,
-} from './outline';
+} from './outline.js';
 
 describe('headingIdNumber', () => {
   it('lit le numéro d’un id aster-h-<n>, null sinon', () => {

@@ -17,21 +17,52 @@
   box-shadow: 0 0 0 2px var(--aster-accent);
 }
 
-/* ---------- Panneau de recherche ---------------------------------------- */
+/* ---------- Bandeau de recherche ---------------------------------------- */
 
+/*
+ * Le panneau « rechercher / remplacer » est un bandeau dans le flux, entre la toolbar et
+ * le contenu (session 5, L52, retour POC n° 5a) : il **pousse** le document au lieu de le
+ * recouvrir, et reste ouvert quand on clique dans le texte. Posé par `createSearchPanel`
+ * juste avant l'hôte de l'éditeur (`.aster__content`), hors de la feuille.
+ */
 .aster-search-panel {
-  min-width: 340px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--aster-space-2) var(--aster-space-3);
+  padding: var(--aster-space-2) var(--aster-space-3);
+  border-bottom: 1px solid var(--aster-border);
+  background: var(--aster-surface-2);
+  color: var(--aster-text);
+  font-family: var(--aster-font-ui);
+  font-size: var(--aster-font-size-ui);
+}
+
+.aster-search-panel[hidden] {
+  display: none;
 }
 
 .aster-search-panel__row {
   display: flex;
+  flex: 1 1 320px;
   align-items: center;
   gap: var(--aster-space-2);
+  min-width: 0;
 }
 
 .aster-search-panel__row .aster-dialog__input {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 8em;
+}
+
+.aster-search-panel .aster-dialog__check {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.aster-search-panel .aster-dialog__actions {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .aster-search-panel__count {

@@ -63,6 +63,22 @@ export interface DefaultFont {
 }
 
 /**
+ * Défauts de paragraphe du document (`docDefaults` de `styles.xml` puis style `Normal`
+ * résolu), session 5 (retour POC n° 2) : ce que prend tout paragraphe qui ne porte pas sa
+ * propre valeur. Le lecteur n'écrit sur un paragraphe que ce qui diffère de ces défauts ;
+ * la vue page les applique aux blocs sans valeur propre (variables
+ * `--aster-page-default-line-height`, `--aster-page-default-spacing-before`,
+ * `--aster-page-default-spacing-after`) ; l'export neuf les écrit dans `docDefaults`.
+ * Mêmes règles que `ParagraphLayoutAttrs` : `lineHeightPt` l'emporte sur `lineHeight`.
+ */
+export interface DefaultParagraph {
+  readonly lineHeight?: number;
+  readonly lineHeightPt?: number;
+  readonly spacingBeforePt?: number;
+  readonly spacingAfterPt?: number;
+}
+
+/**
  * Mise en page d'un document : ce que l'import `.docx` lit dans la dernière section et
  * ce que l'export réécrit (export neuf) ou conserve (export dans le gabarit). Tous les
  * champs sont optionnels : un objet vide = les défauts d'Aster (A4 portrait, 25,4 mm).
@@ -72,12 +88,65 @@ export interface DocumentLayout {
   /** Nombre de colonnes de texte, 1 par défaut. Conservé, non affiché par la vue page. */
   readonly columns?: number;
   readonly defaultFont?: DefaultFont;
+  readonly defaultParagraph?: DefaultParagraph;
   /** Langue BCP 47 du document, ex. `fr-FR`. */
   readonly lang?: string;
   readonly headers?: HeaderFooterSet;
   readonly footers?: HeaderFooterSet;
   /** Première page différente (en-tête et pied `first`). */
   readonly titlePage?: boolean;
+  /**
+   * Sections du document dans l'ordre (session 4). La dernière est aussi recopiée dans
+   * `page`, `columns`, `headers`, `footers`, `titlePage` (compatibilité 0.5). Absent ou vide
+   * = une seule section. Le corps marque la fin de chaque section sauf la dernière par un
+   * nœud `sectionBreak` (`<hr data-section-break="n">`).
+   */
+  readonly sections?: readonly SectionLayout[];
+}
+
+/** Type de saut qui ouvre une section (`w:type` du `sectPr`). `nextPage` par défaut. */
+export type SectionStart = 'nextPage' | 'continuous' | 'evenPage' | 'oddPage';
+
+/** Mise en page d'une section : ce que Word porte dans un `w:sectPr`. */
+export interface SectionLayout {
+  readonly page?: PageSetup;
+  readonly columns?: number;
+  readonly headers?: HeaderFooterSet;
+  readonly footers?: HeaderFooterSet;
+  readonly titlePage?: boolean;
+  readonly start?: SectionStart;
+}
+
+/**
+ * Saut de section : nœud bloc atomique `<hr data-section-break="n">` où `n` (à partir de 1)
+ * est l'index dans `DocumentLayout.sections` de la section qui **se termine** ici ; la
+ * section `n + 1` commence au bloc suivant. Jamais émis pour la dernière section. La vue
+ * page change de feuille (format, marges, en-têtes) à chaque saut ; l'export écrit un
+ * `w:sectPr` dans le dernier paragraphe de la section, greffé depuis le gabarit quand il
+ * existe. `setHTML(getHTML())` conserve l'attribut.
+ */
+export interface SectionBreakAttrs {
+  readonly section: number;
+}
+
+/** Alignement du texte sur un taquet (`w:tab w:val`) ; `left` est le défaut, non sérialisé. */
+export type TabAlign = 'left' | 'center' | 'right' | 'decimal';
+
+/** Points de suite entre la tabulation et le taquet (`w:leader`) ; absent = aucun. */
+export type TabLeader = 'dot' | 'hyphen' | 'underscore';
+
+/**
+ * Tabulation : nœud inline atomique `<span data-tab=""></span>`, plus, dans cet ordre et
+ * seulement quand ils sont connus : `data-stop="36pt"` (position du taquet),
+ * `data-align="center"` (alignement autre que `left`), `data-leader="dot"` (points de
+ * suite). Rendu comme un espace élastique par la feuille de style ; l'export écrit `w:tab`
+ * et le taquet (`w:tabs`) avec son alignement et ses points de suite. Remplace l'espace
+ * cadratin de la 0.5. Session 4 : `align` et `leader` ajoutés (R43-05).
+ */
+export interface TabAttrs {
+  readonly stopPt?: number | null;
+  readonly align?: TabAlign | null;
+  readonly leader?: TabLeader | null;
 }
 
 /** Côtés d'une bordure de paragraphe ; `between` sépare deux paragraphes bordés consécutifs. */
@@ -92,6 +161,11 @@ export interface BlockBorder {
   readonly widthPt: number;
   /** Couleur CSS (`#rrggbb`). */
   readonly color: string;
+  /**
+   * Distance entre le texte et la bordure, en points (`w:space`). Sérialisée juste après
+   * les `border-*` en `padding-<côté>: Npt` ; absente = défaut de l'export (1 pt).
+   */
+  readonly spacePt?: number;
 }
 
 /**
@@ -177,6 +251,21 @@ export interface ListLayoutAttrs {
   readonly docxNumId?: string | null;
 }
 
+/** Drapeaux `w:tblLook` ; les six noms sont ceux d'ECMA-376 §17.4.56. */
+export const TABLE_LOOK_FLAGS = [
+  'firstRow',
+  'lastRow',
+  'firstColumn',
+  'lastColumn',
+  'noHBand',
+  'noVBand',
+] as const;
+
+export type TableLookFlag = (typeof TABLE_LOOK_FLAGS)[number];
+
+/** Jeu de drapeaux `w:tblLook` : un drapeau absent vaut faux. */
+export type TableLook = Readonly<Partial<Record<TableLookFlag, boolean>>>;
+
 /** Alignement vertical du contenu d'une cellule. */
 export type CellVerticalAlign = 'top' | 'middle' | 'bottom';
 
@@ -190,6 +279,18 @@ export interface TableLayoutAttrs {
   readonly width?: string | null;
   readonly borders?: readonly BlockBorder[] | null;
   readonly docxStyle?: string | null;
+  /** Alignement horizontal du tableau (`w:jc`), sérialisé en `data-align`. */
+  readonly align?: 'left' | 'center' | 'right' | null;
+  /**
+   * Drapeaux `w:tblLook` du style de tableau conditionnel (session 4, vague 3) : quels
+   * formats conditionnels le document active. Sérialisé en `data-docx-look` avec les
+   * drapeaux à vrai, dans l'ordre de `TABLE_LOOK_FLAGS`, séparés par un espace
+   * (`data-docx-look="firstRow firstColumn noVBand"`) ; absent = pas de `w:tblLook`
+   * (le lecteur applique alors le défaut de Word, `0x04A0`, mais ne sérialise rien).
+   * Le writer dans le gabarit réécrit `w:tblLook` depuis ce jeu de drapeaux et retire
+   * les propriétés directes posées par le lecteur pour refléter le style conditionnel.
+   */
+  readonly look?: TableLook | null;
 }
 
 export interface CellLayoutAttrs {

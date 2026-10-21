@@ -1,10 +1,10 @@
 import type { AsterEditor, StandardCommandArgs } from '@aster-editor/core';
 import { IMAGE_ALIGNMENTS, IMAGE_EDIT_EVENT } from '@aster-editor/core';
 import type { ReferenceElement } from '@floating-ui/dom';
-import { el } from '../utils/dom';
-import { isRecord, readNumberOrString, readString } from '../utils/guards';
-import { createBubble, selectionReference, type Bubble } from './bubble';
-import { createPlainButton, setDisabled } from './button';
+import { el } from '../utils/dom.js';
+import { isRecord, readNumberOrString, readString } from '../utils/guards.js';
+import { createBubble, selectionReference, type Bubble } from './bubble.js';
+import { createPlainButton, setDisabled } from './button.js';
 
 /** Alignement d'image, tel que le contrat `image.setAttributes` l'attend. */
 type ImageAlign = NonNullable<StandardCommandArgs['image.setAttributes']['align']>;

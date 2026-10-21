@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseXml } from '../reader/test-support';
-import { compareParts, stripRevisionIds } from './parts';
+import { parseXml } from '../reader/test-support.js';
+import { compareParts, stripRevisionIds } from './parts.js';
 
 const encoder = new TextEncoder();
 

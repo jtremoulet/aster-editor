@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeScore, GROUP_WEIGHTS, Tally } from './tally';
-import type { FidelityProperty } from './types';
+import { computeScore, GROUP_WEIGHTS, Tally } from './tally.js';
+import type { FidelityProperty } from './types.js';
 
 function prop(
   group: FidelityProperty['group'],

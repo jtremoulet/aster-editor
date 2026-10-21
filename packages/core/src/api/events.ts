@@ -1,6 +1,7 @@
-import type { AsterEditor } from './editor';
-import type { AsterLocale } from './i18n';
-import type { VariableValues } from './variables';
+import type { AsterEditor } from './editor.js';
+import type { AsterLocale } from './i18n.js';
+import type { DocumentLayout } from './layout.js';
+import type { VariableValues } from './variables.js';
 
 /**
  * Événements émis par un `AsterEditor`. Les handlers reçoivent toujours l'éditeur
@@ -23,6 +24,20 @@ export interface AsterEvents {
   /** Les valeurs ou les déclarations de variables ont changé (`VariableStore.setValues` / `define`). */
   variablesChange: (payload: { editor: AsterEditor; values: VariableValues }) => void;
   localeChange: (payload: { editor: AsterEditor; locale: AsterLocale }) => void;
+  /**
+   * La vue page a été activée, remplacée ou retirée par `setPageView` (session 4, L45b).
+   * `layout` est la mise en page en vigueur (`getLayout()`), `null` quand la vue est retirée.
+   * Émis **après** la mise à jour de l'état, donc `getLayout()` répond déjà la nouvelle
+   * mise en page dans le handler ; l'événement DOM `aster:page-view-change` sur
+   * `contentElement` reste émis (plugins du core, intégrateurs vanilla), mais lui part
+   * pendant le montage et le retrait. Non émis quand l'appel ne change rien (`false` sans
+   * vue active) ni quand une mise en page hostile a laissé la vue précédente en place.
+   */
+  pageViewChange: (payload: {
+    editor: AsterEditor;
+    active: boolean;
+    layout: DocumentLayout | null;
+  }) => void;
   /**
    * Une image est en cours d'upload via le hook `upload`. Permet à l'UI d'afficher
    * un état d'attente. `done` est émis après succès ou échec.

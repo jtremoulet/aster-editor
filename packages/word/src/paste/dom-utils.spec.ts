@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseHtml } from '../testing/html-compare';
+import { parseHtml } from '../testing/html-compare.js';
 import {
   collectTextNodes,
   getStyleProperty,
@@ -10,7 +10,7 @@ import {
   serializeStyle,
   unwrap,
   wrapChildren,
-} from './dom-utils';
+} from './dom-utils.js';
 
 describe('parseStyle / serializeStyle', () => {
   it('découpe les déclarations, ignore les morceaux invalides et normalise les noms', () => {

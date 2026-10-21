@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildDocx, run } from '../preprocess/minimal-docx';
-import { createNumberingResolver } from '../reader/lists';
-import { defaultXmlParse, openPackage } from '../reader/package';
-import { createStyleResolver } from '../reader/styles';
-import { stylesXml } from '../reader/test-support';
+import { buildDocx, run } from '../preprocess/minimal-docx.js';
+import { createNumberingResolver } from '../reader/lists.js';
+import { defaultXmlParse, openPackage } from '../reader/package.js';
+import { createStyleResolver } from '../reader/styles.js';
+import { stylesXml } from '../reader/test-support.js';
 import {
   readDocumentModel,
   type DocumentModel,
   type ParagraphModel,
   type TableModel,
-} from './model';
-import { placeholderFields } from './model-paragraph';
+} from './model.js';
+import { placeholderFields } from './model-paragraph.js';
 
 /** Modèle comparable d'un corps `document.xml` (fragments XML Word), styles facultatifs. */
 async function modelOf(body: string, styles?: string): Promise<DocumentModel> {
@@ -276,6 +276,59 @@ describe('model — bordures et largeurs effectives', () => {
     expect(tbl.rows[1]?.map((c) => c.widthPt)).toEqual([360]);
     expect(tbl.rows[2]?.map((c) => c.widthPt)).toEqual([undefined, 240]);
     expect(tbl.columnWidthsPt).toEqual([120, 240]);
+  });
+});
+
+describe('model — styles conditionnels de tableau résolus comme le lecteur (L46)', () => {
+  const styles = stylesXml(
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+      '<w:style w:type="table" w:styleId="Cond"><w:name w:val="Cond"/>' +
+      '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/></w:tcPr></w:tblStylePr>' +
+      '<w:tblStylePr w:type="band1Horz"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/></w:tcPr></w:tblStylePr>' +
+      '</w:style>',
+  );
+  const rows = ['A', 'B', 'C', 'D']
+    .map((text) => `<w:tr><w:tc><w:p>${run(text)}</w:p></w:tc></w:tr>`)
+    .join('');
+  const tbl = (tblPr: string): string =>
+    `<w:tbl><w:tblPr><w:tblStyle w:val="Cond"/>${tblPr}</w:tblPr>${rows}</w:tbl>`;
+
+  it('w:tblLook firstRow + bandes : fond et gras de la première ligne, fond des bandes impaires', async () => {
+    const look =
+      '<w:tblLook w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>';
+    const model = table(await modelOf(tbl(look), styles));
+    expect(model.conditional).toBe('firstRow,noVBand');
+    expect(model.rows.map((row) => row[0]?.shading)).toEqual([
+      '#d9e2f3',
+      '#f2f2f2',
+      undefined,
+      '#f2f2f2',
+    ]);
+    const bold = (index: number): boolean | undefined =>
+      model.rows[index]?.[0]?.blocks[0]?.kind === 'paragraph'
+        ? (model.rows[index]?.[0]?.blocks[0] as ParagraphModel).runs[0]?.props.bold
+        : undefined;
+    expect(bold(0)).toBe(true);
+    expect(bold(1)).toBeUndefined();
+  });
+
+  it('sans w:tblLook, le défaut de Word (0x04A0) s’applique ; noHBand éteint les bandes', async () => {
+    const byDefault = table(await modelOf(tbl(''), styles));
+    expect(byDefault.conditional).toBe('firstRow,firstColumn,noVBand');
+    expect(byDefault.rows[1]?.[0]?.shading).toBe('#f2f2f2');
+    const noBands = table(await modelOf(tbl('<w:tblLook w:val="0x0620"/>'), styles));
+    expect(noBands.conditional).toBe('firstRow,noHBand,noVBand');
+    expect(noBands.rows[0]?.[0]?.shading).toBe('#d9e2f3');
+    expect(noBands.rows[1]?.[0]?.shading).toBeUndefined();
+  });
+
+  it('un style sans format conditionnel ne pose pas `conditional`, même avec un w:tblLook', async () => {
+    const plain = stylesXml(
+      '<w:style w:type="table" w:styleId="Cond"><w:name w:val="Cond"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4"/></w:tblBorders></w:tblPr></w:style>',
+    );
+    const model = table(await modelOf(tbl('<w:tblLook w:firstRow="1"/>'), plain));
+    expect(model.conditional).toBeUndefined();
+    expect(model.rows[0]?.[0]?.shading).toBeUndefined();
   });
 });
 

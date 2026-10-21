@@ -1,10 +1,10 @@
 import JSZip from 'jszip';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { importDocx } from '../import-docx';
-import type { DocxImportResult } from '../types';
-import { exportDocx } from '../../export/export-docx';
-import type { DocxExportOptions, DocxExportWarning } from '../../export/types';
+import { importDocx } from '../import-docx.js';
+import type { DocxImportResult } from '../types.js';
+import { exportDocx } from '../../export/export-docx.js';
+import type { DocxExportOptions, DocxExportWarning } from '../../export/types.js';
 
 /**
  * Harnais des specs de la greffe : fixtures, archives décomposées en parties, exports

@@ -1,20 +1,20 @@
-import { importDocx } from '../import-docx';
-import { createNumberingResolver } from '../reader/lists';
-import { defaultXmlParse, openPackage, relsPathOf } from '../reader/package';
-import { createStyleResolver } from '../reader/styles';
-import type { DocxPackage, NumberingResolver, StyleResolver } from '../reader/types';
-import type { DocxInput, DocxLostObject } from '../types';
+import { importDocx, invalidDocx } from '../import-docx.js';
+import { createNumberingResolver } from '../reader/lists.js';
+import { defaultXmlParse, openPackage, relsPathOf } from '../reader/package.js';
+import { createStyleResolver } from '../reader/styles.js';
+import type { DocxPackage, NumberingResolver, StyleResolver } from '../reader/types.js';
+import type { DocxInput, DocxLostObject } from '../types.js';
 import {
   compareBlocks,
   headerFooterSummary,
   sameFields,
   type CompareContext,
-} from './compare-blocks';
-import { readDocumentModel, type DocumentModel, type HeaderFooterType } from './model';
-import { compareParts, listParts } from './parts';
-import { computeScore, Tally } from './tally';
-import type { CompareDocx, CompareDocxOptions, FidelityReport } from './types';
-import { ABSENT, fmt } from './values';
+} from './compare-blocks.js';
+import { readDocumentModel, type DocumentModel, type HeaderFooterType } from './model.js';
+import { compareParts, listParts } from './parts.js';
+import { computeScore, Tally } from './tally.js';
+import type { CompareDocx, CompareDocxOptions, FidelityReport } from './types.js';
+import { ABSENT, fmt } from './values.js';
 
 /**
  * `compareDocx(original, result, options)` : ouvre les deux paquets, compare les parties
@@ -28,11 +28,11 @@ const HEADER_FOOTER_TYPES: readonly HeaderFooterType[] = ['default', 'first', 'e
 
 const NOTES: readonly string[] = [
   'Une propriété est comptée quand au moins un des deux documents la pose ; une valeur ajoutée par le résultat compte comme perdue, une valeur absente des deux côtés ne compte pas. Les défauts de Word (alignement à gauche, espacement ou retrait nul, interligne simple, orientation portrait, une seule colonne) valent « absent ».',
-  'Les propriétés de paragraphe et de run sont résolues (docDefaults, thème, styles) dans chacun des deux documents, sans le style de tableau : les styles conditionnels de tableau (première ligne, bandes) ne sont pas comparés.',
+  'Les propriétés de paragraphe et de run sont résolues (docDefaults, thème, styles) dans chacun des deux documents ; dans une cellule, le style de tableau et ses formats conditionnels (`w:tblStylePr` activés par `w:tblLook`, défaut de Word `0x04A0` sans l’élément) sont fondus dans le fond, les bordures et les défauts de run de la cellule, comme le lecteur : un format conditionnel vaut la même mise en forme posée directement (tolérance L46). `table.conditional` compare les drapeaux `w:tblLook` effectifs des seuls tableaux dont le style définit des formats conditionnels ; `table.align` compare `w:jc`.',
   'Images : nombre et dimensions (±1 px) seulement ; habillage, position des images ancrées et octets des médias (couverts par les parties du paquet) ne sont pas comparés.',
   'Tableaux : bordures effectives telles que Word les rend (style de tableau, puis `w:tblBorders` selon la position de la cellule dans la grille, puis `w:tcBorders`, `nil` efface) ; côté tableau seules les bordures extérieures sont comparées. Largeur de cellule effective (`w:tcW`, sinon les colonnes de grille couvertes) ; largeurs de colonnes et de cellules à ±0,5 pt.',
   'Saut de page explicite (`w:br w:type="page"`) : frontière de bloc, pas un caractère ; le paragraphe qui le précède porte `paragraph.pageBreakAfter`, un paragraphe réduit au saut se replie sur le précédent.',
-  'Champs de fusion (`MERGEFIELD` simple ou complexe) : modélisés par leur nom brut et leur résultat ; le texte du paragraphe inclut le résultat affiché par Word, `field.mergeField` compare la liste ordonnée des noms bruts (`"Nom Client"`, `nom_client` et `"NOM CLIENT"` sont trois champs distincts), et un `{{nom}}` en clair vaut un champ dont le nom normalisé est le même. Autres champs (page, date…) : seul le texte de résultat est comparé. Tabulations comparées comme caractère, taquets ignorés.',
+  'Champs de fusion (`MERGEFIELD` simple ou complexe) : modélisés par leur nom brut et leur résultat ; le texte du paragraphe inclut le résultat affiché par Word, `field.mergeField` compare la liste ordonnée des noms bruts (`"Nom Client"`, `nom_client` et `"NOM CLIENT"` sont trois champs distincts), et un `{{nom}}` en clair vaut un champ dont le nom normalisé est le même. Autres champs (page, date…) : seul le texte de résultat est comparé. Tabulations comparées comme caractère ; les taquets d’un paragraphe tabulé le sont par position et alignement (`paragraph.tabs`, session 4), points de suite ignorés.',
   'Révisions : le texte inséré est lu, le texte supprimé ignoré ; commentaires, signets, `w:proofErr` et `w:lastRenderedPageBreak` ne sont jamais comparés.',
 ];
 
@@ -61,20 +61,10 @@ interface OpenedDocument {
 }
 
 /**
- * Erreur typée pour les entrées illisibles, même nom et même préfixe de message que
- * l'import (`DocxImportError`, `invalid-docx: …`, non exportés par `import-docx.ts`) : un
- * intégrateur distingue un document hostile d'un bug du comparateur (R30-12).
- */
-function invalidDocx(label: string, detail: string): Error {
-  const error = new Error(`invalid-docx: ${label} : ${detail}`);
-  error.name = 'DocxImportError';
-  return error;
-}
-
-/**
  * Ouvre un paquet et lit son modèle. Un zip sans partie principale, des octets qui ne sont
- * pas un zip ou un XML illisible rejettent en `DocxImportError`, jamais une erreur JSZip
- * ou `Error` nue.
+ * pas un zip ou un XML illisible rejettent en `DocxImportError` (`invalid-docx: <label> :
+ * <détail>`, l'erreur de l'import), jamais une erreur JSZip ou `Error` nue : un intégrateur
+ * distingue un document hostile d'un bug du comparateur (R30-12).
  */
 async function open(buffer: ArrayBuffer, label: string): Promise<OpenedDocument> {
   try {
@@ -86,7 +76,7 @@ async function open(buffer: ArrayBuffer, label: string): Promise<OpenedDocument>
     const model = await readDocumentModel(pkg, styles, numbering);
     return { buffer, pkg, styles, numbering, model };
   } catch (error: unknown) {
-    throw invalidDocx(label, error instanceof Error ? error.message : String(error));
+    throw invalidDocx(`${label} : ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -94,6 +84,16 @@ function compareSections(a: DocumentModel, b: DocumentModel, ctx: CompareContext
   const { tally } = ctx;
   if (a.lang !== undefined || b.lang !== undefined) {
     tally.record('section', 'section.lang', 'document', fmt(a.lang), fmt(b.lang));
+  }
+  // Défauts de paragraphe (session 5) : une propriété du document, rangée avec la section.
+  if (a.defaultParagraph !== undefined || b.defaultParagraph !== undefined) {
+    tally.record(
+      'section',
+      'section.defaultParagraph',
+      'document',
+      fmt(a.defaultParagraph),
+      fmt(b.defaultParagraph),
+    );
   }
   tally.record(
     'section',

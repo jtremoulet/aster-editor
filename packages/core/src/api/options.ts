@@ -1,10 +1,10 @@
 import type { AnyExtension } from '@tiptap/core';
-import type { AsterCommand } from './commands';
-import type { AsterDocument } from './document';
-import type { AsterLocale } from './i18n';
-import type { PageViewOptions } from './layout';
-import type { PasteTransformer } from './paste';
-import type { VariableSource } from './variables';
+import type { AsterCommand } from './commands.js';
+import type { AsterDocument } from './document.js';
+import type { AsterLocale } from './i18n.js';
+import type { PageViewOptions } from './layout.js';
+import type { PasteTransformer } from './paste.js';
+import type { VariableSource } from './variables.js';
 
 /** Politique de sécurité et de comportement des liens. */
 export interface LinkPolicy {
@@ -52,6 +52,14 @@ export interface AsterOptions {
    * affichés en lecture seule. `true` = A4 portrait par défaut. Pagination approximative, désactivable par `pagination: false`.
    */
   pageView?: boolean | PageViewOptions;
+  /**
+   * Touche Tab dans un paragraphe ou un titre (session 4). `'focus'` (défaut) : la touche
+   * n'est pas consommée, le focus quitte l'éditeur comme dans n'importe quel champ de
+   * formulaire (pas de piège clavier, WCAG 2.1.2 ; comportement de la 0.5). `'insert'` :
+   * insère un nœud `tab` (édition type Word). Dans les listes et les cellules, Tab garde
+   * toujours l'indentation et la navigation ; `text.insertTab` fonctionne dans les deux modes.
+   */
+  tabKey?: 'focus' | 'insert';
   /**
    * Désactive des commandes standard par identifiant. Utile pour une toolbar réduite
    * qui veut aussi bloquer le raccourci clavier correspondant.

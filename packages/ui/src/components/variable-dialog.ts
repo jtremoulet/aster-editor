@@ -5,12 +5,12 @@ import type {
   Unsubscribe,
   VariableEditEventDetail,
 } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { clear, el } from '../utils/dom';
-import { isRecord } from '../utils/guards';
-import { createPlainButton, setDisabled } from './button';
-import { clampToViewport } from './table-context-menu';
-import { placeholderText } from './variable-menu';
+import type { ToolbarWidget } from '../types.js';
+import { clear, el } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
+import { createPlainButton, setDisabled } from './button.js';
+import { clampToViewport } from './table-context-menu.js';
+import { placeholderText } from './variable-menu.js';
 
 // Réexportés pour les intégrateurs de `ui` : la source de vérité est le core.
 export { VARIABLE_EDIT_EVENT } from '@aster-editor/core';

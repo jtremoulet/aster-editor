@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../testing/dom';
-import { stripEmptyParagraphs } from './strip-empty-paragraphs';
+import { runPass } from '../testing/dom.js';
+import { stripEmptyParagraphs } from './strip-empty-paragraphs.js';
 
 describe('stripEmptyParagraphs', () => {
   it('supprime les paragraphes vides, blancs ou en espaces insécables', () => {

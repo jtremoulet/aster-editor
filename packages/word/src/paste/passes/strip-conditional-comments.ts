@@ -1,4 +1,4 @@
-import type { PastePass } from '../types';
+import type { PastePass } from '../types.js';
 
 /** Commentaires conditionnels standards : `<!--[if gte mso 9]>…<![endif]-->`. */
 const DOWNLEVEL_HIDDEN = /<!--\[if[^\]]*\]>[\s\S]*?<!\[endif\]-->/gi;

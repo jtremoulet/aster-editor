@@ -1,7 +1,10 @@
-import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { toVariableName } from '../preprocess/names';
-import type { ResolvedRunProps } from '../reader/types';
-import { emuToPx } from '../reader/units';
+import { parseMergeField, type MergeField } from '../preprocess/fields.js';
+import { toVariableName } from '../preprocess/names.js';
+import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { applyTableStyle } from '../reader/paragraphs.js';
+import { docDefaultsOf } from '../reader/styles.js';
+import type { ResolvedRunProps } from '../reader/types.js';
+import { emuToPx } from '../reader/units.js';
 import type {
   FieldModel,
   ImageModel,
@@ -9,7 +12,7 @@ import type {
   NoteModel,
   ParagraphModel,
   RunModel,
-} from './model';
+} from './model.js';
 
 /**
  * Lecture d'un `w:p` en paragraphes comparables. Trois choix de modélisation, décidés en
@@ -24,7 +27,11 @@ import type {
  *   **brut** de l'instruction est conservé dans `fields` (R30-04) : deux vrais champs ne
  *   sont égaux que par leur nom brut, la normalisation ne vaut que face à un `{{}}` en clair ;
  * - les runs voisins de mêmes propriétés résolues sont fusionnés ; le run `{{nom}}` d'un
- *   champ prend les propriétés du premier run de son résultat et fusionne comme les autres.
+ *   champ prend les propriétés du premier run de son résultat et fusionne comme les autres ;
+ * - dans une cellule, le style de tableau vu par la cellule (formats conditionnels compris,
+ *   `ctx.tableStyle`) s'intercale entre `docDefaults` et le style de paragraphe, avec la
+ *   règle du lecteur (`reader/paragraphs.ts`, L46) : un gras de première ligne venu du
+ *   style vaut le même gras posé directement sur le run.
  */
 
 /** Champ complexe ouvert : instruction accumulée, phase résultat atteinte, champ de fusion capturé. */
@@ -34,11 +41,8 @@ interface OpenField {
   capturing: boolean;
 }
 
-/** Nom brut et nom normalisé d'une instruction `MERGEFIELD`. */
-interface MergeFieldName {
-  readonly raw: string;
-  readonly name: string;
-}
+/** Nom brut et nom normalisé d'une instruction `MERGEFIELD` (`preprocess/fields.ts`). */
+type MergeFieldName = MergeField;
 
 /** Capture en cours du résultat d'un champ de fusion : bornes dans le segment courant. */
 interface MergeCapture {
@@ -68,21 +72,6 @@ interface Segment {
 
 /** `{{nom}}`, blancs intérieurs tolérés, pour lister les champs du texte canonique. */
 const PLACEHOLDER = /\{\{\s*([^{}]*?)\s*\}\}/g;
-
-/**
- * Instruction `MERGEFIELD nom` ou `MERGEFIELD "nom composé"`, options (`\* MERGEFORMAT`)
- * ignorées : même lecture que `preprocess/fields.ts` (`parseMergeField`, non exporté).
- */
-const MERGEFIELD_INSTR = /^\s*MERGEFIELD\s+(?:"([^"]*)"|(\S+))/iu;
-
-/** Nom brut et normalisé d'une instruction `MERGEFIELD`, `null` pour toute autre instruction. */
-function parseMergeField(instruction: string): MergeFieldName | null {
-  const match = MERGEFIELD_INSTR.exec(instruction);
-  if (!match) return null;
-  const raw = (match[1] ?? match[2] ?? '').trim();
-  const name = toVariableName(raw);
-  return name === null ? null : { raw, name };
-}
 
 function newSegment(): Segment {
   return {
@@ -155,7 +144,11 @@ function isEmpty(segment: Segment): boolean {
  */
 export function readParagraphs(p: Element, ctx: ModelContext): ParagraphModel[] {
   const pPr = childNamed(p, 'pPr');
-  const props = ctx.styles.paragraph(pPr);
+  const props = applyTableStyle(
+    ctx.styles.paragraph(pPr),
+    ctx.tableStyle ?? null,
+    docDefaultsOf(ctx.styles),
+  );
   const segments: Segment[] = [];
   let current = newSegment();
   const openFields: OpenField[] = [];

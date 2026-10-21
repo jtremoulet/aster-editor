@@ -6,7 +6,7 @@ import type {
   VariableSource,
   VariableStore,
   VariableValues,
-} from '../api';
+} from '../api/index.js';
 
 /** Nom du nœud ProseMirror des variables, fourni par l'extension `Variable` du core. */
 export const VARIABLE_NODE_NAME = 'variable';

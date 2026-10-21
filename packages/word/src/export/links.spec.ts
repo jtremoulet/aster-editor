@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { exportDocx } from './export-docx';
-import { encodeHref } from './inline';
-import { toZipEntries } from './testing/sample';
+import { exportDocx } from './export-docx.js';
+import { encodeHref } from './inline.js';
+import { toZipEntries } from './testing/sample.js';
 
 describe('encodeHref (M-4)', () => {
   it('encode espace, barre verticale et non-ASCII sans toucher aux délimiteurs d’URL', () => {

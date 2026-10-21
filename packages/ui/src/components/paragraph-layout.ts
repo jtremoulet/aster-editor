@@ -3,8 +3,8 @@ import type {
   ParagraphLayoutAttrName,
   ParagraphLayoutAttrs,
 } from '@aster-editor/core';
-import { el } from '../utils/dom';
-import { isRecord } from '../utils/guards';
+import { el } from '../utils/dom.js';
+import { isRecord } from '../utils/guards.js';
 
 /**
  * Briques partagées par les widgets de mise en page de paragraphe (interligne,

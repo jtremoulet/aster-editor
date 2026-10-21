@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../testing/dom';
-import { unwrapCellParagraphs } from './unwrap-cell-paragraphs';
+import { runPass } from '../testing/dom.js';
+import { unwrapCellParagraphs } from './unwrap-cell-paragraphs.js';
 
 describe('unwrapCellParagraphs', () => {
   it('garde tel quel le paragraphe unique d’une cellule', () => {

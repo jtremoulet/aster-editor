@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AsterEditor } from '@aster-editor/core';
 import { VARIABLE_EDIT_EVENT as CORE_EVENT, createEditor } from '@aster-editor/core';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { VARIABLE_EDIT_EVENT, createVariableDialog, type VariableDialog } from './variable-dialog';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import {
+  VARIABLE_EDIT_EVENT,
+  createVariableDialog,
+  type VariableDialog,
+} from './variable-dialog.js';
 
 describe('createVariableDialog', () => {
   let editor: MockEditor;

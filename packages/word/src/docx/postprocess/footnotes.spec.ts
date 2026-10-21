@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../testing/dom';
-import { footnotes } from './footnotes';
+import { runPass } from '../testing/dom.js';
+import { footnotes } from './footnotes.js';
 
 /** Sortie typique de mammoth pour un appel de note et sa liste finale. */
 const MAMMOTH_NOTE =

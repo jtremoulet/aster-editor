@@ -4,11 +4,14 @@ import type {
   PageOrientation,
   PageSetup,
   PageSizeName,
+  SectionLayout,
+  SectionStart,
 } from '@aster-editor/core';
-import type { DocxImportWarning } from '../types';
-import { childNamed, wordAttribute } from '../preprocess/xml-utils';
-import type { DocxPackage, StyleResolver } from './types';
-import { numericAttribute, twipsToMm } from './units-blocks';
+import type { DocxImportWarning } from '../types.js';
+import { childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import type { DocxPackage, StyleResolver } from './types.js';
+import { defaultParagraphOf } from './styles.js';
+import { numericAttribute, twipsToMm } from './units.js';
 
 /**
  * Mise en page d'une section (`w:sectPr`) vers le `DocumentLayout` du contrat : format
@@ -123,11 +126,57 @@ function readPage(sectPr: Element, warn: (message: string) => void): PageSetup |
   return Object.keys(page).length > 0 ? page : undefined;
 }
 
+const SECTION_STARTS: ReadonlySet<string> = new Set([
+  'nextPage',
+  'continuous',
+  'evenPage',
+  'oddPage',
+]);
+
+/** Type de saut qui ouvre la section (`w:type w:val`), `undefined` si absent ou inconnu (`nextColumn`). */
+export function readSectionStart(sectPr: Element): SectionStart | undefined {
+  const type = childNamed(sectPr, 'type');
+  const value = type ? wordAttribute(type, 'val') : '';
+  return SECTION_STARTS.has(value) ? (value as SectionStart) : undefined;
+}
+
+/** Propriétés propres d'une section (sans en-têtes ni pieds), telles que `SectionLayout` les porte. */
+export type SectionProperties = Pick<SectionLayout, 'page' | 'columns' | 'start'>;
+
+/**
+ * Lit un `w:sectPr` : `page` (format, orientation, marges), `columns` (`w:cols w:num` de 2 à
+ * 45) et `start` (`w:type`). Les valeurs hors bornes sont ignorées et signalées dans
+ * `warnings` quand il est fourni. Commun à la mise en page de premier niveau
+ * (`readSectionLayout`) et à chaque entrée de `layout.sections` (session 4).
+ */
+export function readSectionProperties(
+  sectPr: Element,
+  warnings?: DocxImportWarning[],
+): SectionProperties {
+  const section: { -readonly [K in keyof SectionProperties]: SectionProperties[K] } = {};
+  const warn = (message: string): void => {
+    warnings?.push({ code: 'reader', message });
+  };
+  const page = readPage(sectPr, warn);
+  if (page) section.page = page;
+  const columns = numericAttribute(childNamed(sectPr, 'cols'), 'num');
+  if (columns !== undefined && columns > MAX_COLUMNS) {
+    warn(`${String(columns)} colonnes, plus que les ${String(MAX_COLUMNS)} de Word : ignoré.`);
+  } else if (columns !== undefined && columns >= 2) {
+    section.columns = Math.floor(columns);
+  }
+  const start = readSectionStart(sectPr);
+  if (start) section.start = start;
+  return section;
+}
+
 /**
  * Lit la mise en page de la section : `page` (format, orientation, marges), `columns`
- * (`w:cols w:num` de 2 à 45), `defaultFont` (résolveur de styles) et `lang` quand l'appelant
- * la fournit (voir `readDocumentLang`). `sectPr` absent → seule la police par défaut. Les
- * valeurs hors bornes sont ignorées et signalées dans `warnings` quand il est fourni.
+ * (`w:cols w:num` de 2 à 45), `defaultFont` et `defaultParagraph` (résolveur de styles :
+ * `docDefaults` puis style `Normal`, session 5) et `lang` quand l'appelant la fournit (voir
+ * `readDocumentLang`). `sectPr` absent → seuls les défauts de police et de paragraphe. Les
+ * valeurs hors bornes sont ignorées et signalées dans `warnings` quand il est fourni. Le
+ * type de saut (`start`) reste dans `layout.sections`, pas au premier niveau.
  */
 export function readSectionLayout(
   sectPr: Element | null,
@@ -136,21 +185,15 @@ export function readSectionLayout(
   warnings?: DocxImportWarning[],
 ): DocumentLayout {
   const layout: { -readonly [K in keyof DocumentLayout]: DocumentLayout[K] } = {};
-  const warn = (message: string): void => {
-    warnings?.push({ code: 'reader', message });
-  };
   if (sectPr) {
-    const page = readPage(sectPr, warn);
+    const { page, columns } = readSectionProperties(sectPr, warnings);
     if (page) layout.page = page;
-    const columns = numericAttribute(childNamed(sectPr, 'cols'), 'num');
-    if (columns !== undefined && columns > MAX_COLUMNS) {
-      warn(`${String(columns)} colonnes, plus que les ${String(MAX_COLUMNS)} de Word : ignoré.`);
-    } else if (columns !== undefined && columns >= 2) {
-      layout.columns = Math.floor(columns);
-    }
+    if (columns !== undefined) layout.columns = columns;
   }
   const font = styles.defaultFont();
   if (font.family || font.sizePt) layout.defaultFont = font;
+  const paragraph = defaultParagraphOf(styles);
+  if (Object.keys(paragraph).length > 0) layout.defaultParagraph = paragraph;
   if (lang) layout.lang = lang;
   return layout;
 }

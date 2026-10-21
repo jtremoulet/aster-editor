@@ -1,8 +1,17 @@
 import type { BlockBorder, BorderSide, CellVerticalAlign } from '@aster-editor/core';
-import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils';
-import { escapeAttr, pt, styleAttr } from './html';
-import { deriveContext } from './index';
-import type { ConverterContext, TableBlock, TableStyleProps } from './types';
+import { childNamed, childrenNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { escapeAttr, pt, styleAttr } from './html.js';
+import { deriveContext } from './index.js';
+import { conditionalFormatsOf } from './styles.js';
+import {
+  applyConditionalFormats,
+  conditionalTypesOf,
+  readBandSizes,
+  readTableLook,
+  tableLookAttribute,
+  type CellPosition,
+} from './table-conditional.js';
+import type { ConverterContext, TableBlock, TableStyleProps } from './types.js';
 import {
   booleanAttribute,
   borderDeclarations,
@@ -18,7 +27,7 @@ import {
   withSide,
   type BorderMap,
   type PaddingPt,
-} from './units-blocks';
+} from './units.js';
 
 /**
  * Conversion d'un `w:tbl` en `<table>` stylé selon le contrat `TableLayoutAttrs` /
@@ -27,10 +36,37 @@ import {
  * vertical, marges internes, `colwidth` Tiptap sur la première ligne, `colspan` et
  * `rowspan` calculés depuis `w:gridSpan` et `w:vMerge` (la cellule de continuation est
  * omise, comme Tiptap). Les cellules sont converties par `ctx.convert.blocks`, ce qui
- * rend les tableaux imbriqués récursifs.
+ * rend les tableaux imbriqués récursifs. Session 4 : `w:jc` → `data-align`, bordure `nil`
+ * explicite qui annule celle du tableau → `0pt solid transparent`, styles conditionnels
+ * (`w:tblStylePr` selon `w:tblLook`) fondus dans le style vu par chaque cellule, et
+ * `w:tblLook` explicite → `data-docx-look` (L49). Les attributs de `<table>` sortent dans
+ * l'ordre du core (`tableLayoutHtmlAttributes`) : `style`, `data-docx-style`, `data-align`,
+ * `data-docx-look` ; `colwidth` est posé sur chaque ligne, comme le core le recopie.
  */
 
 type SideBorders = Partial<Record<BorderSide, BlockBorder | null>>;
+
+/**
+ * Bordure `nil` explicite d'une cellule qui annule une bordure du tableau ou du style :
+ * émise en `border-<côté>: 0pt solid transparent`, que le core relit comme `BlockBorder`
+ * de largeur 0 (`layout-css.ts` accepte `0pt` et le mot-clé `transparent`) et que le
+ * writer réécrit en `w:tcBorders` `nil`. Une bordure simplement absente n'est pas émise.
+ */
+function transparentBorder(side: BorderSide): BlockBorder {
+  return { side, style: 'solid', widthPt: 0, color: 'transparent' };
+}
+
+const TABLE_ALIGNMENTS: ReadonlyMap<string, 'center' | 'right'> = new Map([
+  ['center', 'center'],
+  ['right', 'right'],
+  ['end', 'right'],
+]);
+
+/** `w:jc` du tableau → `data-align` (`left` / `start`, valeur par défaut, omis). */
+function tableAlign(tblPr: Element | null): 'center' | 'right' | undefined {
+  const jc = tblPr ? childNamed(tblPr, 'jc') : null;
+  return jc ? TABLE_ALIGNMENTS.get(wordAttribute(jc, 'val')) : undefined;
+}
 
 interface CellRecord {
   readonly header: boolean;
@@ -82,21 +118,21 @@ function isMergeContinuation(vMerge: Element | null): boolean {
   return value === '' || value === 'continue';
 }
 
+type Edges = Readonly<Record<'top' | 'right' | 'bottom' | 'left', boolean>>;
+
 /**
  * Bordures effectives d'une cellule : celles du style de tableau, puis les bordures
- * intérieures du tableau sur les arêtes intérieures, puis `w:tcBorders` (`nil` retire).
- * Les arêtes extérieures restent sur `<table>`.
+ * intérieures du tableau sur les arêtes intérieures, puis `w:tcBorders`. Un `nil` direct
+ * qui annule une bordure effective (du style, intérieure, ou extérieure du tableau sur une
+ * arête) devient une bordure transparente de largeur 0 ; un `nil` sans rien à annuler
+ * retire simplement le côté. Les arêtes extérieures restent sur `<table>`.
  */
 function cellBorders(
   style: TableStyleProps | null,
   table: BorderMap,
+  outer: SideBorders,
   tcBorders: BorderMap,
-  edges: {
-    readonly top: boolean;
-    readonly right: boolean;
-    readonly bottom: boolean;
-    readonly left: boolean;
-  },
+  edges: Edges,
 ): SideBorders {
   const result: SideBorders = { ...bordersBySide(style?.cellBorders) };
   const insideH = table.insideH;
@@ -111,7 +147,13 @@ function cellBorders(
   }
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
     const direct = tcBorders[side];
-    if (direct !== undefined) result[side] = direct;
+    if (direct === undefined) continue;
+    if (direct !== null) {
+      result[side] = direct;
+      continue;
+    }
+    const cancelled = result[side] ?? (edges[side] ? outer[side] : undefined);
+    result[side] = cancelled ? transparentBorder(side) : null;
   }
   return result;
 }
@@ -155,6 +197,15 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
     return { kind: 'table', html: '' };
   }
   const tableCtx = deriveContext(ctx, { tableStyle: style });
+  // Formats conditionnels : ceux du style, activés par `w:tblLook` (défaut de Word sans
+  // l'élément, R42-06) ; sans format dans le style, rien à décider.
+  const conditional = conditionalFormatsOf(style);
+  const look = readTableLook(tblPr);
+  const bands = readBandSizes(tblPr);
+  const cellStyle = (position: CellPosition): TableStyleProps | null => {
+    if (!style || !conditional) return style;
+    return applyConditionalFormats(style, conditional, conditionalTypesOf(position, look, bands));
+  };
 
   // Une cellule `vMerge restart` reste ouverte sur sa colonne de grille tant que les lignes
   // suivantes y placent une continuation : on incrémente son `rowspan` et on omet la cellule.
@@ -189,19 +240,27 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
       }
       for (let c = column; c < column + colspan; c += 1) openMerges.delete(c);
 
-      const edges = {
+      const edges: Edges = {
         top: rowIndex === 0,
         bottom: rowIndex === rows.length - 1,
         left: column === 0,
         right: cellIndex === tcs.length - 1,
       };
+      const effectiveStyle = cellStyle({
+        row: rowIndex,
+        rowCount: rows.length,
+        column,
+        lastColumn: edges.right,
+      });
       const borders = cellBorders(
-        style,
+        effectiveStyle,
         tableBorders,
+        outerBorders,
         readBorders(tcPr ? childNamed(tcPr, 'tcBorders') : null),
         edges,
       );
-      const shading = shadingColor(tcPr ? childNamed(tcPr, 'shd') : null) ?? style?.cellShading;
+      const shading =
+        shadingColor(tcPr ? childNamed(tcPr, 'shd') : null) ?? effectiveStyle?.cellShading;
       const vAlign = tcPr ? childNamed(tcPr, 'vAlign') : null;
       const verticalAlign = vAlign ? VERTICAL_ALIGNS.get(wordAttribute(vAlign, 'val')) : undefined;
       const padding = mergePadding(
@@ -209,11 +268,15 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
         defaultPadding,
         readCellMargins(tcPr ? childNamed(tcPr, 'tcMar') : null),
       );
+      // Sur toutes les lignes, pas seulement la première : le core recopie le `colwidth`
+      // de chaque colonne sur chaque cellule, l'idempotence stricte l'exige (L46 → L49).
       const widths = grid.slice(column, column + colspan);
-      const colwidth =
-        rowIndex === 0 && widths.length === colspan ? widths.map(String).join(',') : undefined;
+      const colwidth = widths.length === colspan ? widths.map(String).join(',') : undefined;
 
-      const cellCtx = deriveContext(tableCtx, { cellVerticalAlign: verticalAlign });
+      const cellCtx = deriveContext(tableCtx, {
+        cellVerticalAlign: verticalAlign,
+        ...(effectiveStyle !== style ? { tableStyle: effectiveStyle } : {}),
+      });
       const blocks = await ctx.convert.blocks(tc, cellCtx);
       const html = ctx.convert.render(blocks, cellCtx) || '<p></p>';
 
@@ -235,11 +298,16 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
     records.push({ cells });
   }
 
+  const align = tableAlign(tblPr);
+  const lookAttribute = tableLookAttribute(tblPr);
   const tableAttrs =
     styleAttr([
       ['width', tableWidth(tblPr ? childNamed(tblPr, 'tblW') : null)],
       ...borderDeclarations(outerBorders),
-    ]) + (styleId ? ` data-docx-style="${escapeAttr(styleId)}"` : '');
+    ]) +
+    (styleId ? ` data-docx-style="${escapeAttr(styleId)}"` : '') +
+    (align ? ` data-align="${align}"` : '') +
+    (lookAttribute ? ` data-docx-look="${lookAttribute}"` : '');
   const body = records.map((row) => `<tr>${row.cells.map(renderCell).join('')}</tr>`).join('');
   return { kind: 'table', html: `<table${tableAttrs}><tbody>${body}</tbody></table>` };
 }

@@ -1,4 +1,4 @@
-import type { AsterCommand, AsterEditor, CommandArgs, StandardCommandId } from '../api';
+import type { AsterCommand, AsterEditor, CommandArgs, StandardCommandId } from '../api/index.js';
 
 /** Spécification d'une commande standard : tout sauf ce que la convention déduit. */
 export interface StandardCommandSpec<K extends StandardCommandId> {

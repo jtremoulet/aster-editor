@@ -1,14 +1,13 @@
-import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils';
-import { relationshipAttribute } from '../reader/images';
-import { twipsToPt } from '../reader/units';
-import { numericAttribute } from '../reader/units-blocks';
+import { allNamed, childNamed, wordAttribute } from '../preprocess/xml-utils.js';
+import { relationshipAttribute } from '../reader/images.js';
+import { numericAttribute, twipsToPt } from '../reader/units.js';
 import type {
   BlockModel,
   HeaderFooterModel,
   HeaderFooterType,
   ModelContext,
   SectionModel,
-} from './model';
+} from './model.js';
 
 /**
  * Sections du modèle comparable : chaque `w:sectPr` du corps (fins de section dans les

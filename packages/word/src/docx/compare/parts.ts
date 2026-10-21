@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import type { XmlParse } from '../reader/types';
+import type { XmlParse } from '../reader/types.js';
 
 /**
  * Comparaison à l'octet des parties du paquet (styles, numérotation, thème, polices,

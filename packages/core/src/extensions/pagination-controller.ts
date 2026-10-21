@@ -1,20 +1,29 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
-import type { AsterEditor, PageViewOptions, Unsubscribe } from '../api';
+import type { AsterEditor, PageViewOptions, Unsubscribe } from '../api/index.js';
 import {
   PAGE_FOOTER_CLASS,
   PAGE_VIEW_CHANGE_EVENT,
   PAGE_VIEW_CLASS,
   getActivePageView,
-} from './page-view';
+  setHostLastPage,
+} from './page-view.js';
 import {
   EMPTY_PAGINATION,
   samePagination,
   type PageGap,
   type PaginationResult,
-} from './pagination-layout';
-import { PAGE_GAP_CLASS, measurePagination } from './pagination-measure';
+} from './pagination-layout.js';
+import { PAGE_GAP_CLASS, measurePagination } from './pagination-measure.js';
+import {
+  PAGE_HEIGHT_TOTAL_CSS_VARIABLE,
+  decorateGapSection,
+  lastPageOf,
+  pageHeightTotalMm,
+  previousPageSection,
+  sectionSignature,
+} from './pagination-sections.js';
 
 /**
  * Contrôleur de la pagination approximative (session 3, L30, extrait de `pagination.ts`
@@ -97,19 +106,37 @@ function pageLabel(aster: AsterEditor | null, page: number, count: number): stri
   return `${aster.i18n.t('pageView.page')} ${page} ${aster.i18n.t('pageView.of')} ${count}`;
 }
 
-/** DOM d'une coupure : `div.aster-page-gap[data-page-number][data-page-count]` et son libellé. */
-function renderGap(gap: PageGap, count: number, label: string): HTMLElement {
+/** Ce qu'une coupure doit savoir de sa section (L44) : la page qui se termine et les options. */
+interface GapSectionContext {
+  readonly previous: number;
+  readonly options: PageViewOptions;
+}
+
+/**
+ * DOM d'une coupure : `div.aster-page-gap[data-page-number][data-page-count]`, son
+ * libellé, le pied de la page qui se termine et l'en-tête de celle qui commence (L52) ;
+ * avec des sections, `data-section`, les variables de la section et, sur la première
+ * coupure d'une section, un libellé.
+ */
+function renderGap(
+  gap: PageGap,
+  result: PaginationResult,
+  label: string,
+  context: GapSectionContext,
+  aster: AsterEditor | null,
+): HTMLElement {
   const element = document.createElement('div');
   element.className = PAGE_GAP_CLASS;
   element.setAttribute('contenteditable', 'false');
   element.setAttribute('aria-hidden', 'true');
   element.setAttribute(PAGE_NUMBER_ATTRIBUTE, String(gap.page));
-  element.setAttribute(PAGE_COUNT_ATTRIBUTE, String(count));
+  element.setAttribute(PAGE_COUNT_ATTRIBUTE, String(result.pageCount));
   element.style.setProperty(PAGE_GAP_FILL_CSS_VARIABLE, `${Math.round(gap.fill)}px`);
   const number = document.createElement('span');
   number.className = PAGE_GAP_NUMBER_CLASS;
   number.textContent = label;
   element.append(number);
+  decorateGapSection(element, gap, context.previous, result, context.options, aster);
   return element;
 }
 
@@ -119,31 +146,68 @@ function buildDecorations(
   result: PaginationResult,
   locale: string,
   aster: AsterEditor | null,
+  options: PageViewOptions,
 ): DecorationSet {
   if (result.gaps.length === 0) {
     return DecorationSet.empty;
   }
-  const byIndex = new Map<number, PageGap>();
-  for (const gap of result.gaps) {
-    byIndex.set(gap.index, gap);
-  }
+  const byIndex = new Map<number, { gap: PageGap; previous: number }>();
+  result.gaps.forEach((gap, position) => {
+    byIndex.set(gap.index, { gap, previous: previousPageSection(result.gaps, position) });
+  });
   const decorations: Decoration[] = [];
   doc.forEach((_node, offset, index) => {
-    const gap = byIndex.get(index);
-    if (!gap) {
+    const entry = byIndex.get(index);
+    if (!entry) {
       return;
     }
+    const { gap, previous } = entry;
     const label = pageLabel(aster, gap.page, result.pageCount);
+    const context: GapSectionContext = { previous, options };
+    const section = sectionSignature(gap, previous, result, options);
     decorations.push(
-      Decoration.widget(offset, () => renderGap(gap, result.pageCount, label), {
+      Decoration.widget(offset, () => renderGap(gap, result, label, context, aster), {
         side: -1,
         // La clé porte tout ce qui change le rendu : ProseMirror réutilise le DOM à clé égale.
-        key: `${PAGE_GAP_CLASS}:${locale}:${gap.page}:${result.pageCount}:${Math.round(gap.fill)}`,
+        key: `${PAGE_GAP_CLASS}:${locale}:${gap.page}:${result.pageCount}:${Math.round(gap.fill)}:${section}`,
         ignoreSelection: true,
       }),
     );
   });
   return DecorationSet.create(doc, decorations);
+}
+
+/** Ce que le contrôleur attend de l'observateur DOM interne de prosemirror-view. */
+interface DomObserverLike {
+  flush(): void;
+}
+
+/** Vrai si la valeur ressemble à `DOMObserver` de prosemirror-view (une méthode `flush`). */
+function isDomObserverLike(value: unknown): value is DomObserverLike {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { flush?: unknown }).flush === 'function'
+  );
+}
+
+/**
+ * Relit tout de suite la sélection (et les mutations) du DOM dans l'état ProseMirror,
+ * comme ProseMirror le fait lui-même avant de traiter un `mousedown` ou une touche.
+ *
+ * Pourquoi (L50) : après un clic, le navigateur pose la sélection dans le DOM et
+ * ProseMirror ne la relit qu'à l'événement `selectionchange`, asynchrone. Si un redessin
+ * (`view.updateState`) survient entre les deux, ProseMirror réécrit dans le DOM la
+ * sélection de l'état, encore à l'ancienne position : le clic est perdu, et une frappe ou
+ * une commande qui suit part de l'ancienne position (preuve L47 : clic + `End` + `Tab`
+ * insérait en fin de document). `domObserver` n'est pas dans les types publics de
+ * prosemirror-view, mais existe depuis sa 1.0 ; sans lui, on redessine comme avant.
+ */
+function flushDomObserver(view: EditorView): void {
+  const observer: unknown = (view as unknown as { domObserver?: unknown }).domObserver;
+  if (isDomObserverLike(observer)) {
+    observer.flush();
+  }
 }
 
 /** Contrôleur par vue ProseMirror, pour `getPaginationResult` et `paginateNow`. */
@@ -163,6 +227,8 @@ export function paginationControllerOf(view: EditorView): PaginationController |
 export class PaginationController {
   result: PaginationResult = EMPTY_PAGINATION;
   private options: PageViewOptions | null = null;
+  /** Vrai entre une (ré)activation avec de nouvelles options et la mesure qui suit. */
+  private optionsChanged = false;
   private host: HTMLElement | null = null;
   /** Génération du rendu : avance à chaque mesure qui change quelque chose, locale ou arrêt. */
   private generation = 1;
@@ -220,7 +286,7 @@ export class PaginationController {
       holder.set =
         this.options === null
           ? DecorationSet.empty
-          : buildDecorations(state.doc, this.result, locale, this.aster);
+          : buildDecorations(state.doc, this.result, locale, this.aster, this.options);
       holder.generation = this.generation;
       this.builtDoc = state.doc;
     }
@@ -242,6 +308,9 @@ export class PaginationController {
       this.deactivate();
       return;
     }
+    // De nouvelles options (mise en page, en-têtes des sections) redessinent les coupures
+    // même à coupures égales : leur contenu en dépend (L44).
+    this.optionsChanged = this.options !== options;
     this.options = options;
     this.host = this.view.dom.closest<HTMLElement>(`.${PAGE_VIEW_CLASS}`);
     this.ensureObserver();
@@ -307,17 +376,31 @@ export class PaginationController {
     const result = measurePagination(this.view, this.options);
     const changed = !samePagination(result, this.result);
     this.result = result;
-    this.writePageCount(result.pageCount);
+    this.writePageCount(result);
     const drifted = result.gaps.length > 0 && this.builtDoc !== this.view.state.doc;
-    if (changed || drifted) {
+    const renewed = this.optionsChanged;
+    this.optionsChanged = false;
+    if (changed || drifted || renewed) {
       this.redraw();
     }
   }
 
-  /** Phase d'écriture : variable sur l'hôte et attribut du pied affiché. */
-  private writePageCount(count: number): void {
+  /**
+   * Phase d'écriture : variables sur l'hôte (nombre de pages ; avec des sections, somme
+   * des hauteurs de pages, L44), attribut du pied affiché et dernière page connue (L52 :
+   * la vue page en déduit la variante `first` / `even` du pied de l'hôte).
+   */
+  private writePageCount(result: PaginationResult): void {
+    const count = result.pageCount;
     this.host?.style.setProperty(PAGE_COUNT_CSS_VARIABLE, String(count));
+    const totalMm = pageHeightTotalMm(result);
+    if (totalMm === null) {
+      this.host?.style.removeProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE);
+    } else {
+      this.host?.style.setProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE, `${totalMm}mm`);
+    }
     this.footer()?.setAttribute(PAGE_COUNT_ATTRIBUTE, String(count));
+    setHostLastPage(this.view.dom, lastPageOf(result, this.options?.layout ?? {}));
   }
 
   /** Pied affiché posé par la vue page : frère de `view.dom`. */
@@ -339,11 +422,13 @@ export class PaginationController {
     this.host = null;
     if (host) {
       host.style.removeProperty(PAGE_COUNT_CSS_VARIABLE);
+      host.style.removeProperty(PAGE_HEIGHT_TOTAL_CSS_VARIABLE);
       if (host.getAttribute('style') === '') {
         host.removeAttribute('style');
       }
     }
     this.footer()?.removeAttribute(PAGE_COUNT_ATTRIBUTE);
+    setHostLastPage(this.view.dom, null);
     const hadGaps = this.result.gaps.length > 0;
     this.result = EMPTY_PAGINATION;
     if (hadGaps) {
@@ -351,9 +436,18 @@ export class PaginationController {
     }
   }
 
-  /** Redessine sans transaction : génération avancée, même état, le jeu est reconstruit à la lecture. */
+  /**
+   * Redessine sans transaction : génération avancée, même état, le jeu est reconstruit à
+   * la lecture. La sélection du DOM est relue avant (`flushDomObserver`, L50) : si elle a
+   * bougé (clic pas encore lu), ProseMirror dispatche d'abord la transaction de sélection
+   * (sans pas : ni historique ni `change`), puis le redessin réapplique un état à jour.
+   */
   private redraw(): void {
     if (this.destroyed || this.view.isDestroyed || this.aster?.isDestroyed()) {
+      return;
+    }
+    flushDomObserver(this.view);
+    if (this.destroyed || this.view.isDestroyed) {
       return;
     }
     this.generation += 1;

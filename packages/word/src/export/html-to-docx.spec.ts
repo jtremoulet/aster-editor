@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toDocumentXml } from './testing/sample';
+import { toDocumentXml } from './testing/sample.js';
 
 /** Nombre d'occurrences d'une sous-chaîne. */
 function count(haystack: string, needle: string): number {
@@ -153,7 +153,10 @@ describe('buildDocx — mapping XML', () => {
     expect(xml).toContain(`>Bonjour${nbsp}!</w:t>`);
     // Un paragraphe qui ne contient qu'un NBSP n'est pas vide.
     expect(xml).toContain(`>${nbsp}</w:t>`);
-    expect(xml).toContain(`>x${emSpace}${emSpace}y z</w:t>`);
+    // L'espace cadratin est la tabulation du lecteur 0.5 : réécrit en `w:tab` (session 4).
+    expect(xml).toContain(
+      '<w:t xml:space="preserve">x</w:t></w:r><w:r><w:tab/></w:r><w:r><w:tab/></w:r><w:r><w:t xml:space="preserve">y z</w:t>',
+    );
   });
 
   it('retire les <br> terminaux d’un paragraphe qui a d’autre contenu (M-3)', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripXmlDeclaration } from './xml-io';
+import { stripXmlDeclaration } from './xml-io.js';
 
 /**
  * Chromium réémet la déclaration XML dans `XMLSerializer.serializeToString`, jsdom non :

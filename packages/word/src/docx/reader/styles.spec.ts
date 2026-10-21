@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createStyleResolver, docDefaultsOf, tableParagraphDefaultsOf } from './styles';
-import { fakePackage, pPrOf, rPrOf, stylesXml, themeXml } from './test-support';
-import type { StyleResolver } from './types';
+import {
+  conditionalFormatsOf,
+  createStyleResolver,
+  docDefaultsOf,
+  tableParagraphDefaultsOf,
+} from './styles.js';
+import { fakePackage, pPrOf, rPrOf, stylesXml, themeXml } from './test-support.js';
+import type { StyleResolver } from './types.js';
 
 const DOC_DEFAULTS =
   '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial"/><w:sz w:val="20"/></w:rPr></w:rPrDefault>' +
@@ -475,6 +480,48 @@ describe('createStyleResolver', () => {
       expect(styles.tableStyle('TableGrid')).toBe(grid);
     });
 
+    it('w:tblStylePr → conditional (firstRow, band1Horz…), hérité le long de basedOn', async () => {
+      const styles = await resolver(
+        TABLE +
+          style(
+            'table',
+            'Cond',
+            '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/><w:bCs/></w:rPr><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="D9E2F3"/></w:tcPr></w:tblStylePr>' +
+              '<w:tblStylePr w:type="band1Horz"><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/></w:tcPr></w:tblStylePr>',
+            { basedOn: 'TableGrid' },
+          ) +
+          style(
+            'table',
+            'CondChild',
+            '<w:tblStylePr w:type="firstRow"><w:tcPr><w:tcBorders><w:bottom w:val="single" w:sz="12" w:color="2F5496"/></w:tcBorders></w:tcPr></w:tblStylePr>',
+            { basedOn: 'Cond' },
+          ),
+      );
+      expect(conditionalFormatsOf(styles.tableStyle('Cond'))).toEqual({
+        firstRow: { cellShading: '#d9e2f3', run: { bold: true } },
+        band1Horz: { cellShading: '#f2f2f2' },
+      });
+      expect(conditionalFormatsOf(styles.tableStyle('CondChild'))).toEqual({
+        firstRow: {
+          cellBorders: {
+            bottom: { side: 'bottom', style: 'solid', widthPt: 1.5, color: '#2f5496' },
+          },
+          cellShading: '#d9e2f3',
+          run: { bold: true },
+        },
+        band1Horz: { cellShading: '#f2f2f2' },
+      });
+      // Le reste du style est inchangé par les formats conditionnels.
+      expect(styles.tableStyle('Cond')?.cellShading).toBe('#f2f2f2');
+      expect(styles.tableStyle('Cond')?.runDefaults).toEqual({
+        fontFamily: 'Arial',
+        fontSizePt: 9,
+      });
+      expect(conditionalFormatsOf(styles.tableStyle('TableGrid'))).toBeUndefined();
+      expect(conditionalFormatsOf(null)).toBeUndefined();
+      expect(conditionalFormatsOf({ borders: [] })).toBeUndefined();
+    });
+
     it('tcBorders explicites priment sur les traits intérieurs ; inconnu et null → null', async () => {
       const styles = await resolver(
         NORMAL +
@@ -540,8 +587,9 @@ describe('createStyleResolver', () => {
         'lineHeightPt',
       );
       expect(paragraph('<w:spacing w:line="31680" w:lineRule="exact"/>').lineHeightPt).toBe(1584);
-      // Espacements et retraits dans ±1584 pt.
-      expect(paragraph('<w:spacing w:before="-100"/>').spacingBeforePt).toBe(-5);
+      // Espacements dans [0, 1584] pt (`ST_TwipsMeasure` non signé, R53-03), retraits dans ±1584 pt.
+      expect(paragraph('<w:spacing w:before="-100"/>').spacingBeforePt).toBeUndefined();
+      expect(paragraph('<w:spacing w:before="0"/>').spacingBeforePt).toBe(0);
       expect(paragraph('<w:spacing w:before="31700"/>').spacingBeforePt).toBeUndefined();
       expect(paragraph('<w:spacing w:after="99999999999"/>').spacingAfterPt).toBe(8);
       expect(paragraph('<w:ind w:left="31700" w:right="-31700"/>')).not.toHaveProperty(

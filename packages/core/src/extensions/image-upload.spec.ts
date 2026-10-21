@@ -5,8 +5,8 @@ import {
   insertImageFile,
   isImageFile,
   readFileAsDataUrl,
-} from './image-upload';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+} from './image-upload.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 const png = (): File =>
   new File([new Uint8Array([137, 80, 78, 71])], 'a.png', { type: 'image/png' });

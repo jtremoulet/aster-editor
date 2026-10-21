@@ -1,8 +1,8 @@
 import { Node, type AnyExtension } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SUSPICIOUS_SPEC_MESSAGE, renderRawSpec, serializeDocumentHtml } from './serialize-html';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+import { SUSPICIOUS_SPEC_MESSAGE, renderRawSpec, serializeDocumentHtml } from './serialize-html.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /**
  * Nœud d'intégrateur naïf de la preuve R23-04 : son `renderHTML` renvoie un attribut

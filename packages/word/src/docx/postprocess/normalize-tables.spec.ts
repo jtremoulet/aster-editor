@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../testing/dom';
-import { normalizeTables } from './normalize-tables';
+import { runPass } from '../testing/dom.js';
+import { normalizeTables } from './normalize-tables.js';
 
 describe('normalizeTables', () => {
   it('enveloppe les lignes nues dans un tbody', () => {

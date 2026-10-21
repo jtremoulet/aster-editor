@@ -32,6 +32,16 @@ const RUNTIME_VARIABLES: ReadonlySet<string> = new Set([
   // Pagination approximative (L30) : posées par le plugin `pagination` du core.
   '--aster-page-count',
   '--aster-page-gap-fill',
+  // Sections (L44) : largeur de la plus large section (core, vue page) et somme des
+  // hauteurs de pages (pagination).
+  '--aster-page-width-max',
+  '--aster-page-height-total',
+  // Défauts du document (L52) : police et paragraphe par défaut, posés par la vue page.
+  '--aster-page-font-family',
+  '--aster-page-font-size',
+  '--aster-page-default-line-height',
+  '--aster-page-default-spacing-before',
+  '--aster-page-default-spacing-after',
 ]);
 
 /** Variables de vue page que chaque thème doit déclarer (documentées dans `page.css`). */
@@ -151,6 +161,31 @@ describe('thèmes CSS', () => {
     }
   });
 
+  it('L52 (retour n° 6) : les radios du dialogue d’image sont alignées comme .aster-dialog__radios', () => {
+    const base = readFileSync(join(THEMES_DIR, 'base.css'), 'utf8');
+    const radios = /\.aster-image-dialog__radios \{([^}]*)\}/.exec(base)?.[1] ?? '';
+    expect(radios).toContain('display: flex');
+    expect(radios).toContain('flex-wrap: wrap');
+    expect(radios).toContain('gap: var(--aster-space-3)');
+    const reference = /\.aster-dialog__radios \{([^}]*)\}/.exec(
+      readFileSync(join(THEMES_DIR, 'page.css'), 'utf8'),
+    )?.[1];
+    expect(radios.replace(/\s+/g, ' ').trim()).toBe((reference ?? '').replace(/\s+/g, ' ').trim());
+    const label = /\.aster-image-dialog__radio-label \{([^}]*)\}/.exec(base)?.[1] ?? '';
+    expect(label).toContain('display: inline-flex');
+    expect(label).toContain('align-items: center');
+  });
+
+  it('L52 (retour n° 5a) : le bandeau de recherche est dans le flux, jamais en position absolue, masqué à l’impression', () => {
+    const search = readFileSync(join(THEMES_DIR, 'search-source.css'), 'utf8');
+    const band = /\.aster-search-panel \{([^}]*)\}/.exec(search)?.[1] ?? '';
+    expect(band).toContain('display: flex');
+    expect(band).toContain('border-bottom: 1px solid var(--aster-border)');
+    expect(band).not.toContain('position:');
+    expect(search).toContain('.aster-search-panel[hidden] {\n  display: none;\n}');
+    expect(readFileSync(join(THEMES_DIR, 'print.css'), 'utf8')).toContain('.aster-search-panel,');
+  });
+
   it('light et night déclarent exactement les mêmes variables', () => {
     const light = Array.from(readTheme('light').keys()).sort();
     const night = Array.from(readTheme('night').keys()).sort();
@@ -256,6 +291,174 @@ describe('thèmes CSS', () => {
       expect(aster.indexOf("'./page.css'")).toBeGreaterThan(aster.indexOf("'./print.css'"));
     });
 
+    it('L44 : la feuille prend la largeur de la plus large section et la hauteur totale des pages', () => {
+      const sheet = /\.aster--page-view \.aster-content \.ProseMirror \{([^}]*)\}/.exec(page);
+      expect(sheet?.[1]).toContain(
+        'width: var(--aster-page-width-max, var(--aster-page-width, 210mm))',
+      );
+      const headerFooter =
+        /\.aster--page-view \.aster-page-header,\s*\.aster--page-view \.aster-page-footer \{([^}]*)\}/.exec(
+          page,
+        );
+      expect(headerFooter?.[1]).toContain(
+        'width: var(--aster-page-width-max, var(--aster-page-width, 210mm))',
+      );
+      // Étirement : la somme des hauteurs remplace N × hauteur, avec repli sur l'ancienne formule.
+      expect(page).toContain(
+        'var(--aster-page-height-total, var(--aster-page-count, 1) * var(--aster-page-height, 297mm))',
+      );
+    });
+
+    it('L44 : saut de section en filet fin, effacé derrière une coupure, masqué à l’impression', () => {
+      const selector = '.aster--page-view .aster-content .ProseMirror hr[data-section-break]';
+      const printAt = page.indexOf('@media print');
+      const screen = new RegExp(`${escapeRegExp(selector)} \\{([^}]*)\\}`).exec(page);
+      expect(screen?.[1]).toContain('border-top: 1px dashed var(--aster-border)');
+      expect(page).toContain(`${selector}:has(+ .aster-page-gap)`);
+      expect(page.indexOf(selector)).toBeLessThan(printAt);
+      const print = new RegExp(`${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`).exec(
+        page.slice(printAt),
+      );
+      expect(print?.[1]).toContain('visibility: hidden');
+      expect(print?.[1]).not.toContain('break-after');
+    });
+
+    it('L44 : libellé, en-tête et pied de section dans la coupure, retirés à l’impression', () => {
+      for (const className of [
+        'aster-page-gap__section',
+        'aster-page-gap__header',
+        'aster-page-gap__footer',
+      ]) {
+        expect(page).toContain(`.aster--page-view .aster-content .ProseMirror .${className}`);
+      }
+      // Le pied de la section qui se termine se cale sur `--aster-page-margin-footer`,
+      // l'en-tête de celle qui commence sur `--aster-page-margin-header`.
+      // Règles propres (précédées de leur commentaire), pas la règle partagée.
+      const footer =
+        /\*\/\n\.aster--page-view \.aster-content \.ProseMirror \.aster-page-gap__footer \{([^}]*)\}/.exec(
+          page,
+        );
+      expect(footer?.[1]).toContain('var(--aster-page-margin-footer, 12.7mm)');
+      const header =
+        /\*\/\n\.aster--page-view \.aster-content \.ProseMirror \.aster-page-gap__header \{([^}]*)\}/.exec(
+          page,
+        );
+      expect(header?.[1]).toContain('var(--aster-page-margin-header, 12.7mm)');
+      expect(header?.[1]).toContain('var(--aster-page-gap-fill, 0px)');
+      // Lecture seule comme les conteneurs de l'hôte, opacité ≥ 0,7 (R26-08).
+      const shared =
+        /\.aster-page-gap__header,\s*\.aster--page-view \.aster-content \.ProseMirror \.aster-page-gap__footer \{([^}]*)\}/.exec(
+          page,
+        );
+      expect(shared?.[1]).toContain('pointer-events: none');
+      expect(Number(/opacity:\s*([\d.]+)/.exec(shared?.[1] ?? '')?.[1])).toBeGreaterThanOrEqual(
+        0.7,
+      );
+      const print = page.slice(page.indexOf('@media print'));
+      expect(print).toContain('.aster-page-gap__section');
+      expect(print).toContain('.aster-page-gap__header');
+      expect(print).toContain('.aster-page-gap__footer');
+      expect(page).toContain('.aster-page-layout__section');
+    });
+
+    it('R44-04 / L52 : dans toute coupure avec en-tête, libellé et numéro sont posés au-dessus de l’en-tête', () => {
+      const rule =
+        /\.aster-page-gap:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__number \{([^}]*)\}/.exec(
+          page,
+        );
+      expect(rule?.[1]?.replace(/\s+/g, ' ')).toContain(
+        'bottom: calc( var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm) + 2px )',
+      );
+      expect(rule?.[1]).toContain('transform: none');
+      // Même règle pour le libellé de section, dans le même bloc.
+      expect(page).toMatch(
+        /\.aster-page-gap:has\(> \.aster-page-gap__header\)\s*\.aster-page-gap__section,/,
+      );
+    });
+
+    it('L52 (retour n° 4) : bandes d’en-tête et de pied à une ligne au moins, hôte et coupures', () => {
+      // Marge haute proche de la distance d'en-tête (12,7 vs 12,49 mm) : la bande tombait à zéro.
+      // Règle propre (seul sélecteur), pas la règle partagée en-tête + pied.
+      const floor = (selector: string): string => {
+        const rule = new RegExp(`(?<!,\\n)^${escapeRegExp(selector)} \\{([^}]*)\\}`, 'm').exec(
+          page,
+        );
+        expect(rule, `${selector} absent`).not.toBeNull();
+        return (rule?.[1] ?? '').replace(/\s+/g, ' ');
+      };
+      expect(floor('.aster--page-view .aster-page-header')).toContain(
+        'max-height: max( calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm)), 1.4em )',
+      );
+      expect(floor('.aster--page-view .aster-page-footer')).toContain(
+        'max-height: max( calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)), 1.4em )',
+      );
+      expect(
+        floor('.aster--page-view .aster-content .ProseMirror .aster-page-gap__header'),
+      ).toContain(
+        'max-height: max( calc(var(--aster-page-margin-top, 25.4mm) - var(--aster-page-margin-header, 12.7mm)), 1.4em )',
+      );
+      expect(
+        floor('.aster--page-view .aster-content .ProseMirror .aster-page-gap__footer'),
+      ).toContain(
+        'max-height: max( calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)), 1.4em )',
+      );
+      // Le corps n'est pas poussé (approximation documentée dans la feuille).
+      expect(page).toContain('Pousser le corps demanderait de mesurer');
+    });
+
+    it('L52 (retour n° 2) : défauts du document appliqués en repli, en vue page seulement', () => {
+      const defaults = page.slice(page.indexOf('Défauts du document'));
+      const content = /\.aster--page-view \.aster-content \{([^}]*)\}/.exec(defaults)?.[1] ?? '';
+      expect(content).toContain(
+        'font-family: var(--aster-page-font-family, var(--aster-font-content))',
+      );
+      expect(content).toContain(
+        'font-size: var(--aster-page-font-size, var(--aster-font-size-content))',
+      );
+      expect(content).toContain(
+        'line-height: var(--aster-page-default-line-height, var(--aster-line-height))',
+      );
+      // En-têtes et pieds suivent la police du document.
+      const headerFooter =
+        /\.aster--page-view \.aster-page-header,\s*\.aster--page-view \.aster-page-footer \{([^}]*)\}/.exec(
+          page,
+        )?.[1] ?? '';
+      expect(headerFooter).toContain('var(--aster-page-font-family, var(--aster-font-content))');
+      // L'espacement ne s'applique qu'avec `aster--page-defaults`, jamais en `!important`.
+      const spacing =
+        /\.aster--page-defaults \.aster-content \.ProseMirror p,[^{]*\{([^}]*)\}/.exec(page)?.[1] ??
+        '';
+      expect(spacing).toContain('margin-top: var(--aster-page-default-spacing-before, 0)');
+      expect(spacing).toContain('margin-bottom: var(--aster-page-default-spacing-after, 0)');
+      expect(page).toContain(
+        '.aster--page-defaults .aster-content .ProseMirror > * + * {\n  margin-top: var(--aster-page-default-spacing-before, 0);',
+      );
+      expect(defaults.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('!important');
+      // Hors vue page, aucune règle ne consomme ces variables.
+      for (const file of ['base.css', 'search-source.css', 'images-tables.css']) {
+        expect(readFileSync(join(THEMES_DIR, file), 'utf8')).not.toContain('--aster-page-default');
+      }
+      // Cellules : marges de Word par défaut en vue page, l'inline `padding` du document prime.
+      const cells =
+        /\.aster--page-view \.aster-content \.ProseMirror td,\s*\.aster--page-view \.aster-content \.ProseMirror th \{([^}]*)\}/.exec(
+          page,
+        )?.[1] ?? '';
+      expect(cells).toContain('padding: 0 5.4pt');
+    });
+
+    it('session 4 : les points de suite d’une tabulation (data-leader) sont une bordure basse', () => {
+      for (const [leader, style] of [
+        ['dot', 'dotted'],
+        ['hyphen', 'dashed'],
+        ['underscore', 'solid'],
+      ]) {
+        const rule = new RegExp(`\\.aster-tab\\[data-leader='${leader}'\\] \\{([^}]*)\\}`).exec(
+          page,
+        );
+        expect(rule?.[1], leader).toContain(`border-bottom: 1px ${style} currentColor`);
+      }
+    });
+
     it('R30-02 : à l’impression, la feuille étirée à N pages retombe à min-height: 0 dans page.css', () => {
       const selector = '.aster--page-view .aster-content .ProseMirror';
       const rule = new RegExp(`${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, 'g');
@@ -263,8 +466,13 @@ describe('thèmes CSS', () => {
       expect(printAt).toBeGreaterThan(-1);
       // Règle écran (sans média, avant le bloc print) : la feuille mesure N pages.
       const screen = [...page.slice(0, printAt).matchAll(rule)].map((match) => match[1] ?? '');
+      // L44 : la somme des hauteurs de pages (sections) remplace N × hauteur, avec repli.
       expect(
-        screen.some((body) => /min-height:\s*calc\(\s*var\(--aster-page-count/.test(body)),
+        screen.some((body) =>
+          /min-height:\s*calc\(\s*var\(--aster-page-height-total, var\(--aster-page-count/.test(
+            body,
+          ),
+        ),
       ).toBe(true);
       // Même sélecteur dans le bloc print, après : `min-height: 0` gagne la cascade sur
       // la règle écran, qui elle-même venait après celle de `print.css` (même spécificité).

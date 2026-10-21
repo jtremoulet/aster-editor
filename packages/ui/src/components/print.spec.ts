@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockEditor, type MockEditor } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import { createWidget } from '../toolbar/widgets';
+import { createMockEditor, type MockEditor } from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import { createWidget } from '../toolbar/widgets.js';
 import {
   PRINT_CONTENT_CLASS,
   PRINT_CONTENT_STYLES,
   buildPrintDocument,
   createPrintButton,
   printEditor,
-} from './print';
+} from './print.js';
 
 /** Fenêtre d'impression simulée : jsdom n'ouvre rien et n'imprime pas. */
 interface FakeWindow {

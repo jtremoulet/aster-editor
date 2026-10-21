@@ -1,6 +1,6 @@
-import type { AsterEditor } from '../api';
-import { htmlToMarkdown, type HtmlParser } from './html-to-markdown';
-import { escapeHtml, markdownToHtml, parseInline } from './markdown-to-html';
+import type { AsterEditor } from '../api/index.js';
+import { htmlToMarkdown, type HtmlParser } from './html-to-markdown.js';
+import { escapeHtml, markdownToHtml, parseInline } from './markdown-to-html.js';
 
 export { htmlToMarkdown, markdownToHtml, escapeHtml, parseInline, type HtmlParser };
 

@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { DocumentLayout, PaginatedPageViewOptions } from '@aster-editor/core';
-import { applyPageView } from '@aster-editor/core';
-import { createMockEditor, type MockEditor, type MockEditorOptions } from '../testing/mock-editor';
-import { registerUiTranslations } from '../toolbar/create-toolbar';
-import type { ToolbarWidget } from '../types';
+import type { DocumentLayout, PageSetup, PaginatedPageViewOptions } from '@aster-editor/core';
+import { applyPageView, createEditor } from '@aster-editor/core';
+import {
+  createMockEditor,
+  type MockEditor,
+  type MockEditorOptions,
+} from '../testing/mock-editor.js';
+import { registerUiTranslations } from '../toolbar/create-toolbar.js';
+import type { ToolbarWidget } from '../types.js';
 import {
   DEFAULT_PAGE_MARGIN_MM,
   MAX_PAGE_DIMENSION_MM,
@@ -15,7 +19,10 @@ import {
   pageDimensionsOf,
   pageViewApiOf,
   resolvePageSetup,
-} from './page-layout-dialog';
+  sectionOfSelection,
+  sectionsOf,
+  withSectionPage,
+} from './page-layout-dialog.js';
 
 const LAYOUT: DocumentLayout = {
   page: {
@@ -433,6 +440,156 @@ describe('createPageLayoutDialog', () => {
       expect(isOpen()).toBe(false);
     });
 
+    it('L44 : sectionOfSelection, sectionsOf et withSectionPage (helpers)', () => {
+      expect(sectionOfSelection(createMockEditor())).toEqual({ index: 1, count: 1 });
+      expect(sectionOfSelection(createMockEditor({ sections: { count: 3, current: 2 } }))).toEqual({
+        index: 2,
+        count: 3,
+      });
+      expect(sectionOfSelection(createMockEditor({ sections: { count: 1, current: 1 } }))).toEqual({
+        index: 1,
+        count: 1,
+      });
+      // Sections connues complétées par le premier niveau (copie de la dernière section).
+      const layout: DocumentLayout = {
+        page: { size: 'A5' },
+        lang: 'fr-FR',
+        sections: [{ page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } }],
+      };
+      expect(sectionsOf(layout, 3)).toEqual([
+        { page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } },
+        { page: { size: 'A5' } },
+        { page: { size: 'A5' } },
+      ]);
+      expect(sectionsOf(null, 2)).toEqual([{}, {}]);
+      // Une seule section sans `sections` : seul `page` change, comme avant. Avec une
+      // section déclarée, c'est elle qui est éditée et recopiée au premier niveau (R44-03).
+      const page: PageSetup = { size: 'Legal', orientation: 'portrait' };
+      expect(withSectionPage({ page: { size: 'A5' } }, { index: 1, count: 1 }, page)).toEqual({
+        page,
+      });
+      expect(withSectionPage(layout, { index: 1, count: 1 }, page)).toEqual({
+        ...layout,
+        page,
+        headers: { default: { html: '<p>h</p>' } },
+        sections: [{ page, headers: { default: { html: '<p>h</p>' } } }],
+      });
+      expect(withSectionPage(null, { index: 1, count: 1 }, page)).toEqual({ page });
+      // Section intermédiaire : `sections` complété, `page` de premier niveau intact.
+      expect(withSectionPage(layout, { index: 2, count: 3 }, page)).toEqual({
+        ...layout,
+        sections: [
+          { page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } },
+          { page },
+          { page: { size: 'A5' } },
+        ],
+      });
+      // Dernière section : recopiée dans `page` (contrat `DocumentLayout.sections`).
+      expect(withSectionPage(layout, { index: 3, count: 3 }, page)).toEqual({
+        ...layout,
+        page,
+        sections: [
+          { page: { size: 'A3' }, headers: { default: { html: '<p>h</p>' } } },
+          { page: { size: 'A5' } },
+          { page },
+        ],
+      });
+    });
+
+    it('L44 : « Section n sur N », page de la section du curseur préremplie et seule appliquée', () => {
+      widget.destroy();
+      host.remove();
+      const layout: DocumentLayout = {
+        ...LAYOUT,
+        sections: [
+          { page: { size: 'A4' }, footers: { default: { html: '<p>Pied 1</p>' } } },
+          { page: LAYOUT.page, headers: { default: { html: '<p>Tête 2</p>' } } },
+          { page: { size: 'A5', orientation: 'portrait', margins: { topMm: 10 } } },
+        ],
+      };
+      mount({ layout, pageView: true, sections: { count: 3, current: 2 } });
+      open();
+      const note = panel().querySelector('.aster-page-layout__section');
+      expect(note?.textContent).toBe('Section 2 of 3');
+      expect(panel().firstElementChild).toBe(note);
+      expect(size().value).toBe('Letter');
+      expect(orientation('landscape').checked).toBe(true);
+      expect(margin('topMm').value).toBe('20');
+      size().value = 'A3';
+      margin('topMm').value = '30';
+      button('Apply').click();
+      expect(editor.pageViewCalls).toEqual([
+        {
+          layout: {
+            ...layout,
+            sections: [
+              layout.sections?.[0],
+              {
+                ...layout.sections?.[1],
+                page: {
+                  size: 'A3',
+                  orientation: 'landscape',
+                  margins: { topMm: 30, rightMm: 15, bottomMm: 20, leftMm: 15, headerMm: 10 },
+                },
+              },
+              layout.sections?.[2],
+            ],
+          },
+        },
+      ]);
+      expect(editor.pageViewCalls[0]).toMatchObject({ layout: { page: LAYOUT.page } });
+      expect(isOpen()).toBe(false);
+      // Réouvert (le mock mémorise la mise en page) : la section 2 montre A3.
+      open();
+      expect(size().value).toBe('A3');
+      expect(margin('topMm').value).toBe('30');
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 sur 3',
+      );
+    });
+
+    it('L44 : dernière section du curseur recopiée dans page ; sans sections connues, complété', () => {
+      widget.destroy();
+      host.remove();
+      mount({
+        layout: { page: { size: 'A5' }, lang: 'fr-FR' },
+        sections: { count: 2, current: 2 },
+      });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 of 2',
+      );
+      expect(size().value).toBe('A5');
+      orientation('landscape').checked = true;
+      enabled().checked = true;
+      button('Apply').click();
+      const page: PageSetup = {
+        size: 'A5',
+        orientation: 'landscape',
+        margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+      };
+      expect(editor.pageViewCalls).toEqual([
+        {
+          layout: {
+            page,
+            lang: 'fr-FR',
+            sections: [{ page: { size: 'A5' } }, { page }],
+          },
+        },
+      ]);
+      // Sans saut de section dans le document, aucune mention de section ; la page
+      // préremplie est celle de la section 1 déclarée, comme l'hôte la rend (R44-03).
+      widget.destroy();
+      host.remove();
+      mount({ layout: { sections: [{ page: { size: 'A3' } }] } });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')).toBeNull();
+      expect(size().value).toBe('A3');
+    });
+
     it('préremplie depuis la vue page active du core (pagination: false) ; libellé fr', () => {
       const off: PaginatedPageViewOptions = { pagination: false };
       const handle = applyPageView(editor.element, editor.contentElement, off);
@@ -447,6 +604,391 @@ describe('createPageLayoutDialog', () => {
       editor.i18n.setLocale('fr');
       open();
       expect(pagination().parentElement?.textContent).toBe('Pagination (approximative)');
+    });
+  });
+
+  describe('correctifs R44 (sections)', () => {
+    const S1: PageSetup = { size: 'Legal' };
+    const S2: PageSetup = { size: 'Letter', orientation: 'landscape', margins: { topMm: 12.7 } };
+    const S3: PageSetup = { size: 'A5', margins: { topMm: 10 } };
+    /** Trois sections déclarées ; le premier niveau est la copie de la troisième (contrat). */
+    const THREE: DocumentLayout = {
+      page: S3,
+      footers: { default: { html: '<p>Pied 3</p>' } },
+      sections: [
+        { page: S1, footers: { default: { html: '<p>Pied 1</p>' } } },
+        { page: S2, headers: { default: { html: '<p>Tête 2</p>' } }, start: 'continuous' },
+        { page: S3, footers: { default: { html: '<p>Pied 3</p>' } } },
+      ],
+    };
+    const sentLayout = (): DocumentLayout => {
+      const call = editor.pageViewCalls[0];
+      if (typeof call !== 'object' || !call.layout) throw new Error('layout attendu');
+      return call.layout;
+    };
+
+    it('R44-02 : withSectionPage ne tronque jamais sections ; la dernière du corps est recopiée au premier niveau', () => {
+      // Corps à 2 sections, 3 déclarées : la section 3 (en-têtes, pieds) survit, l'invariant tient.
+      const edited = withSectionPage(THREE, { index: 1, count: 2 }, { size: 'A3' });
+      expect(edited.sections).toHaveLength(3);
+      expect(edited.sections?.[0]).toEqual({ ...THREE.sections?.[0], page: { size: 'A3' } });
+      expect(edited.sections?.[1]).toBe(THREE.sections?.[1]);
+      expect(edited.sections?.[2]).toBe(THREE.sections?.[2]);
+      expect(edited.page).toBe(edited.sections?.at(-1)?.page);
+      expect(edited.footers).toEqual(edited.sections?.at(-1)?.footers);
+      // Dernière section du corps éditée : `page` et consorts suivent la dernière entrée.
+      const last = withSectionPage(THREE, { index: 3, count: 3 }, { size: 'A3' });
+      expect(last.sections?.[2]?.page).toEqual({ size: 'A3' });
+      expect(last.page).toEqual({ size: 'A3' });
+      expect(last.footers).toBe(THREE.sections?.[2]?.footers);
+      expect(last.headers).toBeUndefined();
+      // Un premier niveau orphelin (en-tête sans équivalent dans la dernière section) est retiré.
+      const orphan: DocumentLayout = {
+        ...THREE,
+        headers: { default: { html: '<p>Orphelin</p>' } },
+        columns: 2,
+      };
+      const synced = withSectionPage(orphan, { index: 3, count: 3 }, { size: 'A3' });
+      expect(synced.headers).toBeUndefined();
+      expect(synced.columns).toBeUndefined();
+      expect(synced.lang).toBe(orphan.lang);
+      // Section intermédiaire : rien ne bouge au premier niveau.
+      const middle = withSectionPage(THREE, { index: 2, count: 3 }, { size: 'A3' });
+      expect(middle.page).toBe(THREE.page);
+      expect(middle.sections?.[1]).toEqual({ ...THREE.sections?.[1], page: { size: 'A3' } });
+      // Un `sections` qui n'est pas un tableau vaut aucune section.
+      expect(
+        withSectionPage({ sections: 'x' as never }, { index: 1, count: 1 }, { size: 'A3' }),
+      ).toEqual({ sections: 'x', page: { size: 'A3' } });
+    });
+
+    it('R44-03 : corps sans saut mais sections déclarées : préremplit et édite sections[0], comme l’hôte', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: THREE, pageView: true });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')).toBeNull();
+      // L'hôte rend sections[0] (Legal), pas la copie de la dernière section (A5).
+      expect(size().value).toBe('Legal');
+      size().value = 'A3';
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.sections).toHaveLength(3);
+      expect(sent.sections?.[0]?.page?.size).toBe('A3');
+      expect(sent.sections?.[0]?.footers).toBe(THREE.sections?.[0]?.footers);
+      expect(sent.sections?.[1]).toBe(THREE.sections?.[1]);
+      expect(sent.sections?.[2]).toBe(THREE.sections?.[2]);
+      // Invariant du contrat : le premier niveau reste la copie de la dernière entrée.
+      expect(sent.page).toBe(S3);
+      // Réouvert : la section 1 montre A3.
+      open();
+      expect(size().value).toBe('A3');
+    });
+
+    it('R44-06 : la section affichée est celle de la tête ; une sélection à cheval est signalée (fr / en)', () => {
+      expect(
+        sectionOfSelection(createMockEditor({ sections: { count: 3, current: 2, anchor: 3 } })),
+      ).toEqual({ index: 2, count: 3, mixed: true });
+      expect(
+        sectionOfSelection(createMockEditor({ sections: { count: 3, current: 3, anchor: 1 } })),
+      ).toEqual({ index: 3, count: 3, mixed: true });
+      expect(
+        sectionOfSelection(createMockEditor({ sections: { count: 3, current: 1, anchor: 1 } })),
+      ).toEqual({ index: 1, count: 3 });
+      widget.destroy();
+      host.remove();
+      mount({ layout: THREE, pageView: true, sections: { count: 3, current: 2, anchor: 3 } });
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 of 3 — the selection spans several sections',
+      );
+      expect(size().value).toBe('Letter');
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(panel().querySelector('.aster-page-layout__section')?.textContent).toBe(
+        'Section 2 sur 3 — la sélection couvre plusieurs sections',
+      );
+    });
+
+    it('R44-06 : sur un éditeur réel, curseur sur le hr → section qui s’y termine ; tête et bornes réelles', () => {
+      const container = document.createElement('div');
+      document.body.append(container);
+      const element = document.createElement('div');
+      container.append(element);
+      const real = createEditor({
+        element,
+        content:
+          '<p>un</p><hr data-section-break="1"><p>deux</p><hr data-section-break="2"><p>trois</p>',
+      });
+      try {
+        const { doc } = real.tiptap.state;
+        const breaks: number[] = [];
+        const texts = new Map<string, number>();
+        doc.forEach((node, offset) => {
+          if (node.type.name === 'sectionBreak') breaks.push(offset);
+          else texts.set(node.textContent, offset + 1);
+        });
+        real.tiptap.commands.setNodeSelection(breaks[0]!);
+        expect(sectionOfSelection(real)).toEqual({ index: 1, count: 3 });
+        real.tiptap.commands.setNodeSelection(breaks[1]!);
+        expect(sectionOfSelection(real)).toEqual({ index: 2, count: 3 });
+        // De « un » à « trois » : la tête est dans la section 3, la sélection couvre 1 à 3.
+        real.tiptap.commands.setTextSelection({
+          from: texts.get('un')!,
+          to: texts.get('trois')! + 3,
+        });
+        expect(sectionOfSelection(real)).toEqual({ index: 3, count: 3, mixed: true });
+        // Inversée (ancre dans « trois », tête dans « deux ») : la tête compte, pas la borne basse.
+        real.tiptap.commands.setTextSelection({
+          from: texts.get('trois')! + 1,
+          to: texts.get('deux')!,
+        });
+        expect(sectionOfSelection(real)).toEqual({ index: 2, count: 3, mixed: true });
+        real.tiptap.commands.setTextSelection({
+          from: texts.get('deux')! + 1,
+          to: texts.get('deux')! + 3,
+        });
+        expect(sectionOfSelection(real)).toEqual({ index: 2, count: 3 });
+        // Sélection de tout le document : à cheval, tête dans la dernière section.
+        real.tiptap.commands.selectAll();
+        expect(sectionOfSelection(real)).toEqual({ index: 3, count: 3, mixed: true });
+      } finally {
+        real.destroy();
+        container.remove();
+      }
+    });
+  });
+
+  describe('en-têtes et pieds (L54)', () => {
+    const rich = (kind: 'headers' | 'footers', type: 'default' | 'first' | 'even'): HTMLElement =>
+      panel().querySelector<HTMLElement>(`.aster-page-layout__${kind}-${type}`)!;
+    const richShown = (kind: 'headers' | 'footers', type: 'default' | 'first' | 'even'): boolean =>
+      !rich(kind, type).parentElement!.hasAttribute('hidden');
+    const titlePage = (): HTMLInputElement =>
+      panel().querySelector<HTMLInputElement>('.aster-page-layout__title-page')!;
+    const evenPages = (): HTMLInputElement =>
+      panel().querySelector<HTMLInputElement>('.aster-page-layout__even-pages')!;
+    /** Saisie simulée : remplace le contenu et signale l'`input` (un champ intact n'est pas réécrit, R52-02). */
+    const edit = (
+      kind: 'headers' | 'footers',
+      type: 'default' | 'first' | 'even',
+      html: string,
+    ): void => {
+      rich(kind, type).innerHTML = html;
+      rich(kind, type).dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const sentLayout = (index = 0): DocumentLayout => {
+      const call = editor.pageViewCalls[index];
+      if (typeof call !== 'object' || !call.layout) throw new Error('layout attendu');
+      return call.layout;
+    };
+    /** Fixture 18 en miniature : première page sur la 1, pages paires sur la 2, pied sur la 3. */
+    const TRIPLE: DocumentLayout = {
+      page: { size: 'A4' },
+      footers: { default: { html: '<p>Pied 3</p>' } },
+      sections: [
+        {
+          page: { size: 'A4' },
+          headers: {
+            default: { html: '<p>Section 1</p>' },
+            first: { html: '<p>Première page</p>' },
+          },
+          titlePage: true,
+        },
+        {
+          page: { size: 'Letter', orientation: 'landscape' },
+          headers: {
+            default: { html: '<p>Section 2</p>' },
+            even: { html: '<p>Section 2 paire</p>' },
+          },
+        },
+        { page: { size: 'A4' }, footers: { default: { html: '<p>Pied 3</p>' } } },
+      ],
+    };
+
+    it('affiche les champs de la section du curseur : default toujours, first si titlePage, even si présent', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 1 } });
+      open();
+      const group = panel().querySelector('.aster-page-layout__headers');
+      expect(group?.getAttribute('aria-label')).toBe('Header and footer');
+      expect(group?.querySelector('.aster-page-layout__hint')?.textContent).toContain(
+        'Enter starts a new paragraph',
+      );
+      expect(titlePage().checked).toBe(true);
+      expect(evenPages().checked).toBe(false);
+      expect(rich('headers', 'default').innerHTML).toBe('<p>Section 1</p>');
+      expect(rich('headers', 'first').innerHTML).toBe('<p>Première page</p>');
+      expect(richShown('headers', 'first')).toBe(true);
+      expect(richShown('headers', 'even')).toBe(false);
+      expect(richShown('footers', 'first')).toBe(true);
+      expect(rich('footers', 'default').innerHTML).toBe('');
+      expect(rich('headers', 'default').getAttribute('contenteditable')).toBe('true');
+      button('Cancel').click();
+      editor.i18n.setLocale('fr');
+      open();
+      expect(panel().querySelector('.aster-page-layout__headers')?.getAttribute('aria-label')).toBe(
+        'En-tête et pied',
+      );
+      expect(
+        panel().querySelector(`label[for="${rich('headers', 'first').id}"]`)?.textContent,
+      ).toBe('En-tête de première page');
+      expect(titlePage().parentElement?.textContent).toBe('Première page différente');
+      expect(evenPages().parentElement?.textContent).toBe('Pages paires différentes');
+      button('Annuler').click();
+      // Section 2 : pas de première page, un en-tête pair.
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 2 } });
+      open();
+      expect(titlePage().checked).toBe(false);
+      expect(evenPages().checked).toBe(true);
+      expect(richShown('headers', 'first')).toBe(false);
+      expect(richShown('headers', 'even')).toBe(true);
+      expect(rich('headers', 'even').innerHTML).toBe('<p>Section 2 paire</p>');
+      expect(rich('headers', 'default').innerHTML).toBe('<p>Section 2</p>');
+    });
+
+    it('assainit la saisie : <script> et onclick retirés, b / i / div normalisés', () => {
+      open();
+      edit(
+        'headers',
+        'default',
+        '<p onclick="alert(1)">Titre<script>alert(1)</script></p><div><b>gras</b> <i>it</i></div>',
+      );
+      enabled().checked = true;
+      button('Apply').click();
+      expect(sentLayout()).toEqual({
+        page: {
+          size: 'A4',
+          orientation: 'portrait',
+          margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+        },
+        headers: { default: { html: '<p>Titre</p><p><strong>gras</strong> <em>it</em></p>' } },
+      });
+      expect(isOpen()).toBe(false);
+    });
+
+    it('un champ vidé retire le type, un jeu vide est retiré ; un contenu inchangé garde sa référence', () => {
+      widget.destroy();
+      host.remove();
+      const layout: DocumentLayout = {
+        headers: { default: { html: '<p>H</p>' } },
+        footers: { default: { html: '<p>F</p>' } },
+      };
+      mount({ layout, pageView: true });
+      open();
+      edit('headers', 'default', '<p><br></p>');
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.headers).toBeUndefined();
+      expect('headers' in sent).toBe(false);
+      expect(sent.footers).toEqual(layout.footers);
+      expect(sent.footers?.default).toBe(layout.footers?.default);
+    });
+
+    it('R52-02 : « Appliquer » sans édition laisse headers et footers identiques (même référence)', () => {
+      widget.destroy();
+      host.remove();
+      const layout: DocumentLayout = {
+        headers: { default: { html: '<p style="border-bottom: 1pt solid #000000"></p>' } },
+        footers: { default: { html: '<div><div>Pied</div></div>' }, even: { html: '<hr>' } },
+      };
+      mount({ layout, pageView: true });
+      open();
+      expect(evenPages().checked).toBe(true);
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.headers).toBe(layout.headers);
+      expect(sent.footers).toBe(layout.footers);
+    });
+
+    it('« Première page différente » pose titlePage et écrit first ; décochée, titlePage est retiré et first conservé (R52-03)', () => {
+      open();
+      expect(richShown('headers', 'first')).toBe(false);
+      titlePage().click();
+      expect(titlePage().checked).toBe(true);
+      expect(richShown('headers', 'first')).toBe(true);
+      expect(richShown('footers', 'first')).toBe(true);
+      edit('headers', 'first', '<p>Première</p>');
+      enabled().checked = true;
+      button('Apply').click();
+      expect(sentLayout()).toMatchObject({
+        headers: { first: { html: '<p>Première</p>' } },
+        titlePage: true,
+      });
+      expect(sentLayout().footers).toBeUndefined();
+      // Réouvert (le mock mémorise) : la case et le champ suivent ; décocher retire
+      // `titlePage` seulement, la partie `first` reste (comme Word), même référence.
+      open();
+      expect(titlePage().checked).toBe(true);
+      expect(rich('headers', 'first').innerHTML).toBe('<p>Première</p>');
+      titlePage().click();
+      expect(richShown('headers', 'first')).toBe(false);
+      button('Apply').click();
+      expect(sentLayout(1).titlePage).toBeUndefined();
+      expect(sentLayout(1).headers).toBe(sentLayout(0).headers);
+      expect(sentLayout(1).headers).toEqual({ first: { html: '<p>Première</p>' } });
+    });
+
+    it('dernière section du corps : en-têtes et pieds recopiés au premier niveau (invariant)', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 3 } });
+      open();
+      expect(rich('footers', 'default').innerHTML).toBe('<p>Pied 3</p>');
+      edit('footers', 'default', '<p>Nouveau pied</p>');
+      edit('headers', 'default', '<p>Tête 3</p>');
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.sections?.[2]).toEqual({
+        page: {
+          size: 'A4',
+          orientation: 'portrait',
+          margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+        },
+        headers: { default: { html: '<p>Tête 3</p>' } },
+        footers: { default: { html: '<p>Nouveau pied</p>' } },
+      });
+      expect(sent.footers).toBe(sent.sections?.[2]?.footers);
+      expect(sent.headers).toBe(sent.sections?.[2]?.headers);
+      expect(sent.titlePage).toBeUndefined();
+      expect(sent.sections?.[0]).toBe(TRIPLE.sections?.[0]);
+      expect(sent.sections?.[1]).toBe(TRIPLE.sections?.[1]);
+    });
+
+    it('section intermédiaire : son entrée seule change, le premier niveau reste celui de la dernière', () => {
+      widget.destroy();
+      host.remove();
+      mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 2 } });
+      open();
+      edit('headers', 'default', '<p>Section 2 bis</p>');
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.sections?.[1]?.headers).toEqual({
+        default: { html: '<p>Section 2 bis</p>' },
+        even: { html: '<p>Section 2 paire</p>' },
+      });
+      expect(sent.sections?.[1]?.headers?.even).toBe(TRIPLE.sections?.[1]?.headers?.even);
+      expect(sent.sections?.[1]?.page).toEqual({
+        size: 'Letter',
+        orientation: 'landscape',
+        margins: { topMm: 25.4, rightMm: 25.4, bottomMm: 25.4, leftMm: 25.4 },
+      });
+      expect(sent.sections?.[0]).toBe(TRIPLE.sections?.[0]);
+      expect(sent.sections?.[2]).toBe(TRIPLE.sections?.[2]);
+      expect(sent.headers).toBeUndefined();
+      expect(sent.footers).toBe(TRIPLE.footers);
+      expect(sent.page).toBe(TRIPLE.page);
+      // Entrée dans un champ riche ne valide pas le dialogue.
+      open();
+      rich('headers', 'default').dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+      );
+      expect(isOpen()).toBe(true);
+      expect(editor.pageViewCalls).toHaveLength(1);
     });
   });
 });

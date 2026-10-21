@@ -1,4 +1,4 @@
-import type { PostprocessPass } from './types';
+import type { PostprocessPass } from './types.js';
 
 /** Vrai pour `0`, `0px`, `auto`, vide : une dimension sans valeur exploitable. */
 function isNullDimension(value: string | null): boolean {

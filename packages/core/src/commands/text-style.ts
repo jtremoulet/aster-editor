@@ -1,5 +1,5 @@
-import type { AsterCommand } from '../api';
-import { defineStandardCommand } from './define';
+import type { AsterCommand } from '../api/index.js';
+import { defineStandardCommand } from './define.js';
 
 /**
  * Styles de texte portés par la marque `textStyle` de Tiptap. Convention commune

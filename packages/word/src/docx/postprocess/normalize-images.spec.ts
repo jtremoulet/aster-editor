@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { runPass } from '../testing/dom';
-import { normalizeImages } from './normalize-images';
+import { runPass } from '../testing/dom.js';
+import { normalizeImages } from './normalize-images.js';
 
 describe('normalizeImages', () => {
   it('ajoute un alt vide quand il manque', () => {

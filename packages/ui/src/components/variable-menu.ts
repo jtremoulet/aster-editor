@@ -1,8 +1,8 @@
 import type { AsterEditor, AsterVariable } from '@aster-editor/core';
-import type { ToolbarWidget } from '../types';
-import { el } from '../utils/dom';
-import { createPlainButton, setDisabled } from './button';
-import { createDropdown, createMenuItem, type Dropdown } from './dropdown';
+import type { ToolbarWidget } from '../types.js';
+import { el } from '../utils/dom.js';
+import { createPlainButton, setDisabled } from './button.js';
+import { createDropdown, createMenuItem, type Dropdown } from './dropdown.js';
 
 /** Nom de variable valide : même règle que `isValidVariableName` du core. */
 export const VARIABLE_NAME_PATTERN = /^[\p{L}\p{N}_][\p{L}\p{N}_.-]*$/u;

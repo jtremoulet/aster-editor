@@ -21,8 +21,8 @@ import {
   VARIABLE_UNRESOLVED_CLASS,
   Variable,
   type VariableEditEventDetail,
-} from './variable';
-import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount';
+} from './variable.js';
+import { findNodePos, mountEditor, selectRange, type MountedEditor } from '../testing/mount.js';
 
 const CLIENT = '<span data-aster-variable="client" data-label="Client">{{client}}</span>';
 const DOC = `<p>Bonjour ${CLIENT} !</p>`;

@@ -16,7 +16,6 @@ import {
 import type { ElementRef, Signal } from '@angular/core';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import type { ControlValueAccessor } from '@angular/forms';
-import { PAGE_VIEW_CHANGE_EVENT } from '@aster-editor/core';
 import type {
   AsterDocument,
   AsterEditor,
@@ -38,6 +37,7 @@ import type { DocxExportOptions, DocxImportResult, FidelityReport } from '@aster
 import { applyAriaAttributes, applyPlaceholder } from './editor-dom';
 import {
   applyLayoutToPageView,
+  onPageViewChange,
   readPageViewLayout,
   resolvePageViewOptions,
   setPageView,
@@ -157,7 +157,8 @@ export class AsterEditorComponent implements ControlValueAccessor {
   /**
    * Chemin de lecture d'`importDocx` : `styled` (lecteur OOXML d'Aster, HTML stylé, mise en
    * page et gabarit renseignés) ou `semantic` (mammoth, HTML sémantique, mise en page vide).
-   * Défaut effectif : `styled`. Lu à chaque import.
+   * Défaut effectif : `styled`, celui de la lib depuis la 0.6 (non transmis quand absent).
+   * Lu à chaque import.
    */
   readonly importFidelity = input<DocxImportFidelity | undefined>(undefined);
   /**
@@ -404,7 +405,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
    * un chunk séparé), remplace le contenu de l'éditeur en émettant `change` pour que le
    * formulaire voie la nouvelle valeur, et rend le résultat avec ses avertissements.
    * Le hook d'upload de l'éditeur est réutilisé pour les images embarquées. En mode `styled`
-   * (défaut, voir `importFidelity`), le gabarit, la mise en page et les objets non
+   * (défaut de la lib, voir `importFidelity`), le gabarit, la mise en page et les objets non
    * représentables sont conservés dans `importedTemplate`, `layout` et `lostObjects`, et la
    * mise en page est appliquée à la vue page si elle est active. Si le composant est détruit
    * ou remonté pendant l'import, le résultat est rendu mais rien n'est écrit ni conservé :
@@ -414,7 +415,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
     this.requireEditor('importDocx');
     const defaults = untracked(() => ({
       upload: this.resolvedOptions().upload,
-      fidelity: this.importFidelity() ?? 'styled',
+      fidelity: this.importFidelity(),
     }));
     const result = await importWord(file, defaults);
     const editor = this.instance?.editor;
@@ -534,13 +535,9 @@ export class AsterEditorComponent implements ControlValueAccessor {
     this.mountedPageView = untracked(() => this.resolvedPageView());
     this.pendingValue = null;
     // Le dialogue « Mise en page » de la toolbar pose sa mise en page via `setPageView` sans
-    // passer par le composant : le core signale chaque changement de vue page par un
-    // événement DOM sur le contenteditable, on y relit la mise en page en vigueur.
-    const onPageViewChange = (): void => this.readLayoutFromPageView(editor);
-    editor.contentElement.addEventListener(PAGE_VIEW_CHANGE_EVENT, onPageViewChange);
-    this.subscriptions = [
-      () => editor.contentElement.removeEventListener(PAGE_VIEW_CHANGE_EVENT, onPageViewChange),
-    ];
+    // passer par le composant : le core signale chaque changement de vue page par
+    // `pageViewChange` (contrat, L45b), on y adopte la mise en page en vigueur.
+    this.subscriptions = [onPageViewChange(editor, (layout) => this.adoptPageViewLayout(layout))];
     this.subscriptions.push(
       editor.on('ready', ({ editor: ready }) => this.ready.emit(ready)),
       editor.on('change', ({ editor: changed }) => {
@@ -567,7 +564,7 @@ export class AsterEditorComponent implements ControlValueAccessor {
     untracked(() => applyAriaAttributes(editor, this.ariaLabel(), this.ariaLabelledBy()));
     // Une vue page montée depuis `options.pageView` sans import : sa mise en page devient
     // celle du composant (le dialogue de la toolbar part de la même base).
-    this.readLayoutFromPageView(editor);
+    this.adoptPageViewLayout(readPageViewLayout(editor));
     if (untracked(() => this.wordPaste())) {
       this.loadWordPaste();
     }
@@ -646,12 +643,11 @@ export class AsterEditorComponent implements ControlValueAccessor {
   }
 
   /**
-   * Relit la mise en page de la vue page active et l'adopte. Si l'input `layout` la masque,
-   * `layoutChanged` est émis directement pour que l'application puisse l'adopter ; sinon
-   * l'effet sur `layout()` s'en charge.
+   * Adopte la mise en page de la vue page active (`null` : vue inactive, rien à adopter).
+   * Si l'input `layout` la masque, `layoutChanged` est émis directement pour que
+   * l'application puisse l'adopter ; sinon l'effet sur `layout()` s'en charge.
    */
-  private readLayoutFromPageView(editor: AsterEditor): void {
-    const current = readPageViewLayout(editor);
+  private adoptPageViewLayout(current: DocumentLayout | null): void {
     // Rien à relire si la vue montre déjà l'état connu, ou l'input `layout` que le composant
     // vient lui-même de poser : l'état garde alors la mise en page de l'import, retrouvée
     // quand l'input repasse à `undefined`.

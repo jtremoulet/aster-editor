@@ -1,5 +1,5 @@
-import { hasTag, isElement } from './dom-utils';
-import type { PostprocessPass } from './types';
+import { hasTag, isElement } from './dom-utils.js';
+import type { PostprocessPass } from './types.js';
 
 /** Préfixes d'ancres générés par mammoth pour les notes de bas de page et de fin. */
 const NOTE_REF_PREFIXES = ['#footnote-ref-', '#endnote-ref-'] as const;

@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
-import { childrenNamed } from '../preprocess/xml-utils';
-import type { DocxPackage, Relationship, XmlParse } from './types';
+import { childrenNamed } from '../preprocess/xml-utils.js';
+import type { DocxPackage, Relationship, XmlParse } from './types.js';
 
 const DEFAULT_MAIN_PART = 'word/document.xml';
 const ROOT_RELS = '_rels/.rels';

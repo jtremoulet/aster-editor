@@ -1,9 +1,9 @@
 import type { AsterEditor, ToolbarDropdownItem } from '@aster-editor/core';
-import { getIcon } from '../icons';
-import type { ToolbarWidget } from '../types';
-import { clear, el, enabledElements, rovingIndexFor, setIcon } from '../utils/dom';
-import { createPlainButton, resolveIcon, setDisabled } from './button';
-import { applyTooltip } from './tooltip';
+import { getIcon } from '../icons/index.js';
+import type { ToolbarWidget } from '../types.js';
+import { clear, el, enabledElements, rovingIndexFor, setIcon } from '../utils/dom.js';
+import { createPlainButton, resolveIcon, setDisabled } from './button.js';
+import { applyTooltip } from './tooltip.js';
 
 /** Dropdown monté : un déclencheur et un panneau ouvrable au clic. */
 export interface Dropdown extends ToolbarWidget {

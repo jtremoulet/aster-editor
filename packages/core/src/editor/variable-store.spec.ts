@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AsterEditor, VariableValues } from '../api';
+import type { AsterEditor, VariableValues } from '../api/index.js';
 import {
   canInsertVariable,
   isAsterVariableStore,
   isValidVariableName,
   variablePlaceholder,
   type AsterVariableStore,
-} from './variable-store';
-import { mountEditor, type MountedEditor } from '../testing/mount';
+} from './variable-store.js';
+import { mountEditor, type MountedEditor } from '../testing/mount.js';
 
 /** Le magasin concret du core, au-delà du contrat `VariableStore` exposé par l'éditeur. */
 function asterStore(mounted: MountedEditor): AsterVariableStore {
