@@ -213,9 +213,62 @@ describe('transformVariablesXml : contrôles de contenu', () => {
     const { body: out, variables } = transform(body);
     expect(out).toBeNull();
     expect([...variables]).toEqual([]);
-    // Même avec un tag, la liaison l'emporte : Word remplit ce contrôle, pas l'intégrateur.
+    // Même avec un tag, une liaison vers les propriétés du document l'emporte : Word
+    // remplit ce contrôle depuis `docProps/core.xml`, pas l'intégrateur.
     const tagged = `<w:p>${sdt(bound.replace('w:val=""', 'w:val="titre"'), run('x'))}</w:p>`;
     expect(transform(tagged).body).toBeNull();
+  });
+
+  it('contrôle lié à un XML personnalisé avec w:tag nommé : reste une variable (R53-02, contrat session 2)', () => {
+    // Cas E1 de la revue R53 : volet « Mappage XML » de Word, docx4j, OpenXML SDK.
+    const custom =
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'urn:client\'" w:xpath="/ns0:data[1]/ns0:client[1]" w:storeItemID="{Y}"/>';
+    const control = (binding: string): string =>
+      `<w:p>${run('Client : ')}${sdt(`<w:tag w:val="client"/><w:alias w:val="Client"/>${binding}<w:text/>`, run('ACME'))}</w:p>`;
+    const bound = transform(control(custom));
+    expect(bound.body).toBe(
+      `<w:p>${run('Client : ')}<w:r><w:t xml:space="preserve">{{client}}</w:t></w:r></w:p>`,
+    );
+    expect([...bound.variables]).toEqual([['client', { label: 'Client', value: 'ACME' }]]);
+    // Témoin E1b, sans liaison : même résultat.
+    const witness = transform(control(''));
+    expect(witness.body).toBe(bound.body);
+    expect([...witness.variables]).toEqual([...bound.variables]);
+    // `w15:dataBinding` (Word 2013+) et `<w:dataBinding/>` vide : même règle.
+    const w15 =
+      '<w15:dataBinding xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" w:prefixMappings="xmlns:ns0=\'urn:client\'" w:xpath="/ns0:client[1]" w:storeItemID="{Z}"/>';
+    expect(transform(control(w15)).body).toBe(bound.body);
+    expect(transform(control('<w:dataBinding/>')).body).toBe(bound.body);
+  });
+
+  it('contrôle lié structurel : w:tag vide ou absent, ou liaison vers les propriétés du document (R53-02)', () => {
+    const bound = (props: string, binding: string): string =>
+      `<w:p>${sdt(`${props}${binding}<w:text/>`, run('x'))}</w:p>`;
+    const custom =
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'urn:client\'" w:xpath="/ns0:client[1]"/>';
+    // Alias seul, tag vide, tag d'espaces : jamais une variable, même vers un XML personnalisé.
+    expect(transform(bound('<w:alias w:val="Client"/>', custom)).body).toBeNull();
+    expect(transform(bound('<w:alias w:val="Client"/><w:tag w:val=""/>', custom)).body).toBeNull();
+    expect(transform(bound('<w:tag w:val="  "/>', custom)).body).toBeNull();
+    // Tag nommé mais liaison vers les propriétés du document : `dc:` (Dublin Core, via `ns0`
+    // comme Word l'écrit), `cp:coreProperties`, `extended-properties`, `custom-properties`.
+    for (const binding of [
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'http://purl.org/dc/elements/1.1/\'" w:xpath="/ns0:title[1]"/>',
+      '<w:dataBinding w:xpath="/dc:title[1]"/>',
+      '<w:dataBinding w:xpath="/cp:coreProperties[1]/cp:category[1]"/>',
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\'" w:xpath="/ns0:Properties[1]/ns0:Company[1]"/>',
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'http://schemas.openxmlformats.org/officeDocument/2006/custom-properties\'" w:xpath="/ns0:Properties[1]/ns0:property[1]"/>',
+      '<w:dataBinding w:xpath="/op:Properties[1]/op:property[1]"/>',
+      '<w:dataBinding w:xpath="/ep:Properties[1]/ep:Company[1]"/>',
+    ]) {
+      expect(
+        transform(bound('<w:tag w:val="titre"/><w:alias w:val="Titre"/>', binding)).body,
+      ).toBeNull();
+    }
+    // Un nom d'élément qui contient `dc` sans être un préfixe de propriété reste une variable.
+    const lookalike =
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'urn:client\'" w:xpath="/ns0:docRef[1]/ns0:abcdc[1]"/>';
+    expect(transform(bound('<w:tag w:val="ref"/>', lookalike)).body).toContain('{{ref}}');
   });
 
   it('transforme un contrôle de bloc en un paragraphe unique qui garde le w:pPr', () => {

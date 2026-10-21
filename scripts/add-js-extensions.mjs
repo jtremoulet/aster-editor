@@ -11,8 +11,15 @@
 // d'effet (`import './x'`) et les `import('./x')` dynamiques. Ignore les paquets nus,
 // les `.css` / `.json` et tout spécificateur déjà muni d'une extension. Idempotent.
 //
+// Ce n'est pas un parseur (R53-06) : les lignes de commentaire (`//`, `/*`, `*`) sont
+// ignorées, un `from '…'` n'est pris qu'en tête d'instruction (`import` / `export`, ou la
+// fin `} from` d'un import multi-lignes) et un `import('…')` partout ailleurs qu'en
+// commentaire ; une chaîne qui imite un import sur une ligne de code (`"from './x'"`) est
+// donc laissée telle quelle. Le filet de sécurité reste `tsc` dans `npm run check`.
+//
 // Usage : node scripts/add-js-extensions.mjs [--check] [--verbose] [dossier…]
-//   --check    ne modifie rien, liste les spécificateurs sans extension, rend 1 s'il y en a
+//   --check    ne modifie rien, liste les spécificateurs sans extension et ceux qui ne
+//              résolvent rien sur le disque, rend 1 s'il y en a (R53-07)
 //   --verbose  liste chaque réécriture (ou, avec --check, chaque manque)
 //   dossier…   dossiers à traiter (défaut : packages/{core,word,ui}/src)
 import { readdirSync, readFileSync, statSync, writeFileSync, existsSync } from 'node:fs';
@@ -38,6 +45,25 @@ const KNOWN_EXTENSIONS = /\.(?:[cm]?js|[cm]?ts|css|json|scss|svg|html|txt|docx|x
  */
 const SPECIFIER_RE =
   /(\bfrom\s*|\bimport\s*\(\s*|^[ \t]*import\s+)(['"])(\.\.?(?:\/[^'"\n]*)?)\2/gm;
+
+/** Ligne de commentaire : `//`, `/*` ou la continuation `*` d'un bloc JSDoc. */
+const COMMENT_LINE_RE = /^\s*(?:\/\/|\/\*|\*)/;
+
+/**
+ * Début de ligne admis avant un `from '…'` : une instruction `import` / `export` sans
+ * guillemet avant le `from` (`import { a } from`, `export * from`, `import type X from`),
+ * ou la fin `} from` d'un import multi-lignes.
+ */
+const STATEMENT_HEAD_RE = /^\s*(?:(?:import|export)\b[^'"`]*|\})\s*$/;
+
+/** Vrai si la correspondance à `offset` est en commentaire ou dans une chaîne (approximation). */
+function isIgnoredMatch(content, offset, prefix) {
+  const lineStart = content.lastIndexOf('\n', offset - 1) + 1;
+  const head = content.slice(lineStart, offset);
+  if (COMMENT_LINE_RE.test(head)) return true;
+  if (prefix.startsWith('from')) return !STATEMENT_HEAD_RE.test(head);
+  return false;
+}
 
 /** Parcours récursif : tous les `.ts` du dossier (specs comprises), hors `node_modules`. */
 function listTsFiles(dir, out = []) {
@@ -106,6 +132,7 @@ for (const dir of targets) {
     const content = readFileSync(file, 'utf8');
     let changed = false;
     const next = content.replace(SPECIFIER_RE, (whole, prefix, quote, spec, offset) => {
+      if (isIgnoredMatch(content, offset, prefix)) return whole;
       const result = fix(file, spec);
       if (!result) return whole;
       const where = `${label(file)}:${lineOf(content, offset)}`;
@@ -132,15 +159,24 @@ for (const line of unresolved)
 
 const summary = [...counts.entries()].map(([pkg, n]) => `${pkg}: ${n}`).join(', ');
 if (CHECK) {
+  let failed = false;
   if (missing.length) {
     if (!VERBOSE) for (const line of missing) console.log(`  ${line}`);
     console.error(
       `✖ ${missing.length} spécificateur(s) relatif(s) sans extension .js (${summary}). ` +
         'Corrige avec : node scripts/add-js-extensions.mjs',
     );
-    process.exit(1);
+    failed = true;
   }
-  console.log('✔ tous les spécificateurs relatifs portent une extension .js');
+  if (unresolved.length) {
+    // Un dossier sans `index.ts`, un `.js` sans `.ts` en face : tsc le refuserait aussi (TS2307).
+    console.error(
+      `✖ ${unresolved.length} spécificateur(s) relatif(s) qui ne résolvent aucun .ts sur le disque`,
+    );
+    failed = true;
+  }
+  if (failed) process.exit(1);
+  console.log('✔ tous les spécificateurs relatifs portent une extension .js et résolvent un .ts');
 } else {
   console.log(
     missing.length

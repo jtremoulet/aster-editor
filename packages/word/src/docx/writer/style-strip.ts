@@ -156,6 +156,20 @@ export function styleOnly(properties: Element, styleElement: string): Element | 
   return clone;
 }
 
+/**
+ * Égalité d'un interligne à la valeur rendue : un paragraphe qui ne dit rien et un qui
+ * écrit `w:line="240" w:lineRule="auto"` ont le même interligne simple (R53-01, même
+ * tolérance que le comparateur). `lineHeightPt` reste comparé tel quel.
+ */
+export function sameLineHeight(a: ResolvedParagraphProps, b: ResolvedParagraphProps): boolean {
+  return a.lineHeightPt === b.lineHeightPt && (a.lineHeight ?? 1) === (b.lineHeight ?? 1);
+}
+
+/** Égalité d'un espacement à la valeur rendue : absent vaut 0 pt. */
+export function sameSpacing(a: number | undefined, b: number | undefined): boolean {
+  return (a ?? 0) === (b ?? 0);
+}
+
 /** Égalité structurelle de deux jeux de bordures du contrat. */
 export function sameBorders(
   a: readonly BlockBorder[] | undefined,
@@ -187,17 +201,13 @@ export function stripParagraphProperties(
         break;
       case 'spacing': {
         const drop: string[] = [];
-        if (wordAttr(child, 'before') && full.spacingBeforePt === base.spacingBeforePt) {
+        if (wordAttr(child, 'before') && sameSpacing(full.spacingBeforePt, base.spacingBeforePt)) {
           drop.push('before');
         }
-        if (wordAttr(child, 'after') && full.spacingAfterPt === base.spacingAfterPt) {
+        if (wordAttr(child, 'after') && sameSpacing(full.spacingAfterPt, base.spacingAfterPt)) {
           drop.push('after');
         }
-        if (
-          wordAttr(child, 'line') &&
-          full.lineHeight === base.lineHeight &&
-          full.lineHeightPt === base.lineHeightPt
-        ) {
+        if (wordAttr(child, 'line') && sameLineHeight(full, base)) {
           drop.push('line', 'lineRule');
         }
         if (dropAttributes(child, drop)) child.remove();

@@ -248,9 +248,11 @@ describe('styles', () => {
       '<w:p><w:pPr><w:pStyle w:val="Important"/></w:pPr><w:r><w:t xml:space="preserve">Important</w:t></w:r></w:p>',
     );
     // Sans mise en page ni marques dans le HTML : le style est annulé propriété par propriété
-    // (le lecteur n'écrit que ce qui diffère des docDefaults, un HTML nu signifie docDefaults).
+    // (le lecteur n'écrit que ce qui diffère des docDefaults, un HTML nu signifie docDefaults),
+    // sauf l'interligne et l'espacement après : un HTML nu y signifie le `Normal` du
+    // document (1,15 / 8 pt), qu'`Important` hérite déjà — rien à réécrire (R53-01).
     expect(body).toContain(
-      '<w:p><w:pPr><w:pStyle w:val="Important"/><w:pBdr><w:left w:val="nil"/></w:pBdr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="0"/></w:pPr>' +
+      '<w:p><w:pPr><w:pStyle w:val="Important"/><w:pBdr><w:left w:val="nil"/></w:pBdr><w:ind w:left="0"/></w:pPr>' +
         '<w:r><w:rPr><w:b w:val="0"/><w:bCs w:val="0"/><w:i w:val="0"/><w:iCs w:val="0"/><w:color w:val="auto"/></w:rPr><w:t xml:space="preserve">Sans rien</w:t></w:r></w:p>',
     );
     expect(result.warnings).toEqual([]);

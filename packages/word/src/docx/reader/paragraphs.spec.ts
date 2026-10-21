@@ -425,14 +425,15 @@ describe('fixtures 11-13 (chemin styled)', () => {
       fidelity: 'styled',
     });
     expect(layout.defaultFont).toEqual({ family: 'Calibri', sizePt: 11 });
-    expect(out).toContain(
-      '<p style="line-height: 1.15; margin-bottom: 8pt" data-docx-style="Normal">Paragraphe Normal',
-    );
+    // `Normal` (1,15 / après 8 pt) est `layout.defaultParagraph` : plus rien sur les
+    // paragraphes qui le portent, ni sur les styles qui en héritent (R53-01).
+    expect(layout.defaultParagraph).toEqual({ lineHeight: 1.15, spacingAfterPt: 8 });
+    expect(out).toContain('<p data-docx-style="Normal">Paragraphe Normal');
     expect(out).toMatch(
-      /<h1 style="line-height: 1.15; margin-top: 12pt; margin-bottom: 4pt" data-docx-style="Heading1" data-keep-next=""><span style="color: #2f5496; font-size: 16pt"><strong>Titre 1/,
+      /<h1 style="margin-top: 12pt; margin-bottom: 4pt" data-docx-style="Heading1" data-keep-next=""><span style="color: #2f5496; font-size: 16pt"><strong>Titre 1/,
     );
     expect(out).toContain(
-      '<p style="line-height: 1.15; margin-bottom: 8pt; margin-left: 28.35pt; border-left: 1.5pt solid #808080; padding-left: 4pt" data-docx-style="Citation"><em>Paragraphe Citation',
+      '<p style="margin-left: 28.35pt; border-left: 1.5pt solid #808080; padding-left: 4pt" data-docx-style="Citation"><em>Paragraphe Citation',
     );
     expect(out).toContain(
       'data-docx-style="Important"><span style="color: #c00000"><strong><em>Paragraphe Important',

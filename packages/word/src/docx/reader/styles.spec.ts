@@ -587,8 +587,9 @@ describe('createStyleResolver', () => {
         'lineHeightPt',
       );
       expect(paragraph('<w:spacing w:line="31680" w:lineRule="exact"/>').lineHeightPt).toBe(1584);
-      // Espacements et retraits dans ±1584 pt.
-      expect(paragraph('<w:spacing w:before="-100"/>').spacingBeforePt).toBe(-5);
+      // Espacements dans [0, 1584] pt (`ST_TwipsMeasure` non signé, R53-03), retraits dans ±1584 pt.
+      expect(paragraph('<w:spacing w:before="-100"/>').spacingBeforePt).toBeUndefined();
+      expect(paragraph('<w:spacing w:before="0"/>').spacingBeforePt).toBe(0);
       expect(paragraph('<w:spacing w:before="31700"/>').spacingBeforePt).toBeUndefined();
       expect(paragraph('<w:spacing w:after="99999999999"/>').spacingAfterPt).toBe(8);
       expect(paragraph('<w:ind w:left="31700" w:right="-31700"/>')).not.toHaveProperty(

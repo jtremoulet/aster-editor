@@ -3,7 +3,7 @@ import { childNamed } from '../preprocess/xml-utils.js';
 import { escapeAttr, pt, styleAttr } from './html.js';
 import { tabStopsOf, type DocxParagraphProps } from './properties.js';
 import { convertRuns, PAGE_BREAK } from './runs.js';
-import { docDefaultsOf, tableParagraphDefaultsOf } from './styles.js';
+import { docDefaultsOf, paragraphBaseOf, tableParagraphDefaultsOf } from './styles.js';
 import type {
   ConverterContext,
   ParagraphBlock,
@@ -14,8 +14,11 @@ import type {
 
 /**
  * Paragraphe Word → `<p …>` ou `<hN …>` avec la sérialisation exacte du contrat
- * (`packages/core/src/api/layout.ts`). Les valeurs égales aux `docDefaults` ne sont pas
- * écrites. Un `w:br w:type="page"` au milieu du paragraphe coupe le bloc : le `html` du
+ * (`packages/core/src/api/layout.ts`). Les valeurs égales à la base d'émission ne sont
+ * pas écrites : les `docDefaults` pour tout, sauf l'interligne et les espacements avant /
+ * après, comparés à `layout.defaultParagraph` (`docDefaults` puis `Normal`, R53-01), ce
+ * que la vue page et l'export neuf appliquent à un paragraphe sans valeur propre.
+ * Un `w:br w:type="page"` au milieu du paragraphe coupe le bloc : le `html` du
  * `ParagraphBlock` contient alors plusieurs frères (`<p>a</p><hr data-page-break><p>b</p>`),
  * que le rendu concatène tels quels (décision figée, L25 les laisse hors liste).
  */
@@ -130,7 +133,16 @@ function sameBorders(
   return JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
 }
 
-/** Attributs du bloc dans l'ordre du contrat : `style`, `data-docx-style`, puis les drapeaux. */
+/**
+ * Attributs du bloc dans l'ordre du contrat : `style`, `data-docx-style`, puis les
+ * drapeaux. `base` est la base d'émission (`paragraphBaseOf`) : interligne et espacements
+ * avant / après y sont ceux de `layout.defaultParagraph`. Un paragraphe résolu **sans**
+ * valeur alors que la base en porte une (style sans `basedOn` dans un document au `Normal`
+ * modifié, R53-01) écrit explicitement le défaut de Word (`line-height: 1`,
+ * `margin-*: 0pt`), sinon la vue page et l'export neuf lui appliqueraient le défaut du
+ * document. Une valeur explicite égale au défaut de Word quand la base n'en a pas
+ * (`w:after="0"` posé par un style de tableau) reste écrite, comme avant.
+ */
 export function paragraphAttributes(
   props: ResolvedParagraphProps,
   base: ParagraphBase,
@@ -140,12 +152,24 @@ export function paragraphAttributes(
     props[key] !== undefined && props[key] !== base[key] ? props[key] : undefined;
   const ptOrNone = (value: number | undefined): string | undefined =>
     value === undefined ? undefined : pt(value);
+  /** Espacement avant / après : la valeur si elle diffère de la base, `0pt` si la base en a une et pas le paragraphe. */
+  const spacing = (key: 'spacingBeforePt' | 'spacingAfterPt'): string | undefined => {
+    const value = props[key];
+    if (value !== undefined) return value !== base[key] ? pt(value) : undefined;
+    const fallback = base[key];
+    return fallback !== undefined && fallback !== 0 ? pt(0) : undefined;
+  };
 
   let lineHeight: string | undefined;
   if (props.lineHeightPt !== undefined) {
     if (props.lineHeightPt !== base.lineHeightPt) lineHeight = pt(props.lineHeightPt);
-  } else if (props.lineHeight !== undefined && props.lineHeight !== base.lineHeight) {
-    lineHeight = String(props.lineHeight);
+  } else if (props.lineHeight !== undefined) {
+    if (props.lineHeight !== base.lineHeight) lineHeight = String(props.lineHeight);
+  } else if (
+    base.lineHeightPt !== undefined ||
+    (base.lineHeight !== undefined && base.lineHeight !== 1)
+  ) {
+    lineHeight = '1';
   }
 
   const borders = sameBorders(props.borders, base.borders) ? [] : (props.borders ?? []);
@@ -155,8 +179,8 @@ export function paragraphAttributes(
   const style = styleAttr([
     ['text-align', props.align && props.align !== 'left' ? props.align : undefined],
     ['line-height', lineHeight],
-    ['margin-top', ptOrNone(differs('spacingBeforePt'))],
-    ['margin-bottom', ptOrNone(differs('spacingAfterPt'))],
+    ['margin-top', spacing('spacingBeforePt')],
+    ['margin-bottom', spacing('spacingAfterPt')],
     ['margin-left', ptOrNone(differs('indentLeftPt'))],
     ['margin-right', ptOrNone(differs('indentRightPt'))],
     ['text-indent', ptOrNone(differs('indentFirstLinePt'))],
@@ -201,7 +225,9 @@ export async function convertParagraph(
   const { props, fromList } = applyListIndent(resolved, pPr, ctx);
   const inline = await convertRuns(paragraph, ctx, props);
   const tag = props.headingLevel ? `h${String(props.headingLevel)}` : 'p';
-  const attrs = paragraphAttributes(props, defaults.paragraph, fromList);
+  // Le style de tableau se résout contre les `docDefaults` seuls ; l'émission, contre la
+  // base qui porte `layout.defaultParagraph` (R53-01).
+  const attrs = paragraphAttributes(props, paragraphBaseOf(ctx.styles), fromList);
   const wrap = (content: string): string => `<${tag}${attrs}>${content}</${tag}>`;
 
   const pieces = inline.split(PAGE_BREAK);

@@ -58,6 +58,12 @@ export interface MutableParagraph {
   align?: ParagraphAlign;
   lineHeight?: number;
   lineHeightPt?: number;
+  /**
+   * Règle de l'interligne en points (`w:lineRule`), posée avec `lineHeightPt` : `exact`
+   * ou `atLeast`. Le contrat ne distingue pas les deux (`lineHeightPt` = exact) ; la
+   * règle sert à ne pas transporter un « au moins » dans `layout.defaultParagraph` (R53-04).
+   */
+  lineRule?: 'exact' | 'atLeast';
   spacingBeforePt?: number;
   spacingAfterPt?: number;
   indentLeftPt?: number;
@@ -187,23 +193,31 @@ function readAlign(jc: Element): ParagraphAlign | undefined {
   }
 }
 
+/**
+ * `w:spacing` : `w:before` / `w:after` sont des `ST_TwipsMeasure`, non signés — une valeur
+ * négative vient d'un producteur cassé et est ignorée (R53-03) ; `w:line` vaut un multiple
+ * (`auto`, en 240e) ou des points (`exact`, `atLeast`), strictement positifs ; un
+ * `w:lineRule` inconnu est ignoré, comme Word ignore un attribut hors schéma (R53-04).
+ */
 function applySpacing(spacing: Element, acc: MutableParagraph): void {
   const before = distanceAttr(wordAttribute(spacing, 'before'));
-  if (before !== undefined) acc.spacingBeforePt = before;
+  if (before !== undefined && before >= 0) acc.spacingBeforePt = before;
   const after = distanceAttr(wordAttribute(spacing, 'after'));
-  if (after !== undefined) acc.spacingAfterPt = after;
+  if (after !== undefined && after >= 0) acc.spacingAfterPt = after;
   const line = numberAttr(wordAttribute(spacing, 'line'));
   if (line === undefined) return;
   const rule = wordAttribute(spacing, 'lineRule') || 'auto';
   if (rule === 'auto') {
     const multiple = bounded(lineToMultiple(line), 0, WORD_LIMITS.lineMultipleMax);
-    if (multiple === undefined) return;
+    if (multiple === undefined || multiple <= 0) return;
     acc.lineHeight = multiple;
     delete acc.lineHeightPt;
-  } else {
+    delete acc.lineRule;
+  } else if (rule === 'exact' || rule === 'atLeast') {
     const exact = bounded(twipsToPt(line), 0, WORD_LIMITS.distanceMaxPt);
-    if (exact === undefined) return;
+    if (exact === undefined || exact <= 0) return;
     acc.lineHeightPt = exact;
+    acc.lineRule = rule;
     delete acc.lineHeight;
   }
 }

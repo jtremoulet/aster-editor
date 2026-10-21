@@ -263,6 +263,22 @@ describe('chemins candidats du retour n° 1 sur des .docx minimaux', () => {
     expect(result.variables).toEqual([{ name: 'Nom' }]);
   });
 
+  it('contrôle lié à un XML personnalisé avec w:tag nommé : variable, libellé et valeur (R53-02, cas E1)', async () => {
+    const custom =
+      '<w:sdt><w:sdtPr><w:tag w:val="client"/><w:alias w:val="Client"/>' +
+      '<w:dataBinding w:prefixMappings="xmlns:ns0=\'urn:client\'" w:xpath="/ns0:data[1]/ns0:client[1]" w:storeItemID="{Y}"/>' +
+      `<w:text/></w:sdtPr><w:sdtContent>${runXml('ACME')}</w:sdtContent></w:sdt>`;
+    const result = await importDocx(await buildDocx(`<w:p>${runXml('Client : ')}${custom}</w:p>`), {
+      fidelity: 'styled',
+    });
+    expect(result.html).toBe(
+      '<p>Client : <span data-aster-variable="client" data-label="Client">{{client}}</span></p>',
+    );
+    expect(result.variables).toEqual([{ name: 'client', label: 'Client', value: 'ACME' }]);
+    expect(result.lost).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
   it('contrôle non lié avec alias seul : reste une variable (`w:alias` normalisé, fixture 10)', async () => {
     const docx = await buildDocx(
       '<w:p><w:sdt><w:sdtPr><w:alias w:val="Titre"/><w:id w:val="8"/><w:text/></w:sdtPr>' +

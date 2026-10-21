@@ -18,14 +18,11 @@ import {
  */
 
 /**
- * Propriétés `w:sdtPr` qui désignent un contrôle structurel ou lié, jamais une variable :
- * table des matières et blocs de construction (`docPartObj`), groupes, images,
- * bibliographie, sections répétées, case à cocher (`w14:checkbox`, dont le symbole
- * coché / décoché est du texte, pas une valeur), et contrôle **lié à une donnée du
- * document** (`w:dataBinding`, session 5 / retour POC n° 1) : c'est la forme des
- * « Propriétés du document » de Word (Titre, Auteur, Société… en en-tête, `w:alias`
- * localisé « Titre ») et des liaisons XML personnalisées, que Word remplit lui-même
- * depuis `docProps/core.xml` ou un `customXml`. Il rend son contenu, jamais `{{Titre}}`.
+ * Propriétés `w:sdtPr` qui désignent un contrôle structurel, jamais une variable : table
+ * des matières et blocs de construction (`docPartObj`), groupes, images, bibliographie,
+ * sections répétées, case à cocher (`w14:checkbox`, dont le symbole coché / décoché est
+ * du texte, pas une valeur). Les contrôles liés (`w:dataBinding`) sont jugés à part, voir
+ * `isBoundToDocument`.
  */
 const STRUCTURAL_SDT: ReadonlySet<string> = new Set([
   'docPartObj',
@@ -38,8 +35,44 @@ const STRUCTURAL_SDT: ReadonlySet<string> = new Set([
   'repeatingSection',
   'repeatingSectionItem',
   'checkbox',
-  'dataBinding',
 ]);
+
+/**
+ * Liaison vers les propriétés du document (`w:xpath` ou `w:prefixMappings`) : parties
+ * `core-properties` (`cp:`, Dublin Core `dc:` / `dcterms:`), `extended-properties` (`ep:`)
+ * et `custom-properties` (`op:`), par leur préfixe usuel ou leur espace de noms (Word
+ * écrit `ns0` mappé sur `http://purl.org/dc/elements/1.1/`).
+ */
+const DOCUMENT_PROPERTIES_BINDING =
+  /coreProperties|core-properties|extended-properties|customProperties|custom-properties|purl\.org\/dc\/|(?:^|[^\w:])(?:dc|dcterms|cp|ep|op):/;
+
+/** Valeur d'un attribut par son nom local, quel que soit son préfixe (`w:xpath` sous `w15:dataBinding`). */
+function attributeByLocalName(element: Element, localName: string): string {
+  for (const attribute of Array.from(element.attributes)) {
+    if (attribute.localName === localName) return attribute.value;
+  }
+  return '';
+}
+
+/**
+ * Contrôle **lié à une donnée du document** (`w:dataBinding` ou `w15:dataBinding`), que
+ * Word remplit lui-même et qui rend son contenu, jamais `{{Titre}}` (session 5 / retour
+ * POC n° 1) : c'est la forme des « Propriétés du document » de Word (Titre, Auteur,
+ * Société… en en-tête, `w:alias` localisé « Titre », `w:tag` **vide**, liaison vers
+ * `dc:title` de `docProps/core.xml`). Un contrôle lié est donc structurel si son `w:tag`
+ * est vide ou absent, **ou** si sa liaison vise les propriétés du document. Un contrôle
+ * mappé par l'intégrateur sur un XML personnalisé **avec** un `w:tag` nommé (volet
+ * « Mappage XML » de Word, docx4j, OpenXML SDK) reste une variable : le `w:tag` donne le
+ * nom, contrat de la session 2 (R53-02).
+ */
+function isBoundToDocument(sdtPr: Element): boolean {
+  const binding = childNamed(sdtPr, 'dataBinding');
+  if (!binding) return false;
+  const tag = childNamed(sdtPr, 'tag');
+  if (!tag || wordAttribute(tag, 'val').trim() === '') return true;
+  const target = `${attributeByLocalName(binding, 'xpath')} ${attributeByLocalName(binding, 'prefixMappings')}`;
+  return DOCUMENT_PROPERTIES_BINDING.test(target);
+}
 
 /**
  * Conteneurs transparents entre un contrôle et son paragraphe : un `w:sdt` dont le
@@ -68,6 +101,7 @@ function contentControlIdentity(sdtPr: Element): { name: string; label?: string 
   if (Array.from(sdtPr.children).some((child) => STRUCTURAL_SDT.has(child.localName))) {
     return null;
   }
+  if (isBoundToDocument(sdtPr)) return null;
   const tag = childNamed(sdtPr, 'tag');
   const alias = childNamed(sdtPr, 'alias');
   const label = alias ? wordAttribute(alias, 'val') : '';

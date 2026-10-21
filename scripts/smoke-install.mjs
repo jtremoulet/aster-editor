@@ -3,6 +3,7 @@
 // monorepo ne teste jamais (il résout tout via les `paths` de tsconfig) :
 // - les `exports` et les types se résolvent par les vrais `node_modules` ;
 // - les imports nus entre paquets (`@aster-editor/core` depuis `ui`) fonctionnent ;
+// - aucun spécificateur relatif sans extension ne traîne dans les `dist` emballés (R53-08) ;
 // - le sous-chemin CSS `@aster-editor/ui/themes/aster.css` est servi ;
 // - esbuild sait empaqueter l'usage vanilla ;
 // - `ngc` compile un composant standalone qui utilise `<aster-editor>`.
@@ -113,6 +114,40 @@ if (tiptapCopies.length !== 1) {
   process.exit(1);
 }
 console.log('✔ une seule copie de @tiptap/core');
+
+// 2c. Aucun spécificateur relatif sans extension dans les `dist` emballés (R53-08) : Node
+// refuserait `from './api'`, et un résidu d'une source supprimée (`dist` non vidé avant
+// `tsc`) peut en porter encore sans que l'import des paquets (étape 6) le voie, puisque
+// rien ne l'importe. On lit les fichiers tels qu'installés depuis les tarballs.
+writeFileSync(
+  join(app, 'dist-specifiers.mjs'),
+  `import { readdirSync, readFileSync } from 'node:fs';
+const KNOWN = /\\.(?:[cm]?js|css|json)$/;
+const SPECIFIER = /(?:\\bfrom\\s*|\\bimport\\s*\\(\\s*|^[ \\t]*import\\s+)(['"])(\\.\\.?(?:\\/[^'"\\n]*)?)\\1/gm;
+const offenders = [];
+const walk = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = dir + '/' + entry.name;
+    if (entry.isDirectory()) walk(path);
+    else if (/\\.(?:js|d\\.ts)$/.test(entry.name)) {
+      const content = readFileSync(path, 'utf8');
+      for (const match of content.matchAll(SPECIFIER)) {
+        if (!KNOWN.test(match[2])) offenders.push(path + "  '" + match[2] + "'");
+      }
+    }
+  }
+};
+for (const name of ['core', 'word', 'ui']) walk('node_modules/@aster-editor/' + name + '/dist');
+console.log(JSON.stringify(offenders));
+`,
+);
+const distOffenders = JSON.parse(capture('node dist-specifiers.mjs', app));
+if (distOffenders.length) {
+  console.error('✖ Spécificateurs relatifs sans extension dans les dist emballés :');
+  for (const offender of distOffenders) console.error(`  - ${offender}`);
+  process.exit(1);
+}
+console.log('✔ dist : aucun spécificateur relatif sans extension (core, word, ui)');
 
 // 3. Résolution des sous-chemins (exports) depuis Node.
 const probe = `

@@ -60,20 +60,33 @@ export interface DocxStyleResolver extends StyleResolver {
 
 /**
  * Accumulateur de paragraphe résolu → `DefaultParagraph` du contrat : interligne multiple
- * (`w:lineRule="auto"`) ou exact / minimal (`lineHeightPt`, qui l'emporte), espacements
- * avant et après en points. Rien n'est écrit pour le défaut de Word (interligne simple,
- * 0 pt) : un objet vide signifie « les défauts d'Aster ».
+ * (`w:lineRule="auto"`) ou exact (`lineHeightPt`, qui l'emporte), espacements avant et
+ * après en points. Rien n'est écrit pour le défaut de Word (interligne simple, 0 pt) : un
+ * objet vide signifie « les défauts d'Aster ». Un interligne « au moins » (`atLeast`)
+ * n'est **pas** transporté (R53-04) : le contrat ne connaît que l'exact, et un `exact` à
+ * la place d'un `atLeast` dans les `docDefaults` de l'export neuf tronquerait toute ligne
+ * plus haute (image inline, police plus grande) dans tout le document ; les paragraphes
+ * continuent de le porter en `lineHeightPt` (comportement figé, voir `README.md`).
+ * Les valeurs irrecevables (`lineHeightPt <= 0`, espacements négatifs) sont déjà
+ * écartées par `applySpacing` (R53-03) ; la garde reste ici pour un accumulateur tiers.
  */
 function toDefaultParagraph(paragraph: MutableParagraph): DefaultParagraph {
   const out: { -readonly [K in keyof DefaultParagraph]: DefaultParagraph[K] } = {};
-  if (paragraph.lineHeightPt !== undefined) out.lineHeightPt = paragraph.lineHeightPt;
-  else if (paragraph.lineHeight !== undefined && paragraph.lineHeight !== 1) {
+  if (paragraph.lineHeightPt !== undefined) {
+    if (paragraph.lineRule !== 'atLeast' && paragraph.lineHeightPt > 0) {
+      out.lineHeightPt = paragraph.lineHeightPt;
+    }
+  } else if (
+    paragraph.lineHeight !== undefined &&
+    paragraph.lineHeight > 0 &&
+    paragraph.lineHeight !== 1
+  ) {
     out.lineHeight = paragraph.lineHeight;
   }
-  if (paragraph.spacingBeforePt !== undefined && paragraph.spacingBeforePt !== 0) {
+  if (paragraph.spacingBeforePt !== undefined && paragraph.spacingBeforePt > 0) {
     out.spacingBeforePt = paragraph.spacingBeforePt;
   }
-  if (paragraph.spacingAfterPt !== undefined && paragraph.spacingAfterPt !== 0) {
+  if (paragraph.spacingAfterPt !== undefined && paragraph.spacingAfterPt > 0) {
     out.spacingAfterPt = paragraph.spacingAfterPt;
   }
   return out;
@@ -88,6 +101,36 @@ export function defaultParagraphOf(styles: StyleResolver): DefaultParagraph {
     return (styles as DocxStyleResolver).defaultParagraph();
   }
   return {};
+}
+
+/** Clés de `ResolvedParagraphProps` que `layout.defaultParagraph` gouverne. */
+const DEFAULT_PARAGRAPH_KEYS = [
+  'lineHeight',
+  'lineHeightPt',
+  'spacingBeforePt',
+  'spacingAfterPt',
+] as const;
+
+/**
+ * Base d'émission d'un paragraphe (R53-01) : les `docDefaults` du document pour toutes
+ * les propriétés, **sauf** l'interligne et les espacements avant / après, pris dans
+ * `defaultParagraph()` (`docDefaults` puis `Normal`). C'est ce que la vue page
+ * (`--aster-page-default-*`) et l'export neuf (`w:pPrDefault`) appliquent à un paragraphe
+ * sans valeur propre : le lecteur ne doit donc écrire que ce qui en diffère, et la greffe
+ * (`writer/styles-merge.ts`) réconcilie le corps greffé contre la même base. Le défaut de
+ * Word (interligne simple, 0 pt) y reste absent, comme dans `defaultParagraph()`.
+ */
+export function paragraphBaseOf(styles: StyleResolver): ResolvedParagraphProps {
+  const base: { -readonly [K in keyof ResolvedParagraphProps]?: ResolvedParagraphProps[K] } = {
+    ...docDefaultsOf(styles).paragraph,
+  };
+  for (const key of DEFAULT_PARAGRAPH_KEYS) delete base[key];
+  const paragraph = defaultParagraphOf(styles);
+  if (paragraph.lineHeightPt !== undefined) base.lineHeightPt = paragraph.lineHeightPt;
+  else if (paragraph.lineHeight !== undefined) base.lineHeight = paragraph.lineHeight;
+  if (paragraph.spacingBeforePt !== undefined) base.spacingBeforePt = paragraph.spacingBeforePt;
+  if (paragraph.spacingAfterPt !== undefined) base.spacingAfterPt = paragraph.spacingAfterPt;
+  return base as ResolvedParagraphProps;
 }
 
 /** Formats conditionnels d'un style de tableau, `undefined` pour un style tiers ou sans `w:tblStylePr`. */
