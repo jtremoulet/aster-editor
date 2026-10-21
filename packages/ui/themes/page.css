@@ -607,10 +607,22 @@
 
 /* ---------- Dialogue « Mise en page » : en-têtes et pieds (L54) ---------- */
 
-/* Deux colonnes de champs riches : le dialogue s'élargit pour les loger. */
+/*
+ * Deux colonnes de champs riches : le dialogue s'élargit pour les loger, sans jamais
+ * dépasser la fenêtre (`min-width` l'emporte sur `max-width`, CSS 2.1 §10.4 : il est
+ * lui-même borné, R52-07) ; sur un écran étroit les colonnes passent à la ligne.
+ */
 .aster-page-layout {
-  min-width: 520px;
+  min-width: min(520px, 90vw);
   max-width: min(90vw, 720px);
+}
+
+.aster-page-layout__headers > .aster-dialog__row {
+  flex-wrap: wrap;
+}
+
+.aster-page-layout__headers > .aster-dialog__row > .aster-page-layout__column {
+  flex: 1 1 200px;
 }
 
 .aster-page-layout__hint {

@@ -36,15 +36,20 @@ export type PageDefaultCssVariable = (typeof PAGE_DEFAULT_CSS_VARIABLES)[number]
 /** Valeurs des variables de défauts, seules les connues sont présentes. */
 export type PageDefaultsCssValues = Partial<Record<PageDefaultCssVariable, string>>;
 
-/** Nombre fini, positif ou nul (ou strictement positif) et borné, sinon `null`. */
+/**
+ * Nombre fini, positif ou nul (ou strictement positif) et borné, **arrondi** à deux
+ * décimales, sinon `null`. La borne est testée sur la valeur arrondie : `0.004` arrondit à
+ * `0`, qui ferait un interligne ou un corps nul à l'écran (R52-06).
+ */
 function boundedNumber(value: unknown, strict: boolean): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value > LAYOUT_NUMBER_LIMIT) {
     return null;
   }
-  if (strict ? value <= 0 : value < 0) {
+  const rounded = roundLayoutNumber(value);
+  if (strict ? rounded <= 0 : rounded < 0) {
     return null;
   }
-  return roundLayoutNumber(value);
+  return rounded;
 }
 
 /**

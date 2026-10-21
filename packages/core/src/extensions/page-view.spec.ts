@@ -465,15 +465,24 @@ describe('vue page', () => {
       );
       expect(headerFooterHtmlFor(section, 'footers', FIRST_PAGE)).toBe('');
       expect(headerFooterHtmlFor({}, 'headers', FIRST_PAGE)).toBe('');
-      // `titlePage` sans `first` : `default` (repli), `even` sur une page paire.
+      // `titlePage` sans `first` : `default` (repli), jamais `even`, même si la première page
+      // de la section est paire (R52-05) ; `even` sur les autres pages paires.
       const noFirst: SectionLayout = {
         titlePage: true,
         headers: { default: { html: '<p>D</p>' }, even: { html: '<p>E</p>' } },
       };
       expect(headerFooterHtmlFor(noFirst, 'headers', FIRST_PAGE)).toBe('<p>D</p>');
       expect(headerFooterHtmlFor(noFirst, 'headers', { pageNumber: 2, firstOfSection: true })).toBe(
-        '<p>E</p>',
+        '<p>D</p>',
       );
+      expect(
+        headerFooterHtmlFor(noFirst, 'headers', { pageNumber: 2, firstOfSection: false }),
+      ).toBe('<p>E</p>');
+      // Sans `default` non plus : rien (Word laisse la page vide), pas `even`.
+      const evenOnly: SectionLayout = { titlePage: true, headers: { even: { html: '<p>E</p>' } } };
+      expect(
+        headerFooterHtmlFor(evenOnly, 'headers', { pageNumber: 2, firstOfSection: true }),
+      ).toBe('');
       expect(isContinuousSection({ sections: [{}, { start: 'continuous' }] }, 2)).toBe(true);
       expect(isContinuousSection({ sections: [{}, { start: 'nextPage' }] }, 2)).toBe(false);
       expect(isContinuousSection({}, 1)).toBe(false);
@@ -516,6 +525,21 @@ describe('vue page', () => {
       ).toEqual({
         '--aster-page-default-spacing-before': '0pt',
         '--aster-page-default-spacing-after': '6pt',
+      });
+      // R52-06 : la borne est testée sur la valeur arrondie. `0.004` arrondit à `0` : un
+      // interligne, un interligne exact ou un corps nul sont rejetés ; un espacement nul
+      // reste permis ; `0.005` arrondit à `0.01`, accepté.
+      expect(pageDefaultsCssValues({ defaultParagraph: { lineHeight: 0.004 } })).toEqual({});
+      expect(pageDefaultsCssValues({ defaultParagraph: { lineHeightPt: 0.001 } })).toEqual({});
+      expect(pageDefaultsCssValues({ defaultFont: { sizePt: 0.004 } })).toEqual({});
+      expect(
+        pageDefaultsCssValues({ defaultParagraph: { lineHeightPt: 0.001, lineHeight: 1.5 } }),
+      ).toEqual({ '--aster-page-default-line-height': '1.5' });
+      expect(pageDefaultsCssValues({ defaultParagraph: { spacingBeforePt: 0.004 } })).toEqual({
+        '--aster-page-default-spacing-before': '0pt',
+      });
+      expect(pageDefaultsCssValues({ defaultFont: { sizePt: 0.005 } })).toEqual({
+        '--aster-page-font-size': '0.01pt',
       });
       // Retrait : plus de variable, plus de classe, `style` nettoyé.
       impl(mounted.editor).setPageView(false);

@@ -25,9 +25,10 @@ export const FIRST_PAGE: HeaderFooterPage = Object.freeze({ pageNumber: 1, first
  * page donnée, `''` s'il n'y en a pas. Règles de Word : sur la première page d'une section
  * `titlePage`, c'est `first` qui compte ; sur une page paire, `even` s'il existe ; `default`
  * partout ailleurs. Écart assumé avec Word : un `first` absent retombe sur `default` (Word
- * laisse la page vide) pour qu'un intégrateur qui ne renseigne que `default` sur un
- * document `titlePage` voie son en-tête, le lecteur `.docx` héritant de toute façon
- * `first` type par type quand le document en a un.
+ * laisse la page vide), **jamais sur `even`** même si cette première page est paire
+ * (R52-05), pour qu'un intégrateur qui ne renseigne que `default` sur un document
+ * `titlePage` voie son en-tête, le lecteur `.docx` héritant de toute façon `first` type
+ * par type quand le document en a un.
  */
 export function headerFooterHtmlFor(
   section: SectionLayout,
@@ -36,8 +37,8 @@ export function headerFooterHtmlFor(
 ): string {
   const set: HeaderFooterSet | undefined = section[kind];
   let html: string | undefined;
-  if (page.firstOfSection && section.titlePage === true && set?.first) {
-    html = set.first.html;
+  if (page.firstOfSection && section.titlePage === true) {
+    html = set?.first?.html ?? set?.default?.html;
   } else if (page.pageNumber % 2 === 0 && set?.even) {
     html = set.even.html;
   } else {

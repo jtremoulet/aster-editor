@@ -1,13 +1,23 @@
 import { sanitizeHeaderFooterHtml } from '@aster-editor/core';
 import { el } from '../utils/dom.js';
+import {
+  SPLITTABLE_TAGS,
+  isBlockNode,
+  isEmptyElement,
+  normalizeFieldHtml,
+  tagOf,
+  wrapInlineRuns,
+} from './rich-field-html.js';
+
+export { normalizeFieldHtml } from './rich-field-html.js';
 
 /**
  * Champ de texte riche **minimal** des dialogues (session 5, L54) : une zone
  * `contenteditable` sans Tiptap, Entrée = nouveau paragraphe, Maj+Entrée = retour à la
  * ligne, collage en texte brut, dont la valeur est le HTML **assaini** par l'assainisseur
- * des en-têtes du core (`sanitizeHeaderFooterHtml`), normalisé (`<p>`, `<strong>`, `<em>`,
- * paragraphes vides retirés). Sert aux en-têtes et pieds du dialogue « Mise en page »
- * (`page-layout-headers.ts`).
+ * des en-têtes du core (`sanitizeHeaderFooterHtml`), normalisé par `rich-field-html.ts`
+ * (`<p>`, `<strong>`, `<em>`, paragraphes vides aux bords retirés). Sert aux en-têtes et
+ * pieds du dialogue « Mise en page » (`page-layout-headers.ts`).
  *
  * Variables : un `{{nom}}` tapé reste du **texte**. Le core n'expose pas de fonction qui
  * convertit un HTML en puces (`Variable` ne le fait qu'à la saisie, dans l'éditeur ; le
@@ -17,90 +27,8 @@ import { el } from '../utils/dom.js';
 /** Classe de la zone éditable d'un champ. */
 export const RICH_FIELD_CLASS = 'aster-page-layout__rich';
 
-/** Balises de bloc conservées telles quelles au premier niveau d'un champ. */
-const BLOCK_TAGS: ReadonlySet<string> = new Set([
-  'p',
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'h5',
-  'h6',
-  'ul',
-  'ol',
-  'table',
-  'hr',
-]);
-
-/** Blocs que la touche Entrée scinde en deux (la seconde moitié devient un `<p>`). */
-const SPLITTABLE_TAGS: ReadonlySet<string> = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
-
-/** Balises de présentation produites par les navigateurs, renommées vers leur équivalent sémantique. */
-const RENAMED_TAGS: Readonly<Record<string, string>> = { b: 'strong', i: 'em', div: 'p' };
-
-/** Vrai si un nœud est un élément de bloc (`BLOCK_TAGS`). */
-function isBlockNode(node: Node): node is Element {
-  return node instanceof Element && BLOCK_TAGS.has(node.tagName.toLowerCase());
-}
-
-/** Vrai si un élément porte un contenu visible : du texte non blanc, une image ou un filet. */
-function hasVisibleContent(element: Element): boolean {
-  return (element.textContent ?? '').trim() !== '' || element.querySelector('img, hr') !== null;
-}
-
-/** Remplace un élément par un autre de même contenu et mêmes attributs, sous un nouveau nom. */
-function renameElement(element: Element, tag: string): Element {
-  const renamed = element.ownerDocument.createElement(tag);
-  for (const attribute of Array.from(element.attributes)) {
-    renamed.setAttribute(attribute.name, attribute.value);
-  }
-  renamed.append(...Array.from(element.childNodes));
-  element.replaceWith(renamed);
-  return renamed;
-}
-
-/** Enveloppe dans un `<p>` chaque suite de nœuds de premier niveau qui ne sont pas des blocs. */
-function wrapInlineRuns(container: ParentNode & Node): void {
-  let paragraph: HTMLElement | null = null;
-  for (const node of Array.from(container.childNodes)) {
-    if (isBlockNode(node)) {
-      paragraph = null;
-      continue;
-    }
-    if (!paragraph) {
-      paragraph = node.ownerDocument?.createElement('p') ?? document.createElement('p');
-      container.insertBefore(paragraph, node);
-    }
-    paragraph.append(node);
-  }
-}
-
-/**
- * Normalise le HTML d'un champ : assaini par le core d'abord (jamais de `<script>`, de
- * `on*`…), puis `<b>` / `<i>` / `<div>` renommés en `<strong>` / `<em>` / `<p>` (y compris
- * imbriqués), texte et nœuds inline de premier niveau enveloppés dans un `<p>`, `<br>`
- * finaux et paragraphes vides retirés. Rend `''` quand rien de visible ne reste : c'est
- * la valeur « en-tête retiré ».
- */
-export function normalizeFieldHtml(html: string): string {
-  const template = document.createElement('template');
-  template.innerHTML = sanitizeHeaderFooterHtml(html);
-  const root = template.content;
-  for (const [from, to] of Object.entries(RENAMED_TAGS)) {
-    for (const element of Array.from(root.querySelectorAll(from))) {
-      renameElement(element, to);
-    }
-  }
-  wrapInlineRuns(root);
-  for (const block of Array.from(root.children)) {
-    if (!SPLITTABLE_TAGS.has(block.tagName.toLowerCase())) continue;
-    while (block.lastChild && block.lastChild.nodeName === 'BR') {
-      block.lastChild.remove();
-    }
-    if (!hasVisibleContent(block)) block.remove();
-  }
-  return Array.from(root.children).some(hasVisibleContent) ? template.innerHTML : '';
-}
+/** Événements qui marquent le champ comme modifié par l'utilisateur (R52-02). */
+const MODIFYING_EVENTS: readonly string[] = ['input', 'keydown', 'paste'];
 
 /** Champ riche monté : son conteneur, sa zone éditable et sa valeur normalisée. */
 export interface RichField {
@@ -108,6 +36,11 @@ export interface RichField {
   readonly field: HTMLElement;
   /** HTML normalisé et assaini de la saisie, `''` si le champ est vide. */
   getHtml(): string;
+  /**
+   * Vrai dès que l'utilisateur a touché au champ (`input`, `keydown` ou `paste`) : un champ
+   * intact rend sa valeur lue telle quelle, sans la renormaliser (R52-02).
+   */
+  isModified(): boolean;
 }
 
 /** Options d'un champ riche. */
@@ -130,7 +63,7 @@ function selectionIn(field: HTMLElement): Range | null {
 
 /** Un bloc sans contenu reste saisissable : un `<br>` lui donne une hauteur. */
 function keepEditable(block: Element): void {
-  if (!hasVisibleContent(block) && block.querySelector('br') === null) {
+  if (isEmptyElement(block) && block.querySelector('br') === null) {
     block.append(document.createElement('br'));
   }
 }
@@ -213,7 +146,7 @@ function insertLineBreak(field: HTMLElement, range: Range): Range {
  */
 function splitBlock(field: HTMLElement, range: Range): Range {
   const block = blockOf(field, range.startContainer);
-  if (!block || !SPLITTABLE_TAGS.has(block.tagName.toLowerCase())) {
+  if (!block || !SPLITTABLE_TAGS.has(tagOf(block))) {
     return insertLineBreak(field, range);
   }
   const tail = field.ownerDocument.createRange();
@@ -238,7 +171,7 @@ function insertText(field: HTMLElement, range: Range, text: string): void {
     if (line === '') return;
     // Le `<br>` qui donnait sa hauteur à un bloc vide n'a plus lieu d'être une fois du texte posé.
     const block = blockOf(field, current.startContainer);
-    const placeholder = block && !hasVisibleContent(block) ? block.querySelector('br') : null;
+    const placeholder = block && isEmptyElement(block) ? block.querySelector('br') : null;
     const node = document.createTextNode(line);
     current.insertNode(node);
     placeholder?.remove();
@@ -249,9 +182,10 @@ function insertText(field: HTMLElement, range: Range, text: string): void {
 
 /**
  * Champ de texte riche minimal : `<div contenteditable role="textbox">` libellé, dont le
- * contenu initial est assaini, Entrée scinde le paragraphe, Maj+Entrée insère un retour à
- * la ligne, le collage n'insère que le texte brut (un paragraphe par ligne). `getHtml()`
- * rend la valeur normalisée (`normalizeFieldHtml`).
+ * contenu initial est assaini (ses paragraphes vides reçoivent un `<br>` pour rester
+ * saisissables), Entrée scinde le paragraphe, Maj+Entrée insère un retour à la ligne, le
+ * collage n'insère que le texte brut (un paragraphe par ligne). `getHtml()` rend la valeur
+ * normalisée (`normalizeFieldHtml`), `isModified()` dit si l'utilisateur a touché au champ.
  */
 export function createRichField(options: RichFieldOptions): RichField {
   const labelId = `${options.id}-label`;
@@ -271,6 +205,9 @@ export function createRichField(options: RichFieldOptions): RichField {
   });
   // Le HTML vient d'un `DocumentLayout` (import ou application) : assaini avant injection.
   field.innerHTML = sanitizeHeaderFooterHtml(options.html);
+  for (const block of Array.from(field.children)) {
+    if (SPLITTABLE_TAGS.has(tagOf(block))) keepEditable(block);
+  }
   const label = el('label', {
     className: 'aster-dialog__label',
     attrs: { id: labelId, for: options.id },
@@ -279,6 +216,12 @@ export function createRichField(options: RichFieldOptions): RichField {
   // `for` ne focalise pas un `div` : le libellé le fait explicitement.
   label.addEventListener('click', () => field.focus());
 
+  let modified = false;
+  for (const type of MODIFYING_EVENTS) {
+    field.addEventListener(type, () => {
+      modified = true;
+    });
+  }
   field.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
@@ -298,5 +241,10 @@ export function createRichField(options: RichFieldOptions): RichField {
     label,
     field,
   ]);
-  return { wrapper, field, getHtml: () => normalizeFieldHtml(field.innerHTML) };
+  return {
+    wrapper,
+    field,
+    getHtml: () => normalizeFieldHtml(field.innerHTML),
+    isModified: () => modified,
+  };
 }

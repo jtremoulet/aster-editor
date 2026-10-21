@@ -769,6 +769,15 @@ describe('createPageLayoutDialog', () => {
       panel().querySelector<HTMLInputElement>('.aster-page-layout__title-page')!;
     const evenPages = (): HTMLInputElement =>
       panel().querySelector<HTMLInputElement>('.aster-page-layout__even-pages')!;
+    /** Saisie simulée : remplace le contenu et signale l'`input` (un champ intact n'est pas réécrit, R52-02). */
+    const edit = (
+      kind: 'headers' | 'footers',
+      type: 'default' | 'first' | 'even',
+      html: string,
+    ): void => {
+      rich(kind, type).innerHTML = html;
+      rich(kind, type).dispatchEvent(new Event('input', { bubbles: true }));
+    };
     const sentLayout = (index = 0): DocumentLayout => {
       const call = editor.pageViewCalls[index];
       if (typeof call !== 'object' || !call.layout) throw new Error('layout attendu');
@@ -844,8 +853,11 @@ describe('createPageLayoutDialog', () => {
 
     it('assainit la saisie : <script> et onclick retirés, b / i / div normalisés', () => {
       open();
-      rich('headers', 'default').innerHTML =
-        '<p onclick="alert(1)">Titre<script>alert(1)</script></p><div><b>gras</b> <i>it</i></div>';
+      edit(
+        'headers',
+        'default',
+        '<p onclick="alert(1)">Titre<script>alert(1)</script></p><div><b>gras</b> <i>it</i></div>',
+      );
       enabled().checked = true;
       button('Apply').click();
       expect(sentLayout()).toEqual({
@@ -868,7 +880,7 @@ describe('createPageLayoutDialog', () => {
       };
       mount({ layout, pageView: true });
       open();
-      rich('headers', 'default').innerHTML = '<p><br></p>';
+      edit('headers', 'default', '<p><br></p>');
       button('Apply').click();
       const sent = sentLayout();
       expect(sent.headers).toBeUndefined();
@@ -877,14 +889,30 @@ describe('createPageLayoutDialog', () => {
       expect(sent.footers?.default).toBe(layout.footers?.default);
     });
 
-    it('« Première page différente » pose titlePage et écrit first ; décochée, les retire', () => {
+    it('R52-02 : « Appliquer » sans édition laisse headers et footers identiques (même référence)', () => {
+      widget.destroy();
+      host.remove();
+      const layout: DocumentLayout = {
+        headers: { default: { html: '<p style="border-bottom: 1pt solid #000000"></p>' } },
+        footers: { default: { html: '<div><div>Pied</div></div>' }, even: { html: '<hr>' } },
+      };
+      mount({ layout, pageView: true });
+      open();
+      expect(evenPages().checked).toBe(true);
+      button('Apply').click();
+      const sent = sentLayout();
+      expect(sent.headers).toBe(layout.headers);
+      expect(sent.footers).toBe(layout.footers);
+    });
+
+    it('« Première page différente » pose titlePage et écrit first ; décochée, titlePage est retiré et first conservé (R52-03)', () => {
       open();
       expect(richShown('headers', 'first')).toBe(false);
       titlePage().click();
       expect(titlePage().checked).toBe(true);
       expect(richShown('headers', 'first')).toBe(true);
       expect(richShown('footers', 'first')).toBe(true);
-      rich('headers', 'first').innerHTML = '<p>Première</p>';
+      edit('headers', 'first', '<p>Première</p>');
       enabled().checked = true;
       button('Apply').click();
       expect(sentLayout()).toMatchObject({
@@ -892,7 +920,8 @@ describe('createPageLayoutDialog', () => {
         titlePage: true,
       });
       expect(sentLayout().footers).toBeUndefined();
-      // Réouvert (le mock mémorise) : la case et le champ suivent ; décocher retire les deux.
+      // Réouvert (le mock mémorise) : la case et le champ suivent ; décocher retire
+      // `titlePage` seulement, la partie `first` reste (comme Word), même référence.
       open();
       expect(titlePage().checked).toBe(true);
       expect(rich('headers', 'first').innerHTML).toBe('<p>Première</p>');
@@ -900,7 +929,8 @@ describe('createPageLayoutDialog', () => {
       expect(richShown('headers', 'first')).toBe(false);
       button('Apply').click();
       expect(sentLayout(1).titlePage).toBeUndefined();
-      expect(sentLayout(1).headers).toBeUndefined();
+      expect(sentLayout(1).headers).toBe(sentLayout(0).headers);
+      expect(sentLayout(1).headers).toEqual({ first: { html: '<p>Première</p>' } });
     });
 
     it('dernière section du corps : en-têtes et pieds recopiés au premier niveau (invariant)', () => {
@@ -909,8 +939,8 @@ describe('createPageLayoutDialog', () => {
       mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 3 } });
       open();
       expect(rich('footers', 'default').innerHTML).toBe('<p>Pied 3</p>');
-      rich('footers', 'default').innerHTML = '<p>Nouveau pied</p>';
-      rich('headers', 'default').innerHTML = '<p>Tête 3</p>';
+      edit('footers', 'default', '<p>Nouveau pied</p>');
+      edit('headers', 'default', '<p>Tête 3</p>');
       button('Apply').click();
       const sent = sentLayout();
       expect(sent.sections?.[2]).toEqual({
@@ -934,7 +964,7 @@ describe('createPageLayoutDialog', () => {
       host.remove();
       mount({ layout: TRIPLE, pageView: true, sections: { count: 3, current: 2 } });
       open();
-      rich('headers', 'default').innerHTML = '<p>Section 2 bis</p>';
+      edit('headers', 'default', '<p>Section 2 bis</p>');
       button('Apply').click();
       const sent = sentLayout();
       expect(sent.sections?.[1]?.headers).toEqual({

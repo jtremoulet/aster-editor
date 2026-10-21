@@ -1,172 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { DocumentLayout, SectionLayout } from '@aster-editor/core';
 import { withSectionLayout } from './page-layout-dialog.js';
 import { createHeaderFooterSection } from './page-layout-headers.js';
-import { createRichField, normalizeFieldHtml, type RichField } from './rich-field.js';
-
-/** Place le curseur (sélection réduite) dans un nœud texte à l'offset donné. */
-function caretAt(node: Node, offset: number): void {
-  const range = document.createRange();
-  range.setStart(node, offset);
-  range.collapse(true);
-  const selection = document.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-}
-
-function pressEnter(field: HTMLElement, shiftKey = false): KeyboardEvent {
-  const event = new KeyboardEvent('keydown', {
-    key: 'Enter',
-    shiftKey,
-    bubbles: true,
-    cancelable: true,
-  });
-  field.dispatchEvent(event);
-  return event;
-}
-
-/** Collage simulé : jsdom n'a pas de `ClipboardEvent`, un `Event` porte `clipboardData`. */
-function paste(field: HTMLElement, text: string): Event {
-  const event = new Event('paste', { bubbles: true, cancelable: true });
-  Object.defineProperty(event, 'clipboardData', {
-    value: { getData: (type: string) => (type === 'text/plain' ? text : '') },
-  });
-  field.dispatchEvent(event);
-  return event;
-}
+import type { RichField } from './rich-field.js';
 
 const t = (key: string): string => key.replace('ui.pageLayout.', '');
 
-describe('normalizeFieldHtml (L54)', () => {
-  it('assainit : <script>, on* et URL dangereuses retirés, data-aster-variable conservé', () => {
-    expect(normalizeFieldHtml('<p onclick="x()">Titre<script>alert(1)</script></p>')).toBe(
-      '<p>Titre</p>',
-    );
-    expect(normalizeFieldHtml('<p><a href="javascript:x">lien</a></p>')).toBe('<p><a>lien</a></p>');
-    expect(
-      normalizeFieldHtml('<p><span data-aster-variable="client.nom">{{client.nom}}</span></p>'),
-    ).toBe('<p><span data-aster-variable="client.nom">{{client.nom}}</span></p>');
-    // Un `{{nom}}` tapé reste du texte : pas de conversion en puce dans l'éditeur minimal.
-    expect(normalizeFieldHtml('<p>Bonjour {{nom}}</p>')).toBe('<p>Bonjour {{nom}}</p>');
-  });
-
-  it('normalise : div → p, b → strong, i → em, inline de premier niveau enveloppé, <br> finaux retirés', () => {
-    expect(normalizeFieldHtml('<div>a<br></div>')).toBe('<p>a</p>');
-    expect(normalizeFieldHtml('texte <b>g</b> et <i>it</i>')).toBe(
-      '<p>texte <strong>g</strong> et <em>it</em></p>',
-    );
-    expect(normalizeFieldHtml('<h1>T</h1>suite<p>fin</p>')).toBe(
-      '<h1>T</h1><p>suite</p><p>fin</p>',
-    );
-    expect(normalizeFieldHtml('<p>a<br><br></p><p><b>b</b></p>')).toBe(
-      '<p>a</p><p><strong>b</strong></p>',
-    );
-    // Une liste ou un tableau sont des blocs conservés tels quels.
-    expect(normalizeFieldHtml('<ul><li>x</li></ul>')).toBe('<ul><li>x</li></ul>');
-  });
-
-  it('vide → "" (paragraphes vides, blancs, <br> seuls, <script> seul) ; une image compte', () => {
-    for (const html of [
-      '',
-      '   ',
-      '<p><br></p>',
-      '<p></p><p> </p>',
-      '<br>',
-      '<script>x</script>',
-    ]) {
-      expect(normalizeFieldHtml(html), JSON.stringify(html)).toBe('');
-    }
-    expect(normalizeFieldHtml('<p><img src="data:image/png;base64,AA=="></p>')).toBe(
-      '<p><img src="data:image/png;base64,AA=="></p>',
-    );
-  });
-});
-
-describe('createRichField (L54)', () => {
-  let rich: RichField;
-  const mount = (html: string): RichField => {
-    rich = createRichField({ id: 'f', label: 'En-tête', html, placeholder: 'Aucun' });
-    document.body.append(rich.wrapper);
-    return rich;
-  };
-  const text = (field: HTMLElement, selector: string): Text => {
-    const node = field.querySelector(selector)?.firstChild;
-    if (!(node instanceof Text)) throw new Error(`texte attendu dans ${selector}`);
-    return node;
-  };
-
-  afterEach(() => {
-    rich.wrapper.remove();
-    document.getSelection()?.removeAllRanges();
-  });
-
-  it('monte une zone contenteditable libellée, au contenu initial assaini', () => {
-    const { field, wrapper } = mount('<p>Titre<script>alert(1)</script></p>');
-    expect(field.getAttribute('contenteditable')).toBe('true');
-    expect(field.getAttribute('role')).toBe('textbox');
-    expect(field.getAttribute('aria-multiline')).toBe('true');
-    expect(field.getAttribute('data-placeholder')).toBe('Aucun');
-    expect(field.innerHTML).toBe('<p>Titre</p>');
-    const label = wrapper.querySelector('label');
-    expect(label?.textContent).toBe('En-tête');
-    expect(field.getAttribute('aria-labelledby')).toBe(label?.id);
-    label?.click();
-    expect(document.activeElement).toBe(field);
-    expect(rich.getHtml()).toBe('<p>Titre</p>');
-  });
-
-  it('Entrée scinde le paragraphe au curseur (et ne remonte pas au dialogue), Maj+Entrée insère un <br>', () => {
-    const { field } = mount('<p>ab<strong>cd</strong></p>');
-    caretAt(text(field, 'strong'), 1);
-    const event = pressEnter(field);
-    expect(event.defaultPrevented).toBe(true);
-    expect(field.innerHTML).toBe('<p>ab<strong>c</strong></p><p><strong>d</strong></p>');
-    // Le curseur est au début du nouveau paragraphe : une seconde Entrée y laisse un bloc vide.
-    pressEnter(field);
-    expect(field.innerHTML).toBe('<p>ab<strong>c</strong></p><p><br></p><p><strong>d</strong></p>');
-    expect(rich.getHtml()).toBe('<p>ab<strong>c</strong></p><p><strong>d</strong></p>');
-    caretAt(text(field, 'p:first-child'), 1);
-    pressEnter(field, true);
-    expect(field.innerHTML).toBe(
-      '<p>a<br>b<strong>c</strong></p><p><br></p><p><strong>d</strong></p>',
-    );
-  });
-
-  it('Entrée sans sélection dans le champ ajoute un paragraphe à la fin ; champ nu enveloppé', () => {
-    const { field } = mount('');
-    expect(field.innerHTML).toBe('');
-    pressEnter(field);
-    expect(field.innerHTML).toBe('<p><br></p><p><br></p>');
-    expect(rich.getHtml()).toBe('');
-    document.getSelection()?.removeAllRanges();
-    field.innerHTML = 'nu';
-    pressEnter(field);
-    expect(field.innerHTML).toBe('<p>nu</p><p><br></p>');
-    // Sélection posée au niveau du champ (devant le premier bloc) : ramenée au début du bloc.
-    const range = document.createRange();
-    range.setStart(field, 0);
-    range.collapse(true);
-    document.getSelection()?.removeAllRanges();
-    document.getSelection()?.addRange(range);
-    pressEnter(field);
-    expect(field.innerHTML).toBe('<p><br></p><p>nu</p><p><br></p>');
-  });
-
-  it('le collage insère le texte brut, un paragraphe par ligne, jamais le HTML', () => {
-    const { field } = mount('<p>ab</p>');
-    caretAt(text(field, 'p'), 2);
-    const event = paste(field, 'un\ndeux\r\n\ntrois');
-    expect(event.defaultPrevented).toBe(true);
-    expect(field.innerHTML).toBe('<p>abun</p><p>deux</p><p><br></p><p>trois</p>');
-    expect(rich.getHtml()).toBe('<p>abun</p><p>deux</p><p>trois</p>');
-    // Champ vide : le texte collé devient le premier paragraphe.
-    const empty = mount('');
-    paste(empty.field, '<b>x</b>');
-    expect(empty.field.innerHTML).toBe('<p>&lt;b&gt;x&lt;/b&gt;</p>');
-    expect(empty.getHtml()).toBe('<p>&lt;b&gt;x&lt;/b&gt;</p>');
-    empty.wrapper.remove();
-  });
-});
+/** Saisie simulée : remplace le contenu du champ et signale l'`input` (drapeau « modifié »). */
+function edit(rich: RichField, html: string): void {
+  rich.field.innerHTML = html;
+  rich.field.dispatchEvent(new Event('input', { bubbles: true }));
+}
 
 describe('createHeaderFooterSection (L54)', () => {
   const SECTION: SectionLayout = {
@@ -189,10 +33,11 @@ describe('createHeaderFooterSection (L54)', () => {
     // Lu sans modification : mêmes références que la section, pas de titlePage.
     expect(section.read()).toEqual({ headers: SECTION.headers, footers: SECTION.footers });
     expect(section.read().headers?.default).toBe(SECTION.headers?.default);
-    // « Première page différente » révèle les champs first ; décocher even les cache.
+    // « Première page différente » révèle les champs first ; décocher even les cache et,
+    // la case ayant été cochée à l'ouverture, retire les `even`.
     section.titlePage.click();
     expect(section.fields.headers.first.wrapper.hasAttribute('hidden')).toBe(false);
-    section.fields.headers.first.field.innerHTML = '<p>Première</p>';
+    edit(section.fields.headers.first, '<p>Première</p>');
     section.evenPages.click();
     expect(section.fields.headers.even.wrapper.hasAttribute('hidden')).toBe(true);
     expect(section.read()).toEqual({
@@ -200,10 +45,144 @@ describe('createHeaderFooterSection (L54)', () => {
       footers: SECTION.footers,
       titlePage: true,
     });
+    expect(section.read().footers).toBe(SECTION.footers);
     // Vider le pied retire le jeu entier.
-    section.fields.footers.default.field.innerHTML = '<p><br></p>';
+    edit(section.fields.footers.default, '<p><br></p>');
     expect(section.read().footers).toBeUndefined();
     section.element.remove();
+  });
+});
+
+describe('createHeaderFooterSection (F52)', () => {
+  const mount = (section: SectionLayout) => {
+    const mounted = createHeaderFooterSection({ section, suffix: 'f', t });
+    document.body.append(mounted.element);
+    return mounted;
+  };
+
+  it('R52-02 : un en-tête « filet » et un pied ouvert par une ligne blanche sont lus tels quels, même référence', () => {
+    const section: SectionLayout = {
+      headers: { default: { html: '<p style="border-bottom: 1pt solid #000000"></p>' } },
+      footers: { default: { html: '<p><br></p><p>Pied</p>' } },
+    };
+    const mounted = mount(section);
+    const values = mounted.read();
+    expect(values.headers).toBe(section.headers);
+    expect(values.footers).toBe(section.footers);
+    expect(values.titlePage).toBeUndefined();
+    // Un `<hr>` seul et un `even` fait d'un filet comptent aussi : la case est cochée.
+    const ruled: SectionLayout = {
+      headers: {
+        default: { html: '<hr>' },
+        even: { html: '<p style="border-top: 1pt solid"></p>' },
+      },
+    };
+    const ruledSection = mount(ruled);
+    expect(ruledSection.evenPages.checked).toBe(true);
+    expect(ruledSection.read()).toEqual({ headers: ruled.headers });
+    expect(ruledSection.read().headers).toBe(ruled.headers);
+    mounted.element.remove();
+    ruledSection.element.remove();
+  });
+
+  it('R52-02 : seul un champ modifié est réécrit ; une saisie équivalente garde la référence lue', () => {
+    const section: SectionLayout = {
+      headers: {
+        default: { html: '<div class="hdr"><div>Gauche</div></div>' },
+        first: { html: '<p>Première</p>' },
+      },
+      footers: { default: { html: '<p>Pied</p>' } },
+      titlePage: true,
+    };
+    const mounted = mount(section);
+    // Lecture sans édition : la valeur non normalisée (`<div>`) est rendue telle quelle.
+    expect(mounted.read().headers).toBe(section.headers);
+    // Une frappe qui ne change rien (flèche) : chaque type équivaut à l'original, même référence.
+    mounted.fields.headers.default.field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }),
+    );
+    expect(mounted.fields.headers.default.isModified()).toBe(true);
+    expect(mounted.read().headers).toBe(section.headers);
+    // Une édition réelle : le type édité est normalisé, les autres gardent leur référence.
+    edit(mounted.fields.headers.default, '<div>Gauche</div><p><br></p><p>Bas</p>');
+    const headers = mounted.read().headers;
+    expect(headers).toEqual({
+      default: { html: '<p>Gauche</p><p></p><p>Bas</p>' },
+      first: { html: '<p>Première</p>' },
+    });
+    expect(headers?.first).toBe(section.headers?.first);
+    expect(mounted.read().footers).toBe(section.footers);
+    expect(mounted.read().titlePage).toBe(true);
+    mounted.element.remove();
+  });
+
+  it('R52-03 : first est conservé quand « Première page différente » est décochée (seul titlePage porte le choix)', () => {
+    const section: SectionLayout = {
+      headers: { default: { html: '<p>D</p>' }, first: { html: '<p>F</p>' } },
+      titlePage: false,
+    };
+    const mounted = mount(section);
+    expect(mounted.titlePage.checked).toBe(false);
+    expect(mounted.fields.headers.first.wrapper.hasAttribute('hidden')).toBe(true);
+    // « Appliquer » à vide : `first` conservé, `titlePage` absent.
+    expect(mounted.read()).toEqual({ headers: section.headers });
+    expect(mounted.read().headers).toBe(section.headers);
+    // L'en-tête `default` édité : `first` masqué reste dans le jeu réécrit, même référence.
+    edit(mounted.fields.headers.default, '<p>D2</p>');
+    expect(mounted.read().headers).toEqual({
+      default: { html: '<p>D2</p>' },
+      first: { html: '<p>F</p>' },
+    });
+    expect(mounted.read().headers?.first).toBe(section.headers?.first);
+    // Cochée puis décochée après une saisie : la saisie masquée n'est pas écrite, `first` d'origine reste.
+    mounted.titlePage.click();
+    edit(mounted.fields.headers.first, '<p>Oubliée</p>');
+    mounted.titlePage.click();
+    expect(mounted.read().headers?.first).toBe(section.headers?.first);
+    expect(mounted.read().titlePage).toBeUndefined();
+    // Et réellement cochée : `titlePage` posé, la saisie écrite.
+    mounted.titlePage.click();
+    expect(mounted.read()).toEqual({
+      headers: { default: { html: '<p>D2</p>' }, first: { html: '<p>Oubliée</p>' } },
+      titlePage: true,
+    });
+    mounted.element.remove();
+    // Avec `titlePage` vrai et sans édition : tout est conservé, la case est cochée.
+    const titled = mount({ ...section, titlePage: true });
+    expect(titled.titlePage.checked).toBe(true);
+    expect(titled.read()).toEqual({ headers: section.headers, titlePage: true });
+    titled.element.remove();
+  });
+
+  it('R52-03 : un even masqué à l’ouverture est conservé ; décocher « Pages paires » les retire', () => {
+    // `even` vide une fois normalisé : case décochée à l'ouverture, `even` conservé tel quel.
+    const blank: SectionLayout = {
+      headers: { default: { html: '<p>D</p>' }, even: { html: '<p><br></p>' } },
+    };
+    const blankSection = mount(blank);
+    expect(blankSection.evenPages.checked).toBe(false);
+    expect(blankSection.read().headers).toBe(blank.headers);
+    edit(blankSection.fields.headers.default, '<p>D2</p>');
+    expect(blankSection.read().headers).toEqual({
+      default: { html: '<p>D2</p>' },
+      even: { html: '<p><br></p>' },
+    });
+    blankSection.element.remove();
+    // `even` présent : décocher la case le retire des deux jeux, même sans autre édition.
+    const paired: SectionLayout = {
+      headers: { default: { html: '<p>D</p>' }, even: { html: '<p>E</p>' } },
+      footers: { even: { html: '<p>FE</p>' } },
+    };
+    const pairedSection = mount(paired);
+    expect(pairedSection.evenPages.checked).toBe(true);
+    pairedSection.evenPages.click();
+    expect(pairedSection.read()).toEqual({ headers: { default: { html: '<p>D</p>' } } });
+    expect(pairedSection.read().headers?.default).toBe(paired.headers?.default);
+    // Recochée : rien n'est retiré.
+    pairedSection.evenPages.click();
+    expect(pairedSection.read().headers).toBe(paired.headers);
+    expect(pairedSection.read().footers).toBe(paired.footers);
+    pairedSection.element.remove();
   });
 });
 
@@ -255,5 +234,23 @@ describe('withSectionLayout (L54)', () => {
     expect(last.titlePage).toBeUndefined();
     expect(last.footers).toBe(headers);
     expect(last.page).toEqual({ size: 'A5' });
+  });
+
+  it('R52-03 : « Appliquer » à vide sur {default, first, titlePage: false} conserve first', () => {
+    const section: SectionLayout = {
+      headers: { default: { html: '<p>D</p>' }, first: { html: '<p>F</p>' } },
+      titlePage: false,
+    };
+    const mounted = createHeaderFooterSection({ section, suffix: 'w', t });
+    // Comme le dialogue : une clé absente des valeurs lues est passée à `undefined` (retirée).
+    const { headers, footers, titlePage } = mounted.read();
+    const applied = withSectionLayout(
+      { ...section, sections: [section] },
+      { index: 1, count: 1 },
+      { headers, footers, titlePage },
+    );
+    expect(applied.headers).toBe(section.headers);
+    expect(applied.sections?.[0]?.headers).toBe(section.headers);
+    expect(applied.titlePage).toBeUndefined();
   });
 });

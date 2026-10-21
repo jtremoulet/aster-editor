@@ -197,7 +197,7 @@ export const uiFr: AsterDictionary = {
   'ui.pageLayout.titlePage': 'Première page différente',
   'ui.pageLayout.evenPages': 'Pages paires différentes',
   'ui.pageLayout.headersHint':
-    'En-tête et pied de cette section. Entrée crée un paragraphe ; un champ vide retire l’en-tête.',
+    'En-tête et pied de cette section. Entrée crée un paragraphe ; un champ vide retire l’en-tête. Décocher « Première page différente » conserve l’en-tête de première page sans l’afficher ; décocher « Pages paires différentes » retire ceux des pages paires.',
   'ui.pageLayout.invalid': 'Saisis des marges valides',
   'ui.pageLayout.ok': 'Appliquer',
   'ui.pageLayout.cancel': 'Annuler',
