@@ -249,21 +249,23 @@ Total : ≈ 8 M tokens d'agents, 1 262 → 1 994 tests unitaires, 35 → 42 e2e,
 
 ### 📊 Métriques par lot
 
-| Lot                                 | Durée         | Tokens         | Outils | Résultat                                                                       |
-| ----------------------------------- | ------------- | -------------- | ------ | ------------------------------------------------------------------------------ |
-| Phase 0 (contrat, briefs, sécurité) | 5 min         | —              | —      | Contrat additif, 5 briefs, scan du dépôt public                                |
-| L40 fixtures 18-19                  | 5 min         | 151k           | 28     | Deux fixtures, hash reproductible                                              |
-| L41 core sections                   | 20 min        | 334k           | 130    | 630 → 709 tests                                                                |
-| L42 lecteur sections                | 21 min        | 403k           | 131    | 184 → 225 tests lecteur, 16 → 1 avec le writer en cours                        |
-| L43 writer sections                 | 24 min        | 458k           | 168    | 16 et 18 → 1, client 0,889 → 0,99                                              |
-| L44 vue page par section            | 25 min        | —              | —      | 712 core, 406 ui                                                               |
-| R41 / R42 / R43 / R44               | 12-17         | 214-296k       | 40-57  | 0 bloquant, 10 + 7 + 10 + 6 findings, tous prouvés                             |
-| F41 / F42 / F43 / F44               | 13-28         | 270-386k       | 78-139 | 31 findings corrigés, 2 reportés (R41-09, R43-09)                              |
-| L45a dette word                     | 31 min        | 416k           | 162    | 16 modules découpés, `units` fusionné, perf 100 pages ≈ 750 ms                 |
-| L45b contrat vue page               | 15 min        | 246k           | 105    | `setPageView` / `getLayout` / `getSectionLayout` / `pageViewChange` au contrat |
-| L46 défaut stylé                    | 26 min        | 355k           | 151    | 986 → 1 075 tests word, comparateur `table.conditional`, 19 → 0,998            |
-| L47 e2e sections, Firefox, WebKit   | 22 min        | 272k           | 101    | 6 scénarios, WebKit 11/11, Firefox indisponible sur la machine, 2 arbitrages   |
-| L48 docs                            | **L48_DUREE** | **L48_TOKENS** | —      | **L48_RESULTAT**                                                               |
+| Lot                                 | Durée  | Tokens   | Outils | Résultat                                                                       |
+| ----------------------------------- | ------ | -------- | ------ | ------------------------------------------------------------------------------ |
+| Phase 0 (contrat, briefs, sécurité) | 5 min  | —        | —      | Contrat additif, 5 briefs, scan du dépôt public                                |
+| L40 fixtures 18-19                  | 5 min  | 151k     | 28     | Deux fixtures, hash reproductible                                              |
+| L41 core sections                   | 20 min | 334k     | 130    | 630 → 709 tests                                                                |
+| L42 lecteur sections                | 21 min | 403k     | 131    | 184 → 225 tests lecteur, 16 → 1 avec le writer en cours                        |
+| L43 writer sections                 | 24 min | 458k     | 168    | 16 et 18 → 1, client 0,889 → 0,99                                              |
+| L44 vue page par section            | 25 min | —        | —      | 712 core, 406 ui                                                               |
+| R41 / R42 / R43 / R44               | 12-17  | 214-296k | 40-57  | 0 bloquant, 10 + 7 + 10 + 6 findings, tous prouvés                             |
+| F41 / F42 / F43 / F44               | 13-28  | 270-386k | 78-139 | 31 findings corrigés, 2 reportés (R41-09, R43-09)                              |
+| L45a dette word                     | 31 min | 416k     | 162    | 16 modules découpés, `units` fusionné, perf 100 pages ≈ 750 ms                 |
+| L45b contrat vue page               | 15 min | 246k     | 105    | `setPageView` / `getLayout` / `getSectionLayout` / `pageViewChange` au contrat |
+| L46 défaut stylé                    | 26 min | 355k     | 151    | 986 → 1 075 tests word, comparateur `table.conditional`, 19 → 0,998            |
+| L47 e2e sections, Firefox, WebKit   | 22 min | 272k     | 101    | 6 scénarios, WebKit 11/11, Firefox indisponible sur la machine, 2 arbitrages   |
+| L48 docs                            | 31 min | 612k     | 232    | 11 documents, compteurs recalculés, chapitre Migration 0.6                     |
+| L49 tblLook, idempotence            | 17 min | 353k     | 148    | 19 → 1 dans le gabarit, idempotence stricte 01, 02, 06-10                      |
+| L50 UX core                         | 16 min | 228k     | 94     | clic perdu par le redessin (cause réelle prouvée), historique, pied de l'hôte  |
 
 ### ✅ Ce qui a marché
 

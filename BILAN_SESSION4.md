@@ -1,6 +1,6 @@
 # 🌅 Bilan session 4 — Aster Editor 0.6.0
 
-> Nuit du mardi 20 au mercredi 21 octobre 2026, 23:07 → **FIN**. Branche `develop`, `main` intacte (0.5.0).
+> Nuit du mardi 20 au mercredi 21 octobre 2026, 23:07 → 03:00 (une interruption de limite d'utilisation, 01:15 → 02:20). Branche `develop`, `main` intacte (0.5.0).
 > À lire en 5 minutes. Détail dans [`docs/JOURNAL.md`](./docs/JOURNAL.md) (section Session 4), process dans [`docs/REX.md`](./docs/REX.md), plan de départ dans [`docs/ROADMAP_SESSION4.md`](./docs/ROADMAP_SESSION4.md).
 
 ## ✅ Ce qui est livré
@@ -10,8 +10,9 @@
 | Chantier             | État                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sections multiples   | ✅ conservées de bout en bout : `layout.sections[]` à l'import (page, colonnes, en-têtes hérités type par type, `titlePage`, type de saut), saut de section dans le corps (`<hr data-section-break="n">`, renuméroté, jamais vide ni imbriqué), **vue page par section** (feuille, marges, en-tête et pied changent à chaque saut, coupures libellées « Section 2 · Letter paysage »), dialogue « Mise en page » par section, export neuf par sections et **greffe des `w:sectPr` intermédiaires dans le gabarit** à l'octet |
+| Clic en vue page     | ✅ un clic pendant un redessin de la pagination n'est plus perdu (la sélection du DOM est relue avant le redessin), `undo` après un chargement ne défait plus le chargement, pied de l'hôte à jour après un saut ajouté ou retiré (L50)                                                                                                                                                                                                                                                                                      |
 | Tabulations          | ✅ nœud `tab` (`data-stop`, `data-align`, `data-leader`), taquets résolus depuis le paragraphe et les styles, réécrits dans Word avec alignement et points de suite ; `getText()` rend `\t`                                                                                                                                                                                                                                                                                                                                  |
-| Bordures et tableaux | ✅ `w:space` (`padding-*`), couleurs exactes, `nil` explicite, `w:jc` (`data-align`), styles de tableau conditionnels résolus à l'import (`tblStylePr` × `tblLook`, défaut Word `0x04A0`, bandes, `insideH`/`insideV`)                                                                                                                                                                                                                                                                                                       |
+| Bordures et tableaux | ✅ `w:space` (`padding-*`), couleurs exactes, `nil` explicite, `w:jc` (`data-align`), styles de tableau conditionnels résolus à l'import (`tblStylePr` × `tblLook`, défaut Word `0x04A0`, bandes, `insideH`/`insideV`) et **`w:tblLook` réécrit à l'export** (`data-docx-look`, L49) : fixture 19 à 1                                                                                                                                                                                                                        |
 | Ton document         | ✅ **0,995 dans le gabarit** (0,889 en 0.5.0) : trois `w:sectPr` identiques à l'octet, pied sur les trois sections, seule perte restante : un style de caractère `Lienhypertexte` posé sur un lien (décision à prendre, voir « À vérifier »)                                                                                                                                                                                                                                                                                 |
 | Défaut `styled`      | ✅ `importDocx(file)` lit avec le lecteur OOXML par défaut ; `{ fidelity: 'semantic' }` retrouve mammoth à l'identique ; texte et variables identiques entre les deux chemins sur les fixtures 01-10                                                                                                                                                                                                                                                                                                                         |
 | Dette technique      | ✅ aucun fichier source > 400 lignes dans `word/export` et `word/reader`, `units` fusionnés, helpers partagés, import de 100 pages en ≈ 0,75 s ; `setPageView` / `getLayout` / `getSectionLayout` et l'événement `pageViewChange` au contrat, `image.setAttributes.height`                                                                                                                                                                                                                                                   |
@@ -19,14 +20,14 @@
 
 ## 📊 Chiffres
 
-| Mesure                             | Session 3 (0.5.0)            | Session 4 (0.6.0)                                                                    |
-| ---------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------ |
-| Tests unitaires                    | 1 994                        | ****UNIT**** (core **CORE**, word **WORD**, ui **UI**, angular 53, démo 30)          |
-| Tests e2e Playwright               | 42                           | ****E2E**** (Chromium 48 + WebKit 11 ; Firefox sondé)                                |
-| Lots d'agents                      | 17 + 6 revues + 7 correctifs | **13 lots + 4 revues + 4 lots de correctifs** (5 agents en parallèle en pointe)      |
-| Findings de revue                  | 73                           | **33** (0 bloquant, 13 majeurs), 31 corrigés avec test, 2 reportés en décision       |
-| Score de fidélité, document client | 0,889 dans le gabarit        | **0,995 dans le gabarit** (0,686 en export neuf)                                     |
-| Fixtures à 1,0 dans le gabarit     | 11, 13, 15                   | **11, 12, 13, 14, 15, 16, 18** ; 19 → 0,998 ; 17 → 0,972 (objets non représentables) |
+| Mesure                             | Session 3 (0.5.0)            | Session 4 (0.6.0)                                                               |
+| ---------------------------------- | ---------------------------- | ------------------------------------------------------------------------------- |
+| Tests unitaires                    | 1 994                        | **2 347** (core 764, word 1 088, ui 412, angular 53, démo 30)                   |
+| Tests e2e Playwright               | 42                           | **59** (Chromium 48 + WebKit 11 ; Firefox sondé)                                |
+| Lots d'agents                      | 17 + 6 revues + 7 correctifs | **16 lots + 4 revues + 4 lots de correctifs** (5 agents en parallèle en pointe) |
+| Findings de revue                  | 73                           | **33** (0 bloquant, 13 majeurs), 31 corrigés avec test, 2 reportés en décision  |
+| Score de fidélité, document client | 0,889 dans le gabarit        | **0,995 dans le gabarit** (0,686 en export neuf)                                |
+| Fixtures à 1,0 dans le gabarit     | 11, 13, 15                   | **11, 12, 13, 14, 15, 16, 18, 19** ; 17 → 0,972 (objets non représentables)     |
 
 ## 🧪 Comment tester en 5 minutes
 
@@ -50,8 +51,7 @@ cd C:\workspace\aster-editor && npm run check && npm run demo
 
 ## 🚧 Différé
 
-- `TableLayoutAttrs.look` (drapeaux `w:tblLook` dans le HTML) pour que le writer réécrive les styles conditionnels au lieu de propriétés directes : dernière perte de la fixture 19 (0,998).
 - `DocumentLayout.defaultParagraph` (interligne des `docDefaults` dans la vue page) et simplification de `pageViewApiOf` dans `ui` / `angular` (L45b, points 7-8).
-- Sélection d'état en retard d'un `requestAnimationFrame` après un clic en vue page (`pagination-controller`), `setHTML(html, true)` groupé avec l'édition suivante dans l'historique, pied de l'hôte recalculé seulement à `setPageView` (pas après `section.removeBreak`).
-- Idempotence stricte avec le core sur les fixtures 01-05, 07, 08, 14, 15 (ordre `type` / `data-docx-num-id` des `<ol>`, `colwidth` sur chaque ligne, image inline sortie du paragraphe) : trois lignes côté lecteur, une décision de contrat pour l'image.
+- Une commande ou une touche envoyée dans la **même frame** qu'un clic part encore de l'ancienne sélection (cas Playwright, pas un utilisateur réel) : flusher l'observateur DOM dans `CommandRegistry.run` et le handler clavier.
+- Idempotence stricte avec le core sur les fixtures 03, 04, 05 : image inline sortie de son paragraphe (nœud image = bloc) et notes sans nœud dans le core : décisions de contrat.
 - `w:defaultTabStop`, approximation « n-ième tabulation = n-ième taquet » après un `w:br`, `bar` réécrit en `left`, marges d'en-tête / pied et type de saut absents du dialogue « Mise en page », en-tête de section invisible quand `margin-top ≈ margin-header`.

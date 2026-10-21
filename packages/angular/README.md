@@ -469,7 +469,7 @@ pondéré entre 0 et 1, propriétés conservées / perdues par groupe (`text`, `
 notes. `null` sans gabarit importé. Un aller-retour sans modification vise un score ≥ 0,98 ;
 c'est le critère d'acceptation, pas une impression visuelle. Scores mesurés sur les fixtures et
 le document client dans [`fixtures/docx/README.md`](../../fixtures/docx/README.md) (session 4 :
-1 pour les fixtures 11 à 16 et 18, 0,998 pour la 19, 0,972 pour la 17 ; 0,995 pour le document
+1 pour les fixtures 11 à 16, 18 et 19, 0,972 pour la 17 ; 0,995 pour le document
 client, dont les trois sections ressortent à l'octet).
 
 ### Limites

@@ -390,7 +390,7 @@ Ce que le chemin stylé **conserve** (tout est relu par l'export, voir 7.4) :
 
 Ce qu'il **ne conserve pas**, écrit noir sur blanc :
 
-- **Les styles conditionnels de tableau comme style** : résolus en propriétés directes (ce que Word rend), mais `w:tblLook` n'est pas réécrit à l'export : le tableau reste identique à l'écran et à l'ouverture, sa mise en forme ne suit plus le style dans Word (fixture 19 : 0,998).
+- **Les styles conditionnels de tableau comme style** : résolus en propriétés directes à l'import (ce que Word rend) et, depuis la vague 3 de la session 4, `w:tblLook` est conservé dans `data-docx-look` et réécrit à l'export : dans le gabarit, les propriétés directes égales à ce que le style produit sont retirées et le tableau suit de nouveau son style dans Word (fixture 19 : 1). Limite : les bordures sont retirées tout ou rien par tableau.
 - **L'alignement des taquets à l'écran** : le `.docx` ressort avec ses taquets `center` / `right` / `decimal`, mais la vue affiche toute tabulation comme un espace élastique aligné à gauche ; la n-ième tabulation d'un paragraphe prend le n-ième taquet (faux après un saut de ligne `<br>`), `w:defaultTabStop` n'est pas lu.
 - **L'habillage des images ancrées** : une image flottante devient inline, alignée par `data-align` ; sa position exacte est perdue.
 - **Les colonnes de section** : lues dans `layout.columns` / `sections[n].columns`, conservées par le gabarit, **non affichées** par la vue page. La numérotation de page par section et les bordures de page ne sont pas lues (conservées par le gabarit).
@@ -498,7 +498,7 @@ console.log(report.identicalParts, report.changedParts, report.lost, report.note
 | `16-sections.docx`             |        0,875 |           **1** | rien (deux sections conservées, session 4)                                                                              |
 | `17-objets-perdus.docx`        |        0,915 |           0,972 | texte d'une zone de texte réinjecté, texte d'une équation absent                                                        |
 | `18-sections-triple.docx`      |        0,876 |           **1** | rien (trois sections, six en-têtes et pieds à l'octet)                                                                  |
-| `19-tabulations-bordures.docx` |        0,985 |           0,998 | `w:tblLook` non réécrit : Word applique son masque par défaut au tableau à style conditionnel                           |
+| `19-tabulations-bordures.docx` |        0,985 |               1 | `w:tblLook` réécrit, propriétés directes du style conditionnel retirées dans le gabarit (L49)                           |
 | `client/Modele_Demo_DER.docx`  |        0,686 |           0,995 | espaces finaux ×2, style `Lienhypertexte` et souligné ajoutés sur un lien, six bordures de cellule (traits gris → noir) |
 
 Pour mémoire, en session 3 (20/10, L28c) : 16 → 0,756 (deux sections → une seule), client → 0,889 (trois sections → une), 14 → 0,998 (centrage perdu), 12 → 0,990 (tabulation relue comme un espace). La cible est ≥ 0,98 dans le gabarit (`compare-fixtures.spec.ts`) ; la 17 y est en `it.fails` documenté avec un plancher de non-régression, les autres assertées à la cible avec la liste exacte des pertes. Un aller-retour **avec une modification locale** (un mot changé) ne fait différer que le bloc touché dans `document.xml`, les autres parties restent intactes (`graft.spec.ts`). Tableau détaillé et dernière mesure dans [`fixtures/docx/README.md`](../fixtures/docx/README.md).
