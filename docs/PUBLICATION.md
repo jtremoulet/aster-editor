@@ -110,11 +110,11 @@ Pour une bêta : `npm run version:set 0.5.0-beta.1`, commit, puis `node scripts/
 Le monorepo résout ses paquets par les `paths` de `tsconfig.base.json`, jamais par de vrais `node_modules`. `npm run smoke:install` comble ce trou avant toute publication :
 
 1. `npm pack` des quatre paquets dans un dossier temporaire hors du dépôt ;
-2. installation dans un projet vierge avec les peers Angular aux versions du monorepo ;
+2. installation dans un projet vierge avec les peers Angular aux versions du monorepo, une seule copie physique de `@tiptap/core`, puis un `grep` des `dist` emballés de `core`, `word` et `ui` : aucun spécificateur relatif sans extension ne doit y traîner (R53-08 : un résidu `units-blocks.js` d'un fichier source supprimé était emballé dans le tarball `word` 0.6.0 ; depuis, `build` vide `dist` avant `tsc`) ;
 3. résolution des `exports` (dont `@aster-editor/ui/themes/aster.css`) par Node ;
 4. usage vanilla : typecheck strict puis bundle esbuild ;
 5. usage Angular : composant standalone avec `<aster-editor [formControl]>` compilé par `ngc` en `strictTemplates` ;
-6. import ESM en Node pur (sans bundler) des quatre paquets : attrape les spécificateurs relatifs sans extension `.js` que `tsc` émet tels quels (gardés à jour par `node scripts/add-js-extensions.mjs --check`, branché dans `npm run lint`).
+6. import ESM en Node pur (sans bundler) des quatre paquets (`core`, `word`, `ui` directement ; `angular` via son FESM en compilation partielle, après un `import('@angular/compiler')` qui permet le JIT sans linker de bundler, même recette que les tests Angular en Node) : attrape les spécificateurs relatifs sans extension `.js` que `tsc` émet tels quels (session 5, L51 : la 0.6.0 publiée échouait ici avec `ERR_UNSUPPORTED_DIR_IMPORT` sur `dist/api`, ce qu'esbuild et `ngc` toléraient ; les sources écrivent désormais `./x.js`, gardées à jour par `node scripts/add-js-extensions.mjs --check`, branché dans `npm run lint`, qui rend 1 sur un spécificateur sans extension **ou** qui ne résout rien sur le disque).
 
 Dossier de sortie : `--out <dossier>` (défaut : `aster-smoke` dans le temporaire du système). Compte deux à trois minutes, l'essentiel dans l'installation d'Angular.
 
