@@ -31,17 +31,17 @@ const NAMES = [
 const WITH_EXPECTED = NAMES.filter((name) => name !== '07-long');
 
 /**
- * Fixtures dont le HTML stylé ressort du core **à l'octet près**. Les autres en diffèrent
- * par trois détails de sérialisation du core, sans perte de contenu (test suivant) : `type`
- * d'un `<ol>` replacé après `data-docx-num-id`, `colwidth` recopié sur toutes les lignes
- * d'un tableau (le lecteur ne le pose que sur la première), image inline sortie de son
- * paragraphe (le nœud image du core est un bloc). Même limite que sur les fixtures 14 et 15.
+ * Fixtures dont le HTML stylé ressort du core **à l'octet près** (L49 : le lecteur émet
+ * les attributs de `<ol>` et de `<table>` dans l'ordre du core et pose `colwidth` sur
+ * toutes les lignes). Deux exclusions restantes, hors lot (contrat du core) :
+ * - une image inline est sortie de son paragraphe par le core, dont le nœud image est un
+ *   bloc (`<p>texte <img></p>` → `<p>texte</p><img><p></p>`) : fixtures 03, 04, 05 ;
+ * - les notes de bas de page (`<sup data-footnote-ref>`, `<ol data-footnotes>`) n'ont pas
+ *   de nœud dans le core, qui ne garde que l'exposant et la liste : fixtures 03, 04.
+ * Le test suivant vérifie que ces fixtures ne perdent rien d'autre.
  */
-const STRICT_IDEMPOTENT = [
-  '06-styles-francais',
-  '09-variables-mergefields',
-  '10-variables-content-controls',
-] as const;
+const NOT_STRICT: readonly string[] = ['03-images', '04-rapport-client', '05-tableaux-complexes'];
+const STRICT_IDEMPOTENT = NAMES.filter((name) => !NOT_STRICT.includes(name));
 
 function loadFixture(name: string): ArrayBuffer {
   const buffer = readFileSync(`${FIXTURES}${name}.docx`);
@@ -116,6 +116,26 @@ describe('importDocx : chemin par défaut styled (0.6)', () => {
     async (name) => {
       const { html } = await importDocx(loadFixture(name));
       expect(normalizeHtml(throughEditor(html))).toBe(normalizeHtml(html));
+    },
+    // La 07 (300 paragraphes, 15 tableaux) passe par un éditeur jsdom : plus de 5 s sous charge.
+    20_000,
+  );
+
+  it.each(NOT_STRICT)(
+    '%s : seules l’image inline sortie de son paragraphe et les notes séparent le HTML relu du HTML importé',
+    async (name) => {
+      const { html } = await importDocx(loadFixture(name));
+      expect(html).toMatch(/<p[^>]*>[^<]*<img /);
+      // Images sorties de leur paragraphe (et paragraphe scindé) et attributs de notes
+      // neutralisés : le reste doit être strictement identique.
+      const comparable = (fragment: string): string =>
+        normalizeHtml(fragment)
+          .replace(/<img [^>]*>/g, '')
+          .replace(/<p[^>]*><\/p>/g, '')
+          .replace(/<\/p><p[^>]*>/g, '')
+          .replace(/ data-footnote(?:-ref|s)?="[^"]*"/g, '')
+          .replace(/\s+/g, '');
+      expect(comparable(throughEditor(html))).toBe(comparable(html));
     },
   );
 

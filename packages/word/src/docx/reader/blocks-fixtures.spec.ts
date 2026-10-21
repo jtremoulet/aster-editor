@@ -53,12 +53,13 @@ describe('fixtures 14-17 en mode styled', () => {
       '<table style="width: 100%; border-top: 3pt solid #000000; border-bottom: 1pt solid #000000; border-left: 1pt solid #000000"><tbody><tr><th colwidth="160" style="border-right: 0.5pt solid #000000; border-bottom: 0.5pt solid #000000; background-color: #d9e2f3; padding: 4pt 4pt 4pt 4pt">',
     );
     expect(count(html, /<th /g)).toBe(3);
-    expect(html).toContain('<td colspan="2" style="');
-    expect(html).toContain('<td rowspan="2" style="');
+    // `colwidth` sur toutes les lignes, comme le core le recopie (idempotence stricte, L49).
+    expect(html).toContain('<td colspan="2" colwidth="160,320" style="');
+    expect(html).toContain('<td rowspan="2" colwidth="160" style="');
     expect(html).toContain('vertical-align: middle');
     // Ligne 4 : la cellule de continuation est omise, il reste deux cellules.
     expect(html).toMatch(
-      /<tr><td style="[^"]*">(?:<p[^>]*>Marges de cellule 4 pt<\/p>)<\/td><td style="[^"]*">(?:<p[^>]*>Cellule C4<\/p>)<\/td><\/tr>/,
+      /<tr><td colwidth="\d+" style="[^"]*">(?:<p[^>]*>Marges de cellule 4 pt<\/p>)<\/td><td colwidth="\d+" style="[^"]*">(?:<p[^>]*>Cellule C4<\/p>)<\/td><\/tr>/,
     );
     // Tableau imbriqué suivi d'un paragraphe vide conservé.
     expect(html).toMatch(
@@ -80,8 +81,8 @@ describe('fixtures 14-17 en mode styled', () => {
     expect(html).toMatch(
       /<ol data-docx-num-id="2"><li><p[^>]*>Liste décimale : premier<\/p><\/li><li><p[^>]*>Liste décimale : deuxième<\/p><\/li><\/ol>/,
     );
-    expect(html).toMatch(/<ol type="a" data-docx-num-id="3"><li>/);
-    expect(html).toMatch(/<ol type="I" data-docx-num-id="4"><li>/);
+    expect(html).toMatch(/<ol data-docx-num-id="3" type="a"><li>/);
+    expect(html).toMatch(/<ol data-docx-num-id="4" type="I"><li>/);
     expect(html).toMatch(
       /<ul data-bullet="•" data-docx-num-id="5"><li><p[^>]*>Puce niveau 1<\/p><ul data-bullet="–" data-docx-num-id="5"><li><p[^>]*>Puce niveau 2<\/p><ul data-bullet="▪" data-docx-num-id="5"><li><p[^>]*>Puce niveau 3<\/p><\/li><\/ul><\/li><\/ul><\/li><li><p[^>]*>Puce niveau 1 bis<\/p><\/li><\/ul>/,
     );
@@ -218,9 +219,10 @@ describe.skipIf(!existsSync(CLIENT))('document client Modele_Demo_DER.docx', () 
       footerMm: 0,
     });
     // `tblW auto` → pas de largeur ; `tblW dxa` → points ; style Grilledutableau posé.
-    expect(count(result.html, /<table data-docx-style="Grilledutableau">/g)).toBeGreaterThanOrEqual(
-      1,
-    );
+    // Word écrit un `w:tblLook` sur chaque tableau : `data-docx-look` suit le style (L49).
+    expect(
+      count(result.html, /<table data-docx-style="Grilledutableau" data-docx-look="[^"]+">/g),
+    ).toBeGreaterThanOrEqual(1);
     expect(result.html).toContain('<table style="width: 524.5pt;');
     expect(result.html).toContain('Disclaimer');
     expect(result.html).not.toContain('<ol');

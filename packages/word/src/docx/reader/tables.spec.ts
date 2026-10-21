@@ -137,7 +137,7 @@ describe('convertTable', () => {
     expect(styled.tableStyle).toBeNull();
   });
 
-  it('gridSpan → colspan, colwidth sur la première ligne depuis tblGrid', async () => {
+  it('gridSpan → colspan, colwidth sur toutes les lignes depuis tblGrid (comme le core, L49)', async () => {
     const html = await convert(
       '<w:tbl><w:tblGrid><w:gridCol w:w="2400"/><w:gridCol w:w="4800"/><w:gridCol w:w="2400"/></w:tblGrid>' +
         row(cell('AB1', '<w:gridSpan w:val="2"/>') + cell('C1')) +
@@ -147,7 +147,9 @@ describe('convertTable', () => {
     expect(html).toContain(
       '<td colspan="2" colwidth="160,320"><p>AB1</p></td><td colwidth="160"><p>C1</p></td>',
     );
-    expect(html).toContain('<tr><td><p>A2</p></td><td><p>B2</p></td><td><p>C2</p></td></tr>');
+    expect(html).toContain(
+      '<tr><td colwidth="160"><p>A2</p></td><td colwidth="320"><p>B2</p></td><td colwidth="160"><p>C2</p></td></tr>',
+    );
   });
 
   it('vMerge : restart ouvre, continuation fusionne et omet la cellule', async () => {
@@ -276,7 +278,7 @@ describe('convertTable', () => {
         '</w:tbl>',
     );
     expect(over).toContain(
-      '<tr><td colspan="2" colwidth="100,100"><p>A</p></td></tr><tr><td><p>B</p></td><td><p>C</p></td></tr>',
+      '<tr><td colspan="2" colwidth="100,100"><p>A</p></td></tr><tr><td colwidth="100"><p>B</p></td><td colwidth="100"><p>C</p></td></tr>',
     );
     const narrower = await convert(
       '<w:tbl><w:tblGrid><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/><w:gridCol w:w="1500"/></w:tblGrid>' +
@@ -290,8 +292,8 @@ describe('convertTable', () => {
     expect(narrower).toBe(
       '<table><tbody>' +
         '<tr><td colspan="2" colwidth="100,100"><p>A</p></td><td colwidth="100"><p>B</p></td></tr>' +
-        '<tr><td><p></p></td><td><p>X</p></td><td><p>Y</p></td></tr>' +
-        '<tr><td><p></p></td><td colspan="2"><p>Z</p></td></tr>' +
+        '<tr><td colwidth="100"><p></p></td><td colwidth="100"><p>X</p></td><td colwidth="100"><p>Y</p></td></tr>' +
+        '<tr><td colwidth="100"><p></p></td><td colspan="2" colwidth="100,100"><p>Z</p></td></tr>' +
         '</tbody></table>',
     );
   });
@@ -486,7 +488,15 @@ describe('convertTable', () => {
     it('R42-06 : tblLook absent ou vide → défaut de Word (première ligne, bandes horizontales), comme <w:tblLook/>', async () => {
       const absent = await conditional('', THREE_ROWS);
       const empty = await conditional('<w:tblLook/>', THREE_ROWS);
-      expect(absent).toBe(empty);
+      // Mêmes propriétés directes ; seul l'élément explicite, même vide, sérialise ses
+      // drapeaux effectifs (`data-docx-look`, L49), l'absence ne sérialise rien.
+      expect(empty).toBe(
+        absent.replace(
+          '<table data-docx-style="Cond">',
+          '<table data-docx-style="Cond" data-docx-look="firstRow firstColumn noVBand">',
+        ),
+      );
+      expect(absent).not.toContain('data-docx-look');
       expect(absent).toContain(
         '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #d9e2f3"><p>H1</p></td>',
       );
@@ -494,6 +504,42 @@ describe('convertTable', () => {
         '<td style="border-top: 0.5pt solid #bfbfbf; background-color: #f2f2f2"><p>A</p></td>',
       );
       expect(absent).toContain('<td style="border-top: 0.5pt solid #bfbfbf"><p>C</p></td>');
+    });
+
+    it('L49 : data-docx-look sérialise les drapeaux effectifs d’un w:tblLook explicite, dans l’ordre du contrat, après data-align', async () => {
+      const opening = (html: string): string => html.slice(0, html.indexOf('<tbody>'));
+      for (const look of [
+        '<w:tblLook w:firstRow="true" w:lastRow="false" w:noHBand="false" w:noVBand="true"/>',
+        '<w:tblLook w:firstRow="1" w:noVBand="1"/>',
+        '<w:tblLook w:val="0420"/>',
+      ]) {
+        expect(opening(await conditional(look, THREE_ROWS)), look).toBe(
+          '<table data-docx-style="Cond" data-docx-look="firstRow noVBand">',
+        );
+      }
+      expect(
+        opening(
+          await conditional(
+            '<w:tblLook w:noVBand="1" w:lastColumn="1" w:firstRow="1" w:lastRow="1" w:noHBand="1" w:firstColumn="1"/>',
+            THREE_ROWS,
+          ),
+        ),
+      ).toBe(
+        '<table data-docx-style="Cond" data-docx-look="firstRow lastRow firstColumn lastColumn noHBand noVBand">',
+      );
+      // Masque nul : aucun drapeau, pas représentable par le contrat (`null` = pas de drapeau).
+      expect(opening(await conditional('<w:tblLook w:val="0000"/>', THREE_ROWS))).toBe(
+        '<table data-docx-style="Cond">',
+      );
+      // Sans style conditionnel, l'élément est sérialisé quand même : l'export le réécrit tel quel.
+      const plain = await convert(
+        '<w:tbl><w:tblPr><w:jc w:val="center"/><w:tblLook w:val="04A0"/></w:tblPr>' +
+          row(cell('A')) +
+          '</w:tbl>',
+      );
+      expect(opening(plain)).toBe(
+        '<table data-align="center" data-docx-look="firstRow firstColumn noVBand">',
+      );
     });
 
     it('le style conditionnel ne remplace pas un fond direct et transmet ses runs au contexte des cellules', async () => {

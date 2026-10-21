@@ -342,10 +342,10 @@ describe('19-tabulations-bordures', () => {
       '<td colwidth="200" style="border-top: 1pt solid #2f5496; border-right: 1pt solid #2f5496; border-bottom: 1pt solid #2f5496; border-left: 1pt solid #2f5496"><p data-docx-style="Normal">Cellule bleue #2F5496</p></td>',
     );
     expect(html).toContain(
-      '<td style="border-top: 0.5pt solid #bfbfbf; border-right: 0.5pt solid #bfbfbf; border-left: 0pt solid transparent"><p data-docx-style="Normal">nil gauche</p></td>',
+      '<td colwidth="200" style="border-top: 0.5pt solid #bfbfbf; border-right: 0.5pt solid #bfbfbf; border-left: 0pt solid transparent"><p data-docx-style="Normal">nil gauche</p></td>',
     );
     expect(html).toContain(
-      '<td style="border-top: 0.5pt solid #bfbfbf; border-bottom: 0pt solid transparent; border-left: 0.5pt solid #bfbfbf"><p data-docx-style="Normal">nil bas</p></td>',
+      '<td colwidth="200" style="border-top: 0.5pt solid #bfbfbf; border-bottom: 0pt solid transparent; border-left: 0.5pt solid #bfbfbf"><p data-docx-style="Normal">nil bas</p></td>',
     );
     expect(html).toContain('border-left: 1pt solid #2f5496" data-align="right">');
     expect(html).not.toContain('solid #000000"><p data-docx-style="Normal">nil');

@@ -7,6 +7,8 @@ import type {
   TableCell,
   ITableCellOptions,
 } from 'docx';
+import { TABLE_LOOK_ATTRIBUTE, TABLE_LOOK_FLAGS, parseTableLook } from '@aster-editor/core';
+import type { ITableLookOptions } from 'docx';
 import type { BlockScope } from './blocks';
 import { resolveDocxStyle, type ExportContext } from './context';
 import { parseBorders, parseStyle } from './css';
@@ -87,6 +89,20 @@ async function convertCell(
 }
 
 /**
+ * `w:tblLook` depuis `data-docx-look` (`TableLayoutAttrs.look`, L49) : les six drapeaux
+ * écrits explicitement (un drapeau absent de l'attribut vaut faux, comme au contrat), pour
+ * que Word n'applique pas son masque par défaut `0x04A0`. `undefined` sans attribut lisible :
+ * aucun `w:tblLook` n'est écrit, comme le lecteur n'en a pas lu.
+ */
+export function tableLookOptions(table: Element): ITableLookOptions | undefined {
+  const look = parseTableLook(table.getAttribute(TABLE_LOOK_ATTRIBUTE));
+  if (!look) return undefined;
+  const options: { -readonly [K in keyof ITableLookOptions]: ITableLookOptions[K] } = {};
+  for (const flag of TABLE_LOOK_FLAGS) options[flag] = look[flag] === true;
+  return options;
+}
+
+/**
  * `<table>` → `Table`. Les lignes de `thead` (ou composées uniquement de `th`) sont
  * marquées `tableHeader`, ce que mammoth réimporte en `thead`. Avec des largeurs de
  * colonnes complètes (`colwidth`, `style="width"`, `<col>`), la table passe en
@@ -155,11 +171,13 @@ export async function convertTable(
       }
     : { rows, width: declaredWidth ?? fallbackWidth ?? { size: 100, type: WidthType.PERCENTAGE } };
   const alignment = tableAlignment(table, style, ctx);
+  const tableLook = tableLookOptions(table);
   const options: ITableOptions = {
     ...sized,
     ...(tableStyle ? { style: tableStyle } : {}),
     ...(borders ? { borders } : {}),
     ...(alignment ? { alignment } : {}),
+    ...(tableLook ? { tableLook } : {}),
   };
   return new Table(options);
 }

@@ -1,4 +1,4 @@
-import type { BlockBorder, BorderSide } from '@aster-editor/core';
+import { tableLookValue, type BlockBorder, type BorderSide } from '@aster-editor/core';
 import { childNamed, wordAttribute } from '../preprocess/xml-utils';
 import {
   applyRunProperties,
@@ -199,6 +199,21 @@ export function readTableLook(tblPr: Element | null): TableLook {
     noHBand: flag('noHBand'),
     noVBand: flag('noVBand'),
   };
+}
+
+/**
+ * Valeur de `data-docx-look` (contrat `TableLayoutAttrs.look`, L49) : les drapeaux
+ * effectifs dans l'ordre de `TABLE_LOOK_FLAGS`, **seulement quand le document porte un
+ * `w:tblLook`** (explicite, même vide : le défaut de Word s'y lit comme des drapeaux
+ * effectifs). Sans l'élément, `undefined` : le défaut reste appliqué aux propriétés
+ * directes des cellules mais rien n'est sérialisé, et l'export n'écrit pas de
+ * `w:tblLook`. Un masque sans aucun drapeau (`w:val="0000"`) n'est pas représentable
+ * par le contrat (`null` = pas de drapeau) et donne aussi `undefined`.
+ */
+export function tableLookAttribute(tblPr: Element | null): string | undefined {
+  const tblLook = tblPr ? childNamed(tblPr, 'tblLook') : null;
+  if (!tblLook) return undefined;
+  return tableLookValue(readTableLook(tblPr)) ?? undefined;
 }
 
 /** Taille des bandes (`w:tblStyleRowBandSize` / `w:tblStyleColBandSize`), 1 par défaut. */

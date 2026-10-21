@@ -250,6 +250,13 @@ export {
   type TableAlign,
 } from './extensions/table-layout';
 export {
+  TABLE_LOOK_ATTRIBUTE,
+  isTableLookFlag,
+  parseTableLook,
+  sanitizeTableLook,
+  tableLookValue,
+} from './extensions/table-look';
+export {
   SUSPICIOUS_SPEC_MESSAGE,
   createRawStyleSerializer,
   renderRawSpec,

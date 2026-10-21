@@ -109,6 +109,24 @@ describe('export neuf — styles inline du contrat de mise en page', () => {
     expect(count(xml, '<w:insideH w:val="single"')).toBe(1);
   });
 
+  it('L49 : data-docx-look → w:tblLook avec les six drapeaux, rien sans attribut, aller-retour exact', async () => {
+    const { xml, warnings } = await toDocumentXml(
+      '<table data-docx-look="firstRow noVBand"><tr><td>a</td></tr></table>' +
+        '<table data-docx-look="bogus"><tr><td>b</td></tr></table>' +
+        '<table><tr><td>c</td></tr></table>',
+    );
+    expect(warnings).toEqual([]);
+    expect(count(xml, '<w:tblLook')).toBe(1);
+    expect(xml).toMatch(
+      /<w:tblLook w:firstRow="true" w:lastRow="false" w:firstColumn="false" w:lastColumn="false" w:noHBand="false" w:noVBand="true"\/>/,
+    );
+    const { html } = await roundTrip(
+      '<table data-docx-look="noVBand firstRow lastColumn"><tr><td>a</td></tr></table>',
+    );
+    // Le lecteur relit l'élément et sérialise les drapeaux dans l'ordre du contrat, en dernier.
+    expect(html).toContain('" data-docx-look="firstRow lastColumn noVBand"><tbody>');
+  });
+
   it('les colonnes d’un tableau à largeur déclarée ne sont pas réduites à la page', async () => {
     const { xml } = await toDocumentXml(
       '<table style="width: 100%"><tr><td colwidth="400">a</td><td colwidth="400">b</td></tr></table>',

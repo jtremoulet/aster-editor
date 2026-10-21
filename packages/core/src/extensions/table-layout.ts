@@ -23,6 +23,7 @@ import {
   roundLayoutNumber,
   sanitizeBorders,
 } from './layout-css';
+import { TABLE_LOOK_ATTRIBUTE, parseTableLook, tableLookValue } from './table-look';
 
 /** Options de table partagées par le jeu d'Aster. */
 export const TABLE_OPTIONS = { resizable: true, cellMinWidth: 48 } as const;
@@ -225,7 +226,8 @@ function silentAttribute(parseHTML: (element: HTMLElement) => unknown): Attribut
 
 /**
  * Attributs HTML de mise en page d'une table, dans l'ordre : `style` (largeur puis
- * bordures), `data-docx-style`, `data-align`.
+ * bordures), `data-docx-style`, `data-align`, `data-docx-look` (drapeaux à vrai dans
+ * l'ordre de `TABLE_LOOK_FLAGS`, omis sans drapeau). Le lecteur `.docx` émet le même ordre.
  */
 export function tableLayoutHtmlAttributes(
   attributes: Record<string, unknown>,
@@ -243,12 +245,18 @@ export function tableLayoutHtmlAttributes(
   if (isTableAlign(align)) {
     rendered[TABLE_ALIGN_ATTRIBUTE] = align;
   }
+  const look = tableLookValue(attributes['look']);
+  if (look) {
+    rendered[TABLE_LOOK_ATTRIBUTE] = look;
+  }
   return rendered;
 }
 
 /**
- * Attributs de `TableLayoutAttrs`. `width` émet tout le rendu (`style`, `data-docx-style`
- * puis `data-align`) ; les autres n'émettent rien, comme pour `ParagraphLayout`.
+ * Attributs de `TableLayoutAttrs`. `width` émet tout le rendu (`style`, `data-docx-style`,
+ * `data-align` puis `data-docx-look`) ; les autres n'émettent rien, comme pour
+ * `ParagraphLayout`. Aucune commande de table ne pose `look` (pas de `table.setLayout`
+ * au contrat) : l'attribut vient de l'import Word ou de `setHTML`.
  */
 function tableLayoutAttributes(): Record<string, Attribute> {
   return {
@@ -263,6 +271,7 @@ function tableLayoutAttributes(): Record<string, Attribute> {
     }),
     docxStyle: silentAttribute((element) => element.getAttribute(DOCX_STYLE_ATTRIBUTE) || null),
     align: silentAttribute(parseTableAlign),
+    look: silentAttribute((element) => parseTableLook(element.getAttribute(TABLE_LOOK_ATTRIBUTE))),
   };
 }
 
@@ -307,9 +316,10 @@ export class AsterTableView extends TableView {
   }
 
   /**
-   * Réapplique `style`, `data-docx-style` et `data-align` de mise en page après
-   * `updateColumns`. L'alignement reçoit son CSS de repli (`tableAlignFallbackStyle`)
-   * dans la vue d'édition seulement : `getHTML()` n'émet que `data-align`.
+   * Réapplique `style`, `data-docx-style`, `data-align` et `data-docx-look` de mise en
+   * page après `updateColumns`. L'alignement reçoit son CSS de repli
+   * (`tableAlignFallbackStyle`) dans la vue d'édition seulement : `getHTML()` n'émet que
+   * `data-align`.
    */
   private syncLayout(node: ProseMirrorNode): void {
     const rendered = tableLayoutHtmlAttributes(node.attrs);
@@ -326,7 +336,7 @@ export class AsterTableView extends TableView {
       this.table.style.width = computedWidth;
     }
     this.table.style.minWidth = minWidth;
-    for (const name of [DOCX_STYLE_ATTRIBUTE, TABLE_ALIGN_ATTRIBUTE]) {
+    for (const name of [DOCX_STYLE_ATTRIBUTE, TABLE_ALIGN_ATTRIBUTE, TABLE_LOOK_ATTRIBUTE]) {
       const value = rendered[name];
       if (value === undefined) {
         this.table.removeAttribute(name);

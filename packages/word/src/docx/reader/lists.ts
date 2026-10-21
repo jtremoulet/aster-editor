@@ -16,7 +16,7 @@ import { numericAttribute, twipsToPt } from './units';
 /**
  * Listes : résolution de `numbering.xml` (`w:abstractNum` → niveaux, `w:num` →
  * `abstractNumId` + `w:lvlOverride`) et regroupement des paragraphes numérotés en
- * `<ol type start data-docx-num-id>` / `<ul data-bullet data-docx-num-id>` imbriqués
+ * `<ol data-docx-num-id start type>` / `<ul data-bullet data-docx-num-id>` imbriqués
  * selon le niveau, chaque `<li>` contenant le `<p>` du paragraphe.
  */
 
@@ -318,7 +318,8 @@ function listOpening(definition: ListDefinition, level: ListLevel, start: number
   const type = level.format !== '1' && level.format !== 'none' ? ` type="${level.format}"` : '';
   const startAttr =
     start !== 1 ? ` start="${String(Math.min(start, Number.MAX_SAFE_INTEGER))}"` : '';
-  return `<ol${type}${startAttr}${numId}>`;
+  // Ordre du core (`setHTML(getHTML())` strict, L49) : `data-docx-num-id`, `start`, `type`.
+  return `<ol${numId}${startAttr}${type}>`;
 }
 
 /**

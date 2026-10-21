@@ -8,6 +8,7 @@ import {
   conditionalTypesOf,
   readBandSizes,
   readTableLook,
+  tableLookAttribute,
   type CellPosition,
 } from './table-conditional';
 import type { ConverterContext, TableBlock, TableStyleProps } from './types';
@@ -37,7 +38,10 @@ import {
  * omise, comme Tiptap). Les cellules sont converties par `ctx.convert.blocks`, ce qui
  * rend les tableaux imbriqués récursifs. Session 4 : `w:jc` → `data-align`, bordure `nil`
  * explicite qui annule celle du tableau → `0pt solid transparent`, styles conditionnels
- * (`w:tblStylePr` selon `w:tblLook`) fondus dans le style vu par chaque cellule.
+ * (`w:tblStylePr` selon `w:tblLook`) fondus dans le style vu par chaque cellule, et
+ * `w:tblLook` explicite → `data-docx-look` (L49). Les attributs de `<table>` sortent dans
+ * l'ordre du core (`tableLayoutHtmlAttributes`) : `style`, `data-docx-style`, `data-align`,
+ * `data-docx-look` ; `colwidth` est posé sur chaque ligne, comme le core le recopie.
  */
 
 type SideBorders = Partial<Record<BorderSide, BlockBorder | null>>;
@@ -264,9 +268,10 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
         defaultPadding,
         readCellMargins(tcPr ? childNamed(tcPr, 'tcMar') : null),
       );
+      // Sur toutes les lignes, pas seulement la première : le core recopie le `colwidth`
+      // de chaque colonne sur chaque cellule, l'idempotence stricte l'exige (L46 → L49).
       const widths = grid.slice(column, column + colspan);
-      const colwidth =
-        rowIndex === 0 && widths.length === colspan ? widths.map(String).join(',') : undefined;
+      const colwidth = widths.length === colspan ? widths.map(String).join(',') : undefined;
 
       const cellCtx = deriveContext(tableCtx, {
         cellVerticalAlign: verticalAlign,
@@ -294,13 +299,15 @@ export async function convertTable(table: Element, ctx: ConverterContext): Promi
   }
 
   const align = tableAlign(tblPr);
+  const lookAttribute = tableLookAttribute(tblPr);
   const tableAttrs =
     styleAttr([
       ['width', tableWidth(tblPr ? childNamed(tblPr, 'tblW') : null)],
       ...borderDeclarations(outerBorders),
     ]) +
     (styleId ? ` data-docx-style="${escapeAttr(styleId)}"` : '') +
-    (align ? ` data-align="${align}"` : '');
+    (align ? ` data-align="${align}"` : '') +
+    (lookAttribute ? ` data-docx-look="${lookAttribute}"` : '');
   const body = records.map((row) => `<tr>${row.cells.map(renderCell).join('')}</tr>`).join('');
   return { kind: 'table', html: `<table${tableAttrs}><tbody>${body}</tbody></table>` };
 }

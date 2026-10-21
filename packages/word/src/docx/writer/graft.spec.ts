@@ -192,7 +192,7 @@ describe('listes', () => {
     expect(numbering).toContain(`<w:num w:numId="${numId}">`);
     const again = await importStyled(result.buffer);
     expect(again.html).toContain('Nouvelle puce');
-    expect(again.html).toMatch(/<ol start="4" data-docx-num-id="\d+"><li><p[^>]*>Quatre<\/p>/);
+    expect(again.html).toMatch(/<ol data-docx-num-id="\d+" start="4"><li><p[^>]*>Quatre<\/p>/);
   });
 
   it('retrouve le niveau d’une liste Word relue à plat d’après sa puce (fixture 15)', async () => {

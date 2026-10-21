@@ -12,6 +12,7 @@ import { createNumberingMerger } from './numbering-merge';
 import { REL_TYPE, RelationshipTable } from './relationships';
 import { ensureSettings } from './settings-merge';
 import { createStyleMerger, type StyleMerger, type StyleType } from './styles-merge';
+import { stripConditionalTableProperties } from './table-look';
 import type { TemplateContext } from './template';
 import { PartStore, setWordAttr, wordAttr, type XmlCodec } from './xml-io';
 
@@ -144,6 +145,9 @@ export async function graftIntoTemplate(
   ];
   await remapStyles(blocks, footnotes.imported(), styles);
   for (const paragraph of paragraphs) styles.stripParagraph(paragraph);
+  // Tableaux à style conditionnel (`w:tblStyle` + `w:tblLook`) : fond, gras et bordures que
+  // le style du gabarit produit déjà ne sont pas écrits en direct (L49).
+  stripConditionalTableProperties(blocks, input.template.resolver);
 
   // 3. Greffe section par section : les blocs remplacent ceux du gabarit, chaque `w:sectPr`
   //    est repris du gabarit ou régénéré, les en-têtes et pieds qui diffèrent sont recopiés.

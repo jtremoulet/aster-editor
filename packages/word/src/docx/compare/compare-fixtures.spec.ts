@@ -33,7 +33,7 @@ const TEMPLATE_TARGET_SCORE = 0.98;
 const ROUNDTRIP_MIN_TEXT_RATIO = 0.7;
 
 /**
- * Fixtures qui atteignent la cible dans le gabarit (mesure du 21/10/2026 après L46 : le
+ * Fixtures qui atteignent la cible dans le gabarit (mesure du 21/10/2026 après L49 : le
  * comparateur résout les styles conditionnels de tableau comme le lecteur et compare
  * `w:jc` et `w:tblLook` — `model.ts`, `compare-tables.ts`), avec les seules propriétés
  * encore perdues :
@@ -41,16 +41,13 @@ const ROUNDTRIP_MIN_TEXT_RATIO = 0.7;
  *   était à 0,988 (`table.borders` ×1, `table.cellBorders` ×4 : `spacePt: 0` d'un côté,
  *   rien ou 1 / 4 pt de l'autre) avant L45a, qui a cessé de comparer `w:space` sur les
  *   bordures de tableau et de cellule, où Word ne l'applique pas.
- * - `19-tabulations-bordures` (**0,998**, 0,919 avant L46, 0,893 avant L45a) :
- *   `table.conditional` ×1 — le writer ne réécrit pas `w:tblLook` (hors contrat,
- *   proposition `TableLayoutAttrs.look`), Word applique alors son masque par défaut
- *   `0x04A0` et active `firstColumn` en plus de `firstRow` (`firstRow,noVBand` →
- *   `firstRow,firstColumn,noVBand`). Les `run.bold` ×2 et `table.cellShading` ×6 d'avant
- *   L46 étaient le même sacrifice vu autrement : le lecteur résout `w:tblStylePr` en
- *   propriétés directes, que le comparateur accepte désormais comme équivalentes au style
- *   (tolérance documentée dans `compare-docx.ts`, notes du rapport). La perte est mesurée,
- *   pas corrigée : le tableau reste visuellement identique mais sa mise en forme ne suit
- *   plus le style dans Word.
+ * - `19-tabulations-bordures` (**1** depuis L49, 0,998 après L46, 0,919 avant, 0,893
+ *   avant L45a) : rien. Le `w:tblLook` est relu en `data-docx-look`
+ *   (`TableLayoutAttrs.look`), réécrit par le writer, et la greffe ne réécrit plus en
+ *   direct le fond, le gras et les bordures que le style conditionnel du gabarit produit
+ *   (`writer/table-look.ts`) : le tableau suit à nouveau son style dans Word. Avant L49,
+ *   `table.conditional` ×1 : sans `w:tblLook`, Word appliquait `0x04A0` et activait
+ *   `firstColumn` en plus de `firstRow`.
  */
 const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
   '11-styles-inline.docx': [],
@@ -60,12 +57,12 @@ const TEMPLATE_AT_TARGET: Readonly<Record<string, readonly string[]>> = {
   '15-listes-numerotation.docx': [],
   '16-sections.docx': [],
   '18-sections-triple.docx': [],
-  '19-tabulations-bordures.docx': ['table.conditional'],
+  '19-tabulations-bordures.docx': [],
 };
 
 /**
  * Fixtures sous la cible dans le gabarit, avec le score mesuré le 21/10/2026 (inchangé
- * de L45a à L46). Les parties annexes du paquet sont toutes identiques à l'octet ; les
+ * de L45a à L49). Les parties annexes du paquet sont toutes identiques à l'octet ; les
  * pertes restantes viennent du lecteur (`reader/**`) ou du writer (`writer/**`,
  * `export/**`), hors périmètre du comparateur :
  * - `17-objets-perdus` (0,972, inchangé) : `paragraph.text` ×3 — texte de la zone de texte
@@ -82,8 +79,9 @@ const TEMPLATE_BELOW_TARGET: Readonly<Record<string, number>> = {
 
 /**
  * Document client dans le gabarit : **0,995** mesuré le 21/10/2026 après L45a, confirmé
- * après F42 à 00:36 et après L46 (ses tableaux n'ont pas de style conditionnel : le
- * comparateur étendu ne change rien ; 0,99 après L43, 0,889 en L28c, 0,830 en L28b) : la
+ * après F42 à 00:36, après L46 et après L49 (ses tableaux n'ont pas de style conditionnel :
+ * le comparateur étendu ne change rien, et le `w:tblLook` de Word est désormais relu et
+ * réécrit tel quel ; 0,99 après L43, 0,889 en L28c, 0,830 en L28b) : la
  * cible de la session 3 est atteinte, les trois `w:sectPr` ressortent identiques à l'octet.
  * Pertes restantes, toutes réelles et hors périmètre du comparateur : `paragraph.text` ×2,
  * `run.runStyle` / `run.underline` ×1 sur un lien (`Lienhypertexte`), `table.cellBorders`
