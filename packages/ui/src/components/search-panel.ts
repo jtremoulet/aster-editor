@@ -181,10 +181,13 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
       className: 'aster-dialog__button aster-search-panel__replace-all',
       text: t('ui.search.replaceAll'),
     });
-    const closeButton = createPlainButton({
-      className: 'aster-dialog__button aster-dialog__button--primary aster-search-panel__close',
-      text: t('ui.search.close'),
-    });
+    // Une croix plutôt qu'un bouton primaire « Fermer » : le bandeau tient sur une ligne et
+    // l'action principale reste la recherche. Le libellé passe par `aria-label` et `title`.
+    const closeButton = iconButton(
+      'aster-search-panel__close',
+      getIcon('close'),
+      t('ui.search.close'),
+    );
 
     const args = (): { query: string; caseSensitive: boolean; replacement: string } => ({
       query: query.value,
@@ -237,9 +240,9 @@ export function createSearchPanel(editor: AsterEditor): ToolbarWidget {
 
     panel.append(
       el('div', { className: 'aster-search-panel__row' }, [query, count, previous, next]),
-      el('div', { className: 'aster-dialog__field' }, [caseLabel]),
+      caseLabel,
       el('div', { className: 'aster-search-panel__row' }, [replacement, replace, replaceAll]),
-      el('div', { className: 'aster-dialog__actions' }, [closeButton]),
+      closeButton,
     );
     sync();
     return { query, sync };

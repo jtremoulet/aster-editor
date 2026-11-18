@@ -252,7 +252,7 @@ Types de `variables.ts`. Une variable est une puce inline atomique du document (
 | Champ         | Type     | Obligatoire | Description                                                                                                              |
 | ------------- | -------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `name`        | `string` | oui         | Identifiant stable : lettres, chiffres, `_`, `.`, `-` (premier caractère : lettre, chiffre ou `_`). Sensible à la casse. |
-| `label`       | `string` | non         | Libellé humain affiché dans la puce et les menus. Par défaut `name`.                                                     |
+| `label`       | `string` | non         | Libellé humain affiché dans la puce et les menus. Une puce sans libellé propre prend celui déclaré ici, sinon `name`.    |
 | `value`       | `string` | non         | Valeur courante. Absente → la puce affiche le libellé.                                                                   |
 | `description` | `string` | non         | Aide affichée dans le menu d'insertion.                                                                                  |
 

@@ -10,6 +10,7 @@ import type { NodeView } from '@tiptap/pm/view';
 import type { AsterEditor, Unsubscribe } from '../api/index.js';
 import {
   VARIABLE_NODE_NAME,
+  declaredVariableLabel,
   isValidVariableName,
   variableLabel,
   variableName,
@@ -127,7 +128,11 @@ export class VariableNodeView implements NodeView {
   /** Reflète nom, libellé et valeur courante dans le DOM. */
   private render(): void {
     const name = variableName(this.node);
-    const label = variableLabel(this.node) ?? name;
+    // Libellé de la puce, sinon celui déclaré dans le magasin, sinon le nom technique.
+    const label =
+      variableLabel(this.node) ??
+      (this.aster ? declaredVariableLabel(this.aster.variables, name) : null) ??
+      name;
     this.dom.setAttribute('data-name', name);
     const value = this.aster?.variables.getValues()[name];
     if (value !== undefined) {

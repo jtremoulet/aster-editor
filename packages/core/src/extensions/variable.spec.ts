@@ -186,6 +186,28 @@ describe('extension Variable', () => {
       expect(chip(mounted, 'x').textContent).toBe('x');
     });
 
+    it('une puce sans libellé affiche celui déclaré dans le magasin (champ importé de Word)', () => {
+      const word = '<p><span data-aster-variable="SalespersonFullName">{{x}}</span></p>';
+      const other = mountEditor({
+        content: word,
+        variables: {
+          variables: [{ name: 'SalespersonFullName', label: 'Nom complet du conseiller' }],
+        },
+      });
+      expect(chip(other, 'SalespersonFullName').textContent).toBe('Nom complet du conseiller');
+      other.cleanup();
+    });
+
+    it('le libellé déclaré après coup (define) remplace le nom, celui de la puce prime', () => {
+      mounted.editor.setHTML(`<p><span data-aster-variable="x">{{x}}</span> ${CLIENT}</p>`);
+      mounted.editor.variables.define([
+        { name: 'x', label: 'Libellé de x' },
+        { name: 'client', label: 'Libellé du magasin' },
+      ]);
+      expect(chip(mounted, 'x').textContent).toBe('Libellé de x');
+      expect(chip(mounted).textContent).toBe('Client');
+    });
+
     it('se rafraîchit sur setValues sans recréer le DOM : valeur, --resolved, title {{nom}}', () => {
       const el = chip(mounted);
       mounted.editor.variables.setValues({ client: 'Dupont' });

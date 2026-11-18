@@ -55,6 +55,24 @@ export interface AsterVariableStore extends VariableStore {
   isDeclared(name: string): boolean;
   /** Vrai si `variable.insert` accepterait ce nom : syntaxe valide et, si `allowUnknown` est faux, déclarée. */
   canInsert(name: string): boolean;
+  /**
+   * Déclaration d'une variable (sans sa valeur), `undefined` si elle n'est pas déclarée.
+   * Lecture directe, sans parcourir le document : les puces l'appellent à chaque rendu.
+   */
+  getDefinition(name: string): AsterVariable | undefined;
+}
+
+/**
+ * Libellé déclaré pour ce nom dans le magasin, `null` s'il n'y en a pas. Sert de repli aux
+ * puces sans libellé propre : un champ de fusion importé de Word n'a que son nom technique,
+ * alors que l'intégrateur a déclaré un libellé lisible. Un magasin tiers est lu par `list()`.
+ */
+export function declaredVariableLabel(store: VariableStore, name: string): string | null {
+  const definition = isAsterVariableStore(store)
+    ? store.getDefinition(name)
+    : store.list().find((variable) => variable.name === name);
+  const label = definition?.label;
+  return typeof label === 'string' && label !== '' ? label : null;
 }
 
 /** Vrai si le magasin est celui du core (et non un mock ou une implémentation tierce). */
@@ -135,6 +153,10 @@ export function createVariableStore(
     allowUnknown,
     isDeclared,
     canInsert: (name) => isValidVariableName(name) && (allowUnknown || isDeclared(name)),
+    getDefinition: (name) => {
+      const definition = definitions.get(name);
+      return definition ? { ...definition } : undefined;
+    },
     list: () => {
       const seen = new Map<string, AsterVariable>();
       for (const [name, definition] of definitions) {

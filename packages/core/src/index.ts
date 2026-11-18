@@ -381,6 +381,7 @@ export {
   VARIABLE_NODE_NAME,
   canInsertVariable,
   createVariableStore,
+  declaredVariableLabel,
   isAsterVariableStore,
   isValidVariableName,
   variableLabel,

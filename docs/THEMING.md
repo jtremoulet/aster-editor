@@ -177,7 +177,7 @@ Trente-quatre variables, définies sur `.aster[data-theme='light']` (`light.css`
 - **Danger** : `--aster-danger`, `--aster-danger-contrast`
 - **Rayons et espacements** : `--aster-radius`, `--aster-radius-lg`, `--aster-space-1` … `--aster-space-4`
 - **Typographie** : `--aster-font-ui`, `--aster-font-content`, `--aster-font-mono`, `--aster-font-size-ui`, `--aster-font-size-content`, `--aster-line-height`
-- **Divers** : `--aster-shadow`, `--aster-focus-ring`, `--aster-button-size`, `--aster-content-min-height`, `--aster-highlight`, `--aster-selection`
+- **Divers** : `--aster-shadow`, `--aster-focus-ring`, `--aster-button-size`, `--aster-content-min-height`, `--aster-highlight`, `--aster-selection`, `--aster-search-sticky-top` (optionnelle, `0px` : décalage du bandeau de recherche collant sous un en-tête fixe de l'application)
 - **Vue page** (session 3) : `--aster-page-bg` (fond de la feuille, `#ffffff` / `#1c1f27`), `--aster-page-desk` (fond du bureau, `#e3e5ea` / `#0f1116`), `--aster-page-shadow` (ombre de la feuille), `--aster-page-desk-padding` (espace bureau / feuille et hauteur d'une coupure, `24px`)
 
 Chaque thème pose aussi `color-scheme` (`light` / `dark`) pour les contrôles natifs (cases à cocher des listes de tâches, `<input type="file">`, `<textarea>` de la vue source).

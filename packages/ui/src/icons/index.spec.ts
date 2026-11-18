@@ -88,22 +88,18 @@ describe('icons', () => {
     expect(hasIcon('paragraph-unset-layout')).toBe(true);
   });
 
-  it('ordered-list : chiffres sans-serif séparés, aucun ne dépasse la grille', () => {
-    const svg = getIcon('ordered-list');
-    const glyphs = Array.from(svg.matchAll(/<text [^>]*>/g), (match) => match[0]);
-    expect(glyphs.length).toBe(3);
-    const baselines: number[] = [];
-    for (const glyph of glyphs) {
-      expect(glyph).toContain('font-family="Arial, Helvetica, sans-serif"');
-      const y = Number.parseFloat(/ y="([\d.]+)"/.exec(glyph)?.[1] ?? 'NaN');
-      const size = Number.parseFloat(/font-size="([\d.]+)"/.exec(glyph)?.[1] ?? 'NaN');
-      expect(y).toBeLessThanOrEqual(18);
-      expect(size).toBeLessThanOrEqual(5);
-      baselines.push(y);
+  it('icônes de listes : au trait, sans <text> (rendu indépendant des polices du poste)', () => {
+    const names = ['bullet-list', 'ordered-list', 'task-list'];
+    for (const name of names) {
+      const svg = getIcon(name);
+      expect(svg, name).toContain('stroke="currentColor"');
+      expect(svg, name).not.toContain('<text');
     }
-    for (let index = 1; index < baselines.length; index += 1) {
-      expect((baselines[index] ?? 0) - (baselines[index - 1] ?? 0)).toBeGreaterThanOrEqual(4.4);
-    }
+    expect(getIcon('bullet-list').match(/<circle /g)?.length).toBe(3);
+    // Trois lignes de texte, deux chiffres dessinés au trait fin.
+    expect(getIcon('ordered-list')).toContain('M8.5 5H17M8.5 10H17M8.5 15H17');
+    expect(getIcon('ordered-list').match(/stroke-width="1.3"/g)?.length).toBe(2);
+    expect(new Set(names.map((name) => getIcon(name))).size).toBe(3);
   });
 
   it('retourne un repli visible pour un nom inconnu', () => {

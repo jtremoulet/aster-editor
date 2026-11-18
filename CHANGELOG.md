@@ -6,6 +6,22 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-18
+
+Premiers correctifs des retours utilisateurs sur la 0.7.0.
+
+### Fixed
+
+- **ui** : le bandeau « rechercher / remplacer » faisait 700 px de haut, champs empilés et centrés : il héritait de `flex-direction: column` de `.aster-dialog`, si bien que les `flex-basis` de ses groupes étaient lus comme des hauteurs. `flex-direction: row` explicite, une seule ligne sur un écran large.
+- **core** : une puce sans libellé propre (champ de fusion importé de Word) affiche le libellé **déclaré dans le magasin** (`variables.variables`, `define`) au lieu du nom technique ; le libellé porté par la puce garde la priorité, et la puce se rafraîchit sur `define`.
+- **ui** : icônes de listes (puces, numérotée, tâches) redessinées au trait, sans `<text>` : les chiffres en police système de 4,6 px bavaient et variaient d'un poste à l'autre.
+
+### Changed
+
+- **ui** : bandeau de recherche compact et **collant** en haut de ce qui défile (`--aster-search-sticky-top`, `0px` par défaut, pour le décaler sous un en-tête fixe de l'application) ; « Fermer » devient une croix (`aria-label` et `title` traduits, classe `.aster-search-panel__close` conservée) ; la case « Respecter la casse » et la croix sont des enfants directs du bandeau (plus de `.aster-dialog__field` ni `.aster-dialog__actions`).
+- **core** : `AsterVariableStore.getDefinition(name)` et `declaredVariableLabel(store, name)` (additifs, hors contrat `VariableStore`).
+- **e2e** : `search.spec.ts` vérifie la hauteur du bandeau.
+
 ## [0.7.0] - 2026-10-21
 
 Réponse aux huit retours de l'intégrateur qui a mis la 0.6.0 en essai à la place de CKEditor : l'aperçu à l'écran se rapproche du document (en-têtes et pieds sur chaque page, défauts de paragraphe et police du document appliqués), les en-têtes et pieds s'éditent dans le dialogue « Mise en page », la recherche défile et ne recouvre plus le texte, les paquets s'importent en Node pur, et un contrôle de contenu lié aux propriétés du document n'est plus pris pour une variable. Session 5 : 4 lots, 2 revues adverses (15 findings, 0 bloquant, 5 majeurs, 14 corrigés avec test, 1 en attente du document du retour n° 1), 2 lots de correctifs.

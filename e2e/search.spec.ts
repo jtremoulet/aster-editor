@@ -82,6 +82,9 @@ test.describe('Recherche (playground)', () => {
     expect(bandBox).not.toBeNull();
     expect(after).not.toBeNull();
     expect(before).not.toBeNull();
+    // Compact : une ligne sur un écran large, jamais les 700 px du retour utilisateurs 0.7
+    // (les `flex-basis` des groupes étaient lus comme des hauteurs).
+    expect(bandBox!.height).toBeLessThan(120);
     expect(bandBox!.y + bandBox!.height).toBeLessThanOrEqual(after!.y + 1);
     expect(after!.y).toBeGreaterThan(before!.y + bandBox!.height - 1);
     // Rien n'est recouvert : la première ligne est entièrement sous le bandeau.
