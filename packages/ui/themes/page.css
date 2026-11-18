@@ -668,9 +668,20 @@
   height: auto;
 }
 
-/* Les puces de variables d'un en-tête importé restent lisibles dans le champ. */
+/* Puces de variables dans le champ : un bloc insécable qui affiche le libellé. */
 .aster-page-layout__rich span[data-aster-variable] {
-  padding: 0 0.2em;
+  padding: 0 0.35em;
+  border: 1px dashed var(--aster-border);
   border-radius: var(--aster-radius);
-  background: var(--aster-surface-3);
+  background: var(--aster-accent-soft);
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Liste « Insérer une variable » sous les champs d'en-tête et de pied. */
+.aster-page-layout__variable {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  margin-top: var(--aster-space-2);
 }

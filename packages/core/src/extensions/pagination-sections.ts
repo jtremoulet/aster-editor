@@ -5,6 +5,7 @@ import type {
   PageSizeName,
   PageViewOptions,
 } from '../api/index.js';
+import { displayHeaderFooterHtml } from './header-footer-variables.js';
 import { roundLayoutNumber } from './layout-css.js';
 import { PAGE_SIZES_MM, resolveSectionLayout } from './page-view.js';
 import {
@@ -196,8 +197,13 @@ function sectionHtml(
   section: number,
   kind: 'headers' | 'footers',
   page: HeaderFooterPage,
+  aster: AsterEditor | null,
 ): string {
-  return headerFooterHtmlFor(resolveSectionLayout(layout, section), kind, page);
+  // HTML affiché : les puces de variables portent leur valeur ou leur libellé.
+  return displayHeaderFooterHtml(
+    headerFooterHtmlFor(resolveSectionLayout(layout, section), kind, page),
+    aster,
+  );
 }
 
 /** Conteneur en lecture seule d'un en-tête ou d'un pied dans une coupure, `null` si vide. */
@@ -224,6 +230,7 @@ function appendHeaderFooter(
   previous: number,
   result: PaginationResult,
   options: PageViewOptions,
+  aster: AsterEditor | null,
 ): void {
   if (options.showHeadersFooters === false) {
     return;
@@ -233,12 +240,12 @@ function appendHeaderFooter(
   const pages = gapPages(gap, previous, result, layout);
   const footer = renderHeaderFooter(
     PAGE_GAP_FOOTER_CLASS,
-    sectionHtml(layout, previous, 'footers', pages.closing),
+    sectionHtml(layout, previous, 'footers', pages.closing, aster),
   );
   if (footer) element.prepend(footer);
   const header = renderHeaderFooter(
     PAGE_GAP_HEADER_CLASS,
-    sectionHtml(layout, section, 'headers', pages.opening),
+    sectionHtml(layout, section, 'headers', pages.opening, aster),
   );
   if (header) element.append(header);
 }
@@ -259,7 +266,7 @@ export function decorateGapSection(
   options: PageViewOptions,
   aster: AsterEditor | null,
 ): void {
-  appendHeaderFooter(element, gap, previous, result, options);
+  appendHeaderFooter(element, gap, previous, result, options, aster);
   const section = gap.section;
   const sections = result.sections;
   if (section === undefined || !sections) {
@@ -290,6 +297,7 @@ export function sectionSignature(
   previous: number,
   result: PaginationResult,
   options: PageViewOptions,
+  aster: AsterEditor | null = null,
 ): string {
   const layout: DocumentLayout = options.layout ?? {};
   const section = gap.section ?? previous;
@@ -300,8 +308,8 @@ export function sectionSignature(
     sections ? JSON.stringify(sections[previous - 1] ?? null) : '',
     sections ? JSON.stringify(sections[section - 1] ?? null) : '',
     String(showHeadersFooters),
-    showHeadersFooters ? sectionHtml(layout, previous, 'footers', pages.closing) : '',
-    showHeadersFooters ? sectionHtml(layout, section, 'headers', pages.opening) : '',
+    showHeadersFooters ? sectionHtml(layout, previous, 'footers', pages.closing, aster) : '',
+    showHeadersFooters ? sectionHtml(layout, section, 'headers', pages.opening, aster) : '',
   ];
   // djb2 : un entier court suffit, la clé n'a pas besoin d'être cryptographique.
   let hash = 5381;

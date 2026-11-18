@@ -197,4 +197,77 @@ test.describe('Captures de référence', () => {
     await parkMouse(page);
     await expect(page.locator('.aster')).toHaveScreenshot('page-view-tall-headers.png');
   });
+
+  test('vue page : variables dans l’en-tête et le pied, avec et sans valeur', async ({ page }) => {
+    await page.evaluate(() => {
+      const aster = (window as unknown as VisualWindow).aster;
+      if (!aster) throw new Error('window.aster is not available: playground not mounted');
+      aster.editor.variables.define([{ name: 'conseiller', label: 'Nom du conseiller' }]);
+      aster.editor.variables.setValues({ reference: 'A-2026-014' });
+    });
+    await setPageView(page, {
+      layout: {
+        page: { size: 'A4', orientation: 'portrait' },
+        headers: {
+          default: {
+            html: '<p>Dossier <span data-aster-variable="reference">{{reference}}</span> — suivi par <span data-aster-variable="conseiller">{{conseiller}}</span></p>',
+          },
+        },
+        footers: {
+          default: {
+            html: '<p style="text-align: center"><span data-aster-variable="societe" data-label="Société">{{societe}}</span></p>',
+          },
+        },
+      },
+    });
+    await expect(page.locator('.aster--page-view')).toHaveCount(1);
+    await setHtml(
+      page,
+      Array.from({ length: 40 }, (_, index) => `<p>Paragraphe ${index + 1} du document.</p>`).join(
+        '',
+      ),
+    );
+    await expect(editor(page).locator('.aster-page-gap')).toHaveCount(1);
+    await expect(page.locator('.aster-page-header')).toHaveText(
+      'Dossier A-2026-014 — suivi par Nom du conseiller',
+    );
+    await parkMouse(page);
+    await expect(page.locator('.aster')).toHaveScreenshot('page-view-header-variables.png');
+  });
+
+  test('dialogue « Mise en page » : champs d’en-tête et de pied avec puces et liste des variables', async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      const aster = (window as unknown as VisualWindow).aster;
+      if (!aster) throw new Error('window.aster is not available: playground not mounted');
+      aster.editor.variables.define([
+        { name: 'reference', label: 'Référence du dossier' },
+        { name: 'conseiller', label: 'Nom du conseiller' },
+      ]);
+    });
+    await setPageView(page, {
+      layout: {
+        page: { size: 'A4', orientation: 'portrait' },
+        headers: {
+          default: {
+            html: '<p>Dossier <span data-aster-variable="reference">{{reference}}</span></p>',
+          },
+        },
+        footers: {
+          default: {
+            html: '<p>Suivi par <span data-aster-variable="conseiller">{{conseiller}}</span></p>',
+          },
+        },
+      },
+    });
+    await setHtml(page, '<p>Un paragraphe.</p>', false);
+    await page.locator('.aster-dropdown__trigger[aria-label="Mise en page"]').click();
+    const dialog = page.locator('.aster-page-layout');
+    await expect(dialog).toBeVisible();
+    await parkMouse(page);
+    await expect(dialog.locator('.aster-page-layout__headers')).toHaveScreenshot(
+      'page-layout-header-fields.png',
+    );
+  });
 });

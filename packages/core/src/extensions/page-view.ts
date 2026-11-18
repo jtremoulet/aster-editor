@@ -15,6 +15,11 @@ import {
 } from './page-view-defaults.js';
 import { createDomHeaderFooterMeasure, pushPageMetrics } from './page-view-push.js';
 import { FIRST_PAGE, headerFooterHtmlFor, type HeaderFooterPage } from './page-view-variants.js';
+import {
+  displayHeaderFooterHtml,
+  hasHeaderFooterVariables,
+  headerFooterVariablesOf,
+} from './header-footer-variables.js';
 
 // Défauts du document (L52) et variantes first / even des en-têtes : modules dédiés.
 export {
@@ -175,14 +180,15 @@ export function displayedPageMetrics(
     return metrics;
   }
   try {
-    return pushPageMetrics(
-      metrics,
-      section,
-      createDomHeaderFooterMeasure(
-        host,
-        { headers: PAGE_HEADER_CLASS, footers: PAGE_FOOTER_CLASS },
-        onInvalidate,
-      ),
+    const measure = createDomHeaderFooterMeasure(
+      host,
+      { headers: PAGE_HEADER_CLASS, footers: PAGE_FOOTER_CLASS },
+      onInvalidate,
+    );
+    // Ce qui est mesuré est ce qui est affiché : les puces de variables avec leur valeur.
+    const editor = headerFooterVariablesOf(host);
+    return pushPageMetrics(metrics, section, (kind, html, widthMm) =>
+      measure(kind, displayHeaderFooterHtml(html, editor), widthMm),
     );
   } catch {
     return metrics;
@@ -389,12 +395,16 @@ function lastSectionState(
   layout: DocumentLayout,
   contentElement: HTMLElement,
   showHeadersFooters: boolean,
+  host: HTMLElement,
 ): LastSectionState {
   const lastSection = bodySectionCount(layout, contentElement);
   const last = resolveSectionLayout(layout, lastSection);
   return {
     footerHtml: showHeadersFooters
-      ? headerFooterHtmlFor(last, 'footers', hostLastPage(contentElement, lastSection))
+      ? displayHeaderFooterHtml(
+          headerFooterHtmlFor(last, 'footers', hostLastPage(contentElement, lastSection)),
+          headerFooterVariablesOf(host),
+        )
       : '',
     widthMaxMm: maxSectionWidthMm(layout, lastSection),
   };
@@ -426,6 +436,19 @@ function applyLastSection(
   }
 }
 
+/**
+ * Vrai si la mise en page peut porter une variable dans un en-tête ou un pied. Une mise en
+ * page non sérialisable (référence circulaire posée par un intégrateur) est supposée en
+ * porter : mieux vaut un réaffichage de trop qu'une exception à l'activation de la vue.
+ */
+function layoutMayHoldVariables(layout: DocumentLayout): boolean {
+  try {
+    return hasHeaderFooterVariables(JSON.stringify(layout) ?? '');
+  } catch {
+    return true;
+  }
+}
+
 /** Vue page montée : conteneurs et retrait. */
 export interface PageViewHandle {
   /** Options telles que reçues, pour remonter la même vue si la suivante échoue (R41-05). */
@@ -433,6 +456,12 @@ export interface PageViewHandle {
   readonly layout: DocumentLayout;
   readonly header: HTMLElement | null;
   readonly footer: HTMLElement | null;
+  /**
+   * Réaffiche les en-têtes et pieds quand les valeurs ou libellés des variables changent :
+   * puces, marges poussées, puis coupures de la pagination. Sans effet si la mise en page
+   * ne porte aucune variable.
+   */
+  refresh(): void;
   /** Retire classe, variables et conteneurs. Idempotent. */
   remove(): void;
 }
@@ -466,11 +495,20 @@ export function applyPageView(
   const values = pageViewCssValues(resolvePageMetrics(first));
   // L'en-tête de l'hôte habille la page 1, première de la section 1 : `first` si la
   // section est `titlePage` (L52), `default` sinon.
-  const headerHtml = showHeadersFooters ? headerFooterHtmlFor(first, 'headers', FIRST_PAGE) : '';
+  const hostHeaderHtml = (): string =>
+    showHeadersFooters
+      ? displayHeaderFooterHtml(
+          headerFooterHtmlFor(first, 'headers', FIRST_PAGE),
+          headerFooterVariablesOf(host),
+        )
+      : '';
+  const headerHtml = hostHeaderHtml();
+  // Lu une fois : sans variable dans la mise en page, `refresh` n'a rien à refaire.
+  const hasVariables = showHeadersFooters && layoutMayHoldVariables(layout);
   // Le pied en bas de la feuille est celui de la dernière section **du corps** (R44-05 :
   // sauts de premier niveau + 1, borné par les sections déclarées ; la pagination affiche
   // les pieds intermédiaires sur chaque coupure) ; l'en-tête, celui de la première.
-  const last = lastSectionState(layout, contentElement, showHeadersFooters);
+  const last = lastSectionState(layout, contentElement, showHeadersFooters, host);
   const defaults = pageDefaultsCssValues(layout);
 
   host.classList.add(PAGE_VIEW_CLASS);
@@ -520,7 +558,11 @@ export function applyPageView(
   // La suite des sauts change (L50) : la dernière section du corps aussi, peut-être. La
   // dernière page change (L52, pagination) : la variante du pied aussi.
   const onSectionBreaksChange = (): void => {
-    applyLastSection(host, footer, lastSectionState(layout, contentElement, showHeadersFooters));
+    applyLastSection(
+      host,
+      footer,
+      lastSectionState(layout, contentElement, showHeadersFooters, host),
+    );
   };
   contentElement.addEventListener(SECTION_BREAKS_CHANGE_EVENT, onSectionBreaksChange);
   contentElement.addEventListener(HOST_LAST_PAGE_EVENT, onSectionBreaksChange);
@@ -534,6 +576,18 @@ export function applyPageView(
     layout,
     header,
     footer,
+    refresh() {
+      if (removed || !hasVariables) {
+        return;
+      }
+      const html = hostHeaderHtml();
+      if (header && header.innerHTML !== html) {
+        header.innerHTML = html;
+      }
+      onSectionBreaksChange();
+      applyDisplayedMargins();
+      notifyPageViewChange(contentElement);
+    },
     remove() {
       if (removed) {
         return;

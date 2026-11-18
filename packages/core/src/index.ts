@@ -286,6 +286,12 @@ export {
   type PageViewHandle,
 } from './extensions/page-view.js';
 export {
+  displayHeaderFooterHtml,
+  hasHeaderFooterVariables,
+  headerFooterVariablesOf,
+  registerHeaderFooterVariables,
+} from './extensions/header-footer-variables.js';
+export {
   createDomHeaderFooterMeasure,
   pushPageMetrics,
   type HeaderFooterMeasure,

@@ -8,6 +8,12 @@ import {
   tagOf,
   wrapInlineRuns,
 } from './rich-field-html.js';
+import {
+  chipTypedVariables,
+  createFieldChip,
+  decorateFieldChips,
+  type RichFieldVariables,
+} from './rich-field-variables.js';
 
 export { normalizeFieldHtml } from './rich-field-html.js';
 
@@ -19,10 +25,9 @@ export { normalizeFieldHtml } from './rich-field-html.js';
  * (`<p>`, `<strong>`, `<em>`, paragraphes vides aux bords retirés). Sert aux en-têtes et
  * pieds du dialogue « Mise en page » (`page-layout-headers.ts`).
  *
- * Variables : un `{{nom}}` tapé reste du **texte**. Le core n'expose pas de fonction qui
- * convertit un HTML en puces (`Variable` ne le fait qu'à la saisie, dans l'éditeur ; le
- * paquet `word` le fait à l'import) ; les puces `<span data-aster-variable>` déjà
- * présentes dans un en-tête importé sont conservées telles quelles par l'assainisseur.
+ * Variables (`rich-field-variables.ts`) : une puce `<span data-aster-variable>` est un bloc
+ * insécable qui affiche son libellé ; `insertVariable` en pose une au curseur, et un
+ * `{{nom}}` tapé devient une puce dans la valeur quand l'éditeur accepte la variable.
  */
 /** Classe de la zone éditable d'un champ. */
 export const RICH_FIELD_CLASS = 'aster-page-layout__rich';
@@ -41,6 +46,11 @@ export interface RichField {
    * intact rend sa valeur lue telle quelle, sans la renormaliser (R52-02).
    */
   isModified(): boolean;
+  /**
+   * Insère une puce de variable à la dernière position du curseur dans le champ (à la fin
+   * s'il n'y est jamais allé), marque le champ modifié et lui rend le focus.
+   */
+  insertVariable(name: string): void;
 }
 
 /** Options d'un champ riche. */
@@ -51,6 +61,8 @@ export interface RichFieldOptions {
   readonly html: string;
   readonly placeholder?: string;
   readonly className?: string;
+  /** Variables de l'éditeur : libellés des puces et noms acceptés. Absent : aucune conversion. */
+  readonly variables?: RichFieldVariables;
 }
 
 /** Plage de sélection courante si elle est dans le champ, sinon `null`. */
@@ -208,6 +220,8 @@ export function createRichField(options: RichFieldOptions): RichField {
   for (const block of Array.from(field.children)) {
     if (SPLITTABLE_TAGS.has(tagOf(block))) keepEditable(block);
   }
+  const variables = options.variables ?? null;
+  decorateFieldChips(field, variables);
   const label = el('label', {
     className: 'aster-dialog__label',
     attrs: { id: labelId, for: options.id },
@@ -217,6 +231,16 @@ export function createRichField(options: RichFieldOptions): RichField {
   label.addEventListener('click', () => field.focus());
 
   let modified = false;
+  // Le curseur quitte le champ dès qu'on ouvre la liste des variables : sa dernière
+  // position dans le champ est retenue pour y insérer la puce.
+  let lastRange: Range | null = null;
+  const rememberRange = (): void => {
+    const range = selectionIn(field);
+    if (range) lastRange = range.cloneRange();
+  };
+  for (const type of ['keyup', 'mouseup', 'input', 'focusout']) {
+    field.addEventListener(type, rememberRange);
+  }
   for (const type of MODIFYING_EVENTS) {
     field.addEventListener(type, () => {
       modified = true;
@@ -244,7 +268,27 @@ export function createRichField(options: RichFieldOptions): RichField {
   return {
     wrapper,
     field,
-    getHtml: () => normalizeFieldHtml(field.innerHTML),
+    getHtml: () =>
+      normalizeFieldHtml(
+        variables ? chipTypedVariables(field.innerHTML, variables) : field.innerHTML,
+      ),
     isModified: () => modified,
+    insertVariable: (name) => {
+      // La position retenue n'est rejouée que si elle est encore dans le champ.
+      if (lastRange && field.contains(lastRange.commonAncestorContainer)) {
+        select(field, lastRange);
+      } else {
+        field.ownerDocument.getSelection()?.removeAllRanges();
+      }
+      const range = insertionRange(field);
+      const block = blockOf(field, range.startContainer);
+      const placeholder = block && isEmptyElement(block) ? block.querySelector('br') : null;
+      const chip = createFieldChip(field.ownerDocument, name, variables);
+      range.insertNode(chip);
+      placeholder?.remove();
+      lastRange = caretAfter(field, chip).cloneRange();
+      modified = true;
+      field.focus();
+    },
   };
 }

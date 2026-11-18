@@ -164,7 +164,7 @@ function buildDecorations(
     const { gap, previous } = entry;
     const label = pageLabel(aster, gap.page, result.pageCount);
     const context: GapSectionContext = { previous, options };
-    const section = sectionSignature(gap, previous, result, options);
+    const section = sectionSignature(gap, previous, result, options, aster);
     decorations.push(
       Decoration.widget(offset, () => renderGap(gap, result, label, context, aster), {
         side: -1,
@@ -238,6 +238,7 @@ export class PaginationController {
   private observer: ResizeObserver | null = null;
   private observedWidth: number | null = null;
   private readonly unsubscribeLocale: Unsubscribe | null;
+  private readonly unsubscribeVariables: Unsubscribe | null;
   private readonly onPageViewChange = (): void => this.syncActivation();
   private destroyed = false;
 
@@ -248,6 +249,12 @@ export class PaginationController {
     CONTROLLERS.set(view, this);
     view.dom.addEventListener(PAGE_VIEW_CHANGE_EVENT, this.onPageViewChange);
     this.unsubscribeLocale = aster?.on('localeChange', () => this.redraw()) ?? null;
+    // Les en-têtes et pieds des coupures affichent les valeurs des variables : la clé de
+    // chaque coupure porte son HTML affiché, seules celles qui changent sont recréées.
+    this.unsubscribeVariables =
+      aster?.on('variablesChange', () => {
+        if (this.options !== null) this.redraw();
+      }) ?? null;
     this.syncActivation();
   }
 
@@ -266,6 +273,7 @@ export class PaginationController {
     this.observer = null;
     this.view.dom.removeEventListener(PAGE_VIEW_CHANGE_EVENT, this.onPageViewChange);
     this.unsubscribeLocale?.();
+    this.unsubscribeVariables?.();
     if (CONTROLLERS.get(this.view) === this) {
       CONTROLLERS.delete(this.view);
     }

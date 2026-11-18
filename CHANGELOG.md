@@ -6,6 +6,21 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-18
+
+Retours utilisateurs sur la 0.7.0, « axe plus loin » : des variables dans les en-têtes et pieds de page.
+
+### Added
+
+- **core** : en vue page, les **variables des en-têtes et pieds** s'affichent comme celles du corps, sur la première page, la dernière et chaque coupure : la valeur si elle est connue, sinon le libellé de la puce, le libellé déclaré, puis le nom. Un `{{nom}}` resté en texte (champ de fusion d'un en-tête importé de Word) est affiché de la même façon. L'affichage suit `variables.setValues`, `variables.define` et le changement de langue sans rappeler `setPageView`, et la hauteur mesurée pour pousser le corps est celle du texte affiché. La mise en page (`getLayout()`, export) garde les puces figées, inchangées. Nouveau module `header-footer-variables.ts` : `displayHeaderFooterHtml`, `hasHeaderFooterVariables`, `registerHeaderFooterVariables`, `headerFooterVariablesOf`.
+- **ui** : dialogue « Mise en page », champs d'en-tête et de pied : liste **« Insérer une variable… »** (variables déclarées ou présentes dans le document) qui pose une puce au curseur du dernier champ visité ; les puces y sont des blocs insécables qui affichent leur libellé ; un `{{nom}}` tapé devient une puce à l'application quand l'éditeur accepte la variable. Clés i18n `ui.pageLayout.insertVariable` et `ui.pageLayout.insertVariableLabel`.
+- **ui** : les puces des en-têtes et pieds de la vue page reprennent le style de celles du corps (`themes/variables.css`).
+- **e2e** : scénario « variables dans les en-têtes et pieds » (insertion au dialogue, affichage sur chaque page, suivi des valeurs, export `.docx` résolu) et deux captures de référence (14 au total).
+
+### Changed
+
+- **ui** : la valeur d'un champ d'en-tête ou de pied **modifié** ramène chaque puce à son texte figé `{{nom}}` ; un champ intact reste rendu tel quel.
+
 ## [0.8.1] - 2026-11-18
 
 Fin du premier tour des retours utilisateurs sur la 0.7.0 : l'en-tête et le pied ne recouvrent plus le texte, et des tests visuels verrouillent l'affichage.

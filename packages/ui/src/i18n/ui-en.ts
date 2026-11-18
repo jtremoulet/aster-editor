@@ -198,7 +198,9 @@ export const uiEn: AsterDictionary = {
   'ui.pageLayout.titlePage': 'Different first page',
   'ui.pageLayout.evenPages': 'Different even pages',
   'ui.pageLayout.headersHint':
-    'Header and footer of this section. Enter starts a new paragraph; an empty field removes it. Unchecking “Different first page” keeps the first page header without showing it; unchecking “Different even pages” removes the even page ones.',
+    'Header and footer of this section. Enter starts a new paragraph; an empty field removes it. Unchecking “Different first page” keeps the first page header without showing it; unchecking “Different even pages” removes the even page ones. Type {{name}} or use the list to insert a variable.',
+  'ui.pageLayout.insertVariable': 'Insert a variable…',
+  'ui.pageLayout.insertVariableLabel': 'Insert a variable into the header or footer',
   'ui.pageLayout.invalid': 'Enter valid margins',
   'ui.pageLayout.ok': 'Apply',
   'ui.pageLayout.cancel': 'Cancel',

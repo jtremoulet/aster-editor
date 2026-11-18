@@ -86,6 +86,9 @@ export function pushPageMetrics(
 /** Hauteurs déjà mesurées, par hôte : la pagination redemande les mêmes à chaque frappe. */
 const MEASURED = new WeakMap<HTMLElement, Map<string, number>>();
 
+/** Nombre de mesures gardées par hôte avant de repartir d'un cache vide. */
+const MAX_MEASURED_ENTRIES = 200;
+
 /** Variables de l'hôte dont dépend la hauteur d'un texte : police, corps, interligne. */
 const FONT_VARIABLES = [
   '--aster-page-font-family',
@@ -137,7 +140,12 @@ export function createDomHeaderFooterMeasure(
     const heightMm = measureProbe();
     // Hôte masqué ou hors document (onglet caché, éditeur pas encore monté) : la hauteur
     // vaut 0 sans que ce soit la vraie. Elle n'est pas retenue, la prochaine demande remesure.
-    if (heightMm > 0) cache.set(key, heightMm);
+    if (heightMm > 0) {
+      // La clé porte le HTML affiché, donc la valeur des variables : une valeur saisie au
+      // fil de la frappe ne doit pas faire grossir le cache sans fin.
+      if (cache.size >= MAX_MEASURED_ENTRIES) cache.clear();
+      cache.set(key, heightMm);
+    }
 
     // Images pas encore chargées : elles mesurent 0. Le **même** témoin est remesuré quand
     // toutes ont fini (ses images sont alors chargées, sans nouvelle requête ni boucle), la

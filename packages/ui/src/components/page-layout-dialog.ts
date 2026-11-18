@@ -501,7 +501,7 @@ function renderPageLayoutPanel(editor: AsterEditor, panel: HTMLElement, dropdown
   );
 
   // En-têtes et pieds de la section (L54) : champs riches minimaux, lus à l'application.
-  const headerFooter = createHeaderFooterSection({ section, suffix, t });
+  const headerFooter = createHeaderFooterSection({ section, suffix, t, editor });
 
   const enabled = createCheckbox(
     t('ui.pageLayout.enabled'),

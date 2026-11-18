@@ -59,7 +59,16 @@ interface LayoutLike {
 
 /** `window.aster` et `window.asterExportDocx` du playground, pour la mise en page et l'export. */
 interface PlaygroundWindowL54 {
-  aster?: { editor: { getHTML(): string; getLayout(): LayoutLike | null } };
+  aster?: {
+    editor: {
+      getHTML(): string;
+      getLayout(): LayoutLike | null;
+      variables: {
+        define(variables: readonly { name: string; label?: string }[]): void;
+        setValues(values: Record<string, string | undefined>): void;
+      };
+    };
+  };
   asterExportDocx?: (html: string, options: Record<string, unknown>) => Promise<Blob>;
 }
 
@@ -284,5 +293,150 @@ test.describe('En-tête et pied plus hauts que leur marge', () => {
       (window as unknown as PlaygroundWindowL54).aster?.editor.getLayout(),
     );
     expect(JSON.stringify(margins)).toContain('"topMm":12.7');
+  });
+});
+
+test.describe('Variables dans les en-têtes et pieds', () => {
+  test.skip(() => !test.info().project.name.startsWith('playground'), 'playground seulement');
+
+  /** Pilote le magasin de variables du playground. */
+  const variables = (
+    page: Page,
+    action: 'define' | 'setValues',
+    payload: readonly { name: string; label?: string }[] | Record<string, string>,
+  ): Promise<void> =>
+    page.evaluate(
+      ([method, data]) => {
+        const aster = (window as unknown as PlaygroundWindowL54).aster;
+        if (!aster) throw new Error('window.aster is not available: playground not mounted');
+        if (method === 'define') {
+          aster.editor.variables.define(data as readonly { name: string; label?: string }[]);
+        } else {
+          aster.editor.variables.setValues(data as Record<string, string>);
+        }
+      },
+      [action, payload] as const,
+    );
+
+  test('insérées depuis le dialogue, affichées sur chaque page, suivies à la valeur, exportées', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(editor(page)).toBeVisible();
+    await variables(page, 'define', [
+      { name: 'reference', label: 'Référence du dossier' },
+      { name: 'conseiller', label: 'Nom du conseiller' },
+    ]);
+    await setPageView(page, { layout: { page: { size: 'A4', orientation: 'portrait' } } });
+    await expect(editorHost(page)).toHaveClass(/aster--page-view/);
+    await setHtml(
+      page,
+      Array.from({ length: 60 }, (_, index) => `<p>Paragraphe ${index + 1}</p>`).join(''),
+    );
+    await expect.poll(() => editor(page).locator('.aster-page-gap').count()).toBeGreaterThan(0);
+
+    // Dialogue : du texte, puis une variable choisie dans la liste, au curseur ; dans le
+    // pied, une variable tapée à la main.
+    await editor(page).locator('p').first().click();
+    await toolbarTrigger(page, 'Mise en page').click();
+    const dialog = page.locator('.aster-page-layout');
+    await expect(dialog).toBeVisible();
+    const header = dialog.locator('.aster-page-layout__headers-default');
+    await header.click();
+    await page.keyboard.type('Dossier ');
+    const picker = dialog.locator('.aster-page-layout__variable');
+    await expect(picker.locator('option')).toHaveText([
+      'Insérer une variable…',
+      'Référence du dossier ({{reference}})',
+      'Nom du conseiller ({{conseiller}})',
+    ]);
+    await picker.selectOption('reference');
+    // La puce affiche son libellé et le curseur est revenu juste après elle.
+    const chip = header.locator('span[data-aster-variable="reference"]');
+    await expect(chip).toHaveText('Référence du dossier');
+    await expect(header).toBeFocused();
+    await page.keyboard.type(' (suivi)');
+    await expect(header).toHaveText('Dossier Référence du dossier (suivi)');
+    const footer = dialog.locator('.aster-page-layout__footers-default');
+    await footer.click();
+    await page.keyboard.type('Votre conseiller : {{conseiller}}');
+    await dialog.getByRole('button', { name: 'Appliquer', exact: true }).click();
+    await expect(dialog).toBeHidden();
+
+    // La mise en page porte les puces figées du core, celles que l'export sait lire.
+    const layout = await getLayout(page);
+    expect(layout.headers?.default?.html).toBe(
+      '<p>Dossier <span data-aster-variable="reference">{{reference}}</span> (suivi)</p>',
+    );
+    expect(layout.footers?.default?.html).toBe(
+      '<p>Votre conseiller : <span data-aster-variable="conseiller">{{conseiller}}</span></p>',
+    );
+
+    // Vue page : libellés tant qu'il n'y a pas de valeur, sur l'hôte comme sur les coupures.
+    const hostHeader = editorHost(page).locator('.aster-page-header');
+    const hostFooter = editorHost(page).locator('.aster-page-footer');
+    const gap = editor(page).locator('.aster-page-gap').first();
+    await expect(hostHeader).toHaveText('Dossier Référence du dossier (suivi)');
+    await expect(hostFooter).toHaveText('Votre conseiller : Nom du conseiller');
+    await expect(gap.locator('.aster-page-gap__header')).toHaveText(
+      'Dossier Référence du dossier (suivi)',
+    );
+    await expect(gap.locator('.aster-page-gap__footer')).toHaveText(
+      'Votre conseiller : Nom du conseiller',
+    );
+    await expect(hostHeader.locator('.aster-variable')).toHaveClass(/aster-variable--unresolved/);
+
+    // Une valeur arrive : toutes les pages suivent, sans rappeler setPageView.
+    await variables(page, 'setValues', { reference: 'A-2026-014', conseiller: 'Camille Durand' });
+    await expect(hostHeader).toHaveText('Dossier A-2026-014 (suivi)');
+    await expect(hostFooter).toHaveText('Votre conseiller : Camille Durand');
+    await expect(gap.locator('.aster-page-gap__header')).toHaveText('Dossier A-2026-014 (suivi)');
+    await expect(gap.locator('.aster-page-gap__footer')).toHaveText(
+      'Votre conseiller : Camille Durand',
+    );
+    await expect(hostHeader.locator('.aster-variable')).toHaveClass(/aster-variable--resolved/);
+
+    // Rouvrir le dialogue : la puce est toujours là, avec son libellé, et rien n'est réécrit.
+    await toolbarTrigger(page, 'Mise en page').click();
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.locator('.aster-page-layout__headers-default span[data-aster-variable]'),
+    ).toHaveText('Référence du dossier');
+    await dialog.getByRole('button', { name: 'Appliquer', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    expect((await getLayout(page)).headers?.default?.html).toBe(layout.headers?.default?.html);
+
+    // Export .docx avec les valeurs : l'en-tête et le pied portent les valeurs, pas {{nom}}.
+    const exported = await page.evaluate(async () => {
+      const w = window as unknown as PlaygroundWindowL54;
+      if (!w.aster || !w.asterExportDocx) {
+        throw new Error('window.aster / asterExportDocx indisponibles : playground non monté');
+      }
+      const blob = await w.asterExportDocx(w.aster.editor.getHTML(), {
+        title: 'Variables',
+        layout: w.aster.editor.getLayout(),
+        variables: {
+          mode: 'resolve',
+          values: { reference: 'A-2026-014', conseiller: 'Camille Durand' },
+        },
+      });
+      const out = new Uint8Array(await blob.arrayBuffer());
+      let binary = '';
+      for (const byte of out) binary += String.fromCharCode(byte);
+      return btoa(binary);
+    });
+    const zip = await JSZip.loadAsync(Buffer.from(exported, 'base64'));
+    const part = async (pattern: RegExp): Promise<string> => {
+      const paths = Object.keys(zip.files).filter((path) => pattern.test(path));
+      const texts = await Promise.all(
+        paths.map(async (path) => Buffer.from(await zipPart(zip, path)).toString('utf8')),
+      );
+      return texts.join('\n');
+    };
+    const headerXml = await part(/^word\/header\d+\.xml$/);
+    const footerXml = await part(/^word\/footer\d+\.xml$/);
+    expect(headerXml).toContain('A-2026-014');
+    expect(headerXml).not.toContain('{{reference}}');
+    expect(footerXml).toContain('Camille Durand');
   });
 });

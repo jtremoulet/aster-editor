@@ -1049,6 +1049,34 @@ describe('pagination (plugin)', () => {
       expect(gaps(editor)).toEqual([]);
     });
 
+    it('variables : l’en-tête et le pied des coupures affichent la valeur et suivent setValues', () => {
+      const layout: DocumentLayout = {
+        ...SMALL_PAGE,
+        headers: {
+          default: { html: '<p>Dossier <span data-aster-variable="ref">{{ref}}</span></p>' },
+        },
+        footers: {
+          default: {
+            html: '<p><span data-aster-variable="ville" data-label="Ville">{{ville}}</span></p>',
+          },
+        },
+      };
+      const { editor } = mount({ content: paragraphs(4), pageView: { layout } });
+      expect(paginateNow(editor).pageCount).toBe(2);
+      const text = (className: string): string | null | undefined =>
+        gaps(editor)[0]?.querySelector(`.${className}`)?.textContent;
+      expect(text(PAGE_GAP_HEADER_CLASS)).toBe('Dossier ref');
+      expect(text(PAGE_GAP_FOOTER_CLASS)).toBe('Ville');
+      editor.variables.setValues({ ref: 'A-12', ville: 'Sète' });
+      expect(text(PAGE_GAP_HEADER_CLASS)).toBe('Dossier A-12');
+      expect(text(PAGE_GAP_FOOTER_CLASS)).toBe('Sète');
+      expect(
+        gaps(editor)[0]
+          ?.querySelector(`.${PAGE_GAP_HEADER_CLASS} .aster-variable`)
+          ?.classList.contains('aster-variable--resolved'),
+      ).toBe(true);
+    });
+
     it('L52 : titlePage sans first retombe sur default ; une section continuous n’a pas de première page propre', () => {
       const sections: DocumentLayout = {
         page: SECTION_2_PAGE,
