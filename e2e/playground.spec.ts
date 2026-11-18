@@ -304,4 +304,40 @@ test.describe('Playground vanilla', () => {
     await expect(menu).toBeHidden();
     await expect(rows).toHaveCount(3);
   });
+
+  test('la bulle de tableau propose Vider et Supprimer dès que le curseur est dans un tableau', async ({
+    page,
+  }) => {
+    const bubble = page.locator('.aster-table-bubble');
+    await expect(bubble).toBeHidden();
+    const cell = editor(page).locator('td').first();
+    await cell.click();
+    await expect(bubble).toBeVisible();
+
+    // La bulle est posée au-dessus du tableau : elle ne recouvre aucune cellule.
+    const bubbleBox = await bubble.boundingBox();
+    const tableBox = await editor(page).locator('table').boundingBox();
+    expect(bubbleBox).not.toBeNull();
+    expect(tableBox).not.toBeNull();
+    expect(bubbleBox!.y + bubbleBox!.height).toBeLessThanOrEqual(tableBox!.y + 1);
+
+    // Vider : la grille reste, le contenu part, le bouton se grise.
+    await page.keyboard.type('à effacer');
+    const cells = editor(page).locator('table th, table td');
+    const count = await cells.count();
+    const clear = bubble.getByRole('button', { name: 'Vider le tableau' });
+    await expect(clear).toBeEnabled();
+    await clear.click();
+    await expect(cells).toHaveCount(count);
+    await expect(editor(page).locator('table')).toHaveText('');
+    await expect(clear).toBeDisabled();
+    // Le curseur est resté dans le tableau : la frappe y retourne.
+    await page.keyboard.type('retour');
+    await expect(editor(page).locator('table')).toHaveText('retour');
+
+    // Supprimer : plus de tableau, plus de bulle.
+    await bubble.getByRole('button', { name: 'Supprimer le tableau' }).click();
+    await expect(editor(page).locator('table')).toHaveCount(0);
+    await expect(bubble).toBeHidden();
+  });
 });

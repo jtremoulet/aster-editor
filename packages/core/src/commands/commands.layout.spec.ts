@@ -44,8 +44,8 @@ describe('commandes de mise en page : enregistrement et i18n', () => {
     mounted.cleanup();
   });
 
-  it('STANDARD_COMMAND_IDS compte 52 commandes, dont paragraph.setLayout et unsetLayout', () => {
-    expect(STANDARD_COMMAND_IDS).toHaveLength(52);
+  it('STANDARD_COMMAND_IDS compte 53 commandes, dont paragraph.setLayout et unsetLayout', () => {
+    expect(STANDARD_COMMAND_IDS).toHaveLength(53);
     expect(STANDARD_COMMAND_IDS).toContain('paragraph.setLayout');
     expect(STANDARD_COMMAND_IDS).toContain('paragraph.unsetLayout');
     expect(mounted.editor.commands.has('paragraph.setLayout')).toBe(true);

@@ -115,6 +115,10 @@ const ICONS: Readonly<Record<string, string>> = {
   'table-delete': stroke(
     '<path d="M3 10V5.5A1.5 1.5 0 0 1 4.5 4H17v6M3 8.5h14M8 8.5V12"/><path d="M11 12l5 5M16 12l-5 5"/>',
   ),
+  // Grille conservée, contenu effacé : le cadre et un trait de gomme en travers.
+  'table-clear': stroke(
+    TABLE_FRAME + '<path d="M3 8.5h14" stroke-opacity="0.4"/><path d="M6.5 14.5l7-4.5"/>',
+  ),
   'table-add-row-before': stroke(
     '<rect x="3" y="9" width="14" height="7" rx="1"/><path d="M3 12.5h14M8 9v7M12.5 9v7M10 2v5M7.5 4.5h5"/>',
   ),

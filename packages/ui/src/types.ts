@@ -34,6 +34,11 @@ export interface AsterUiOptions extends Omit<AsterOptions, 'element'> {
    */
   imageBubble?: boolean;
   /**
+   * Bulle contextuelle au-dessus du tableau qui contient le curseur (ajouter une ligne, une
+   * colonne, vider, supprimer). Vrai par défaut, dès que le core expose `table.delete`.
+   */
+  tableBubble?: boolean;
+  /**
    * Menu de blocs déclenché par `/` en début de bloc (titres, listes, tableau, image…).
    * Vrai par défaut.
    */

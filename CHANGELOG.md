@@ -6,6 +6,23 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-18
+
+Suite des retours utilisateurs sur la 0.7.0 : supprimer ou vider un tableau sans chercher, et savoir quelle version tourne.
+
+### Added
+
+- **core** : commande `table.clear` (« Vider le tableau ») : vide toutes les cellules du tableau courant en une étape d'historique, grille, fusions et largeurs conservées, curseur gardé dans sa cellule ; refusée hors tableau, en lecture seule et sur un tableau déjà vide. `STANDARD_COMMAND_IDS` passe à 53.
+- **core** : constante `VERSION` (version du monorepo), écrite par `scripts/set-version.mjs` et vérifiée contre le `package.json` par un test.
+- **ui** : **bulle de tableau** (`createTableBubble`, option `tableBubble` de `createAster`, vraie par défaut) : dès que le curseur est dans un tableau, une barre au-dessus de son coin droit propose ajouter une ligne, ajouter une colonne, **Vider** et **Supprimer**. « Vider le tableau » rejoint aussi le menu de la toolbar et le clic droit (`TABLE_ACTIONS`). Icône `table-clear`, clés i18n `ui.table.clear` et `ui.table.delete`.
+- **ui** : `createAster` pose `data-aster-version` sur `.aster` : la version se lit dans l'inspecteur du navigateur.
+- **démo** : numéro de version affiché à côté du nom dans l'en-tête.
+- **e2e** : scénario « bulle de tableau » (apparition, Vider, Supprimer).
+
+### Fixed
+
+- **ui** : les bulles contextuelles (lien, image, tableau) sont masquées à l'impression.
+
 ## [0.7.1] - 2026-11-18
 
 Premiers correctifs des retours utilisateurs sur la 0.7.0.

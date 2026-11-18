@@ -34,6 +34,7 @@ export const fr: AsterDictionary = {
   'command.image.setAttributes': 'Propriétés de l’image',
   'command.table.insert': 'Insérer un tableau',
   'command.table.delete': 'Supprimer le tableau',
+  'command.table.clear': 'Vider le tableau',
   'command.table.addRowBefore': 'Insérer une ligne au-dessus',
   'command.table.addRowAfter': 'Insérer une ligne en dessous',
   'command.table.deleteRow': 'Supprimer la ligne',

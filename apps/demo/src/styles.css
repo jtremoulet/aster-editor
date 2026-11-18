@@ -41,6 +41,12 @@ body {
   border-bottom: 1px solid var(--demo-border);
 }
 
+.demo-header__version {
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .demo-header__brand {
   font-weight: 700;
   font-size: 1.1rem;

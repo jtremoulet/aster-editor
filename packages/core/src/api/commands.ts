@@ -45,6 +45,7 @@ export const STANDARD_COMMAND_IDS = [
   // Tables
   'table.insert',
   'table.delete',
+  'table.clear',
   'table.addRowBefore',
   'table.addRowAfter',
   'table.deleteRow',

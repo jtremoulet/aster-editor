@@ -34,6 +34,7 @@ export const en: AsterDictionary = {
   'command.image.setAttributes': 'Image properties',
   'command.table.insert': 'Insert table',
   'command.table.delete': 'Delete table',
+  'command.table.clear': 'Clear table',
   'command.table.addRowBefore': 'Insert row above',
   'command.table.addRowAfter': 'Insert row below',
   'command.table.deleteRow': 'Delete row',

@@ -32,6 +32,8 @@ export const uiFr: AsterDictionary = {
   'ui.table.grid': 'Choisir la taille du tableau',
   'ui.table.actions': 'Actions du tableau',
   'ui.table.contextMenu': 'Menu du tableau',
+  'ui.table.clear': 'Vider',
+  'ui.table.delete': 'Supprimer',
   'ui.color.none': 'Aucune couleur',
   'ui.color.palette': 'Palette de couleurs',
   'ui.color.black': 'Noir',

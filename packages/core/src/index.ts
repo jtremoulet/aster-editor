@@ -7,6 +7,7 @@
  */
 export * from './api/index.js';
 export { createEditor } from './editor/create-editor.js';
+export { VERSION } from './version.js';
 export { fr } from './i18n/fr.js';
 export { en } from './i18n/en.js';
 export { createI18n, interpolate, FALLBACK_LOCALE } from './i18n/create-i18n.js';
