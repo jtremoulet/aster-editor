@@ -407,8 +407,9 @@ describe('thèmes CSS', () => {
       ).toContain(
         'max-height: max( calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)), 1.4em )',
       );
-      // Le corps n'est pas poussé (approximation documentée dans la feuille).
-      expect(page).toContain('Pousser le corps demanderait de mesurer');
+      // Depuis la 0.8.1 le core pousse le corps (marges affichées agrandies) : la feuille le
+      // documente, le plancher ne sert plus que sans mesure possible.
+      expect(page).toContain('ils poussent le corps');
     });
 
     it('L52 (retour n° 2) : défauts du document appliqués en repli, en vue page seulement', () => {

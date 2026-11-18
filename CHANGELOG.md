@@ -6,6 +6,19 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-18
+
+Fin du premier tour des retours utilisateurs sur la 0.7.0 : l'en-tête et le pied ne recouvrent plus le texte, et des tests visuels verrouillent l'affichage.
+
+### Fixed
+
+- **core** : en vue page, un en-tête ou un pied **plus haut que sa marge** recouvrait le texte ou était rogné. Il pousse désormais le corps, comme dans Word : sa hauteur est mesurée dans le DOM et les marges haute et basse **affichées** (`--aster-page-margin-top` / `-bottom`, sur l'hôte et sur chaque saut de section) passent à `distance du bord + hauteur`, ce qui déplace le corps et réduit d'autant le nombre de lignes par page dans la pagination. La mise en page du document (`getLayout()`, export `.docx`) n'est pas modifiée. Une section prend la plus haute de ses variantes (`default`, `first`, `even`) ; la marge poussée est bornée à 40 % de la hauteur de page ; la mesure est refaite quand une image d'en-tête finit de charger.
+
+### Added
+
+- **core** : `displayedPageMetrics`, `pushPageMetrics` et `createDomHeaderFooterMeasure` (`page-view-push.ts`).
+- **e2e** : **tests visuels** (projet Playwright `visual`, `e2e/visual.spec.ts`, 12 captures de référence dans `e2e/__screenshots__/`), joués dans l'image Docker de Playwright par `npm run e2e:visual` (`scripts/visual-tests.mjs`, `--update` pour régénérer) et par le nouveau job `visual` de la CI ; scénario « en-tête et pied plus hauts que leur marge » dans `headers-dialog.spec.ts`.
+
 ## [0.8.0] - 2026-11-18
 
 Suite des retours utilisateurs sur la 0.7.0 : supprimer ou vider un tableau sans chercher, et savoir quelle version tourne.

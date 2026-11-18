@@ -276,6 +276,7 @@ export {
   applyPageView,
   bodySectionCount,
   maxSectionWidthMm,
+  displayedPageMetrics,
   pageViewCssValues,
   resolvePageMetrics,
   resolveSectionLayout,
@@ -284,6 +285,11 @@ export {
   type PageMetrics,
   type PageViewHandle,
 } from './extensions/page-view.js';
+export {
+  createDomHeaderFooterMeasure,
+  pushPageMetrics,
+  type HeaderFooterMeasure,
+} from './extensions/page-view-push.js';
 // --- Pagination approximative de la vue page (session 3, L30) -------------
 export { PAGE_VIEW_CHANGE_EVENT, getActivePageView } from './extensions/page-view.js';
 export {

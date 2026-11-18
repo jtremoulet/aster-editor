@@ -10,6 +10,8 @@ import {
   importPlaygroundDocx,
   sameBytes,
   sectionGaps,
+  setHtml,
+  setPageView,
   toolbarTrigger,
   zipPart,
 } from './fixtures.js';
@@ -209,5 +211,78 @@ test.describe('En-têtes dans le dialogue « Mise en page » — playground', ()
     );
     const target = new RegExp(`Id="${reference?.[1] ?? ''}"[^>]*Target="([^"]+)"`).exec(rels);
     expect(`word/${target?.[1] ?? ''}`).toBe(added[0]);
+  });
+});
+
+/** Mise en page du retour utilisateurs 0.7 : marge haute de Word (12,7 mm, en-tête à 12,49 mm) et en-tête de quatre lignes. */
+const TALL_HEADER_LAYOUT = {
+  page: {
+    size: 'A4',
+    orientation: 'portrait',
+    margins: { topMm: 12.7, bottomMm: 12.7, headerMm: 12.49, footerMm: 12.49 },
+  },
+  headers: {
+    default: {
+      html: '<p><strong>Cabinet Nebula</strong></p><p>12 rue des Étoiles</p><p>34000 Montpellier</p><p>contact@example.com</p>',
+    },
+  },
+  footers: {
+    default: { html: '<p>Document confidentiel</p><p>Ne pas diffuser</p><p>Page de garde</p>' },
+  },
+};
+
+test.describe('En-tête et pied plus hauts que leur marge', () => {
+  test('ils poussent le corps au lieu de le recouvrir, sur l’hôte et à chaque coupure', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(editor(page)).toBeVisible();
+    await setPageView(page, { layout: TALL_HEADER_LAYOUT });
+    await expect(editorHost(page)).toHaveClass(/aster--page-view/);
+    await setHtml(
+      page,
+      Array.from({ length: 60 }, (_, index) => `<p>Paragraphe ${index + 1}</p>`).join(''),
+    );
+    await expect.poll(() => editor(page).locator('.aster-page-gap').count()).toBeGreaterThan(0);
+
+    const box = async (locator: Locator): Promise<{ top: number; bottom: number }> => {
+      const rect = await locator.boundingBox();
+      if (!rect) throw new Error('élément sans boîte');
+      return { top: rect.y, bottom: rect.y + rect.height };
+    };
+    /** Hauteur que le contenu occupe réellement, rognage compris (scrollHeight). */
+    const clipped = (locator: Locator): Promise<boolean> =>
+      locator.evaluate((element) => element.scrollHeight > element.clientHeight + 1);
+
+    // Page 1 : l'en-tête de l'hôte est entier et finit au-dessus du premier paragraphe.
+    const header = page.locator('.aster-page-header');
+    const paragraphs = editor(page).locator('p');
+    expect(await clipped(header)).toBe(false);
+    expect((await box(header)).bottom).toBeLessThanOrEqual((await box(paragraphs.first())).top + 1);
+
+    // Dernière page : le pied de l'hôte est entier et commence sous le dernier paragraphe.
+    const footer = page.locator('.aster-page-footer');
+    expect(await clipped(footer)).toBe(false);
+    expect((await box(footer)).top).toBeGreaterThanOrEqual(
+      (await box(paragraphs.last())).bottom - 1,
+    );
+
+    // Coupure : le pied de la page qui finit et l'en-tête de celle qui commence ne touchent
+    // ni le dernier paragraphe d'avant, ni le premier d'après.
+    const gap = editor(page).locator('.aster-page-gap').first();
+    const before = gap.locator('xpath=preceding-sibling::p[1]');
+    const after = gap.locator('xpath=following-sibling::p[1]');
+    const gapFooter = gap.locator('.aster-page-gap__footer');
+    const gapHeader = gap.locator('.aster-page-gap__header');
+    expect(await clipped(gapFooter)).toBe(false);
+    expect(await clipped(gapHeader)).toBe(false);
+    expect((await box(gapFooter)).top).toBeGreaterThanOrEqual((await box(before)).bottom - 1);
+    expect((await box(gapHeader)).bottom).toBeLessThanOrEqual((await box(after)).top + 1);
+
+    // La mise en page du document n'est pas modifiée : seules les marges affichées le sont.
+    const margins = await page.evaluate(() =>
+      (window as unknown as PlaygroundWindowL54).aster?.editor.getLayout(),
+    );
+    expect(JSON.stringify(margins)).toContain('"topMm":12.7');
   });
 });

@@ -55,6 +55,8 @@ npm run lint                # eslint + prettier check
 npm run typecheck           # tsc --noEmit sur tous les paquets
 npm run demo                # ng serve apps/demo sur http://localhost:4200
 npm run check               # lint + typecheck + test, à lancer avant tout commit
+npm run e2e:visual          # tests visuels (captures de référence) dans l'image Docker de Playwright
+npm run e2e:visual:update   # régénère les captures après un changement d'affichage voulu
 ```
 
 ## 🧭 Conventions

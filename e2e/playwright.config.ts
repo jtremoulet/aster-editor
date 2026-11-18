@@ -45,6 +45,15 @@ function firefoxAvailable(): boolean {
 }
 
 /**
+ * Tests visuels (captures de référence, `visual.spec.ts`) : le projet `visual` n'existe que
+ * si cette variable vaut `1`. Une capture dépend des polices et du moteur de rendu du
+ * système : elle n'est comparable que dans l'image Docker de Playwright, celle de
+ * `npm run e2e:visual` et du job `visual` de la CI. Un `npm run e2e` sur un poste ne les
+ * joue donc jamais, et le serveur de la démo Angular n'est alors pas démarré.
+ */
+const VISUAL = process.env['ASTER_E2E_VISUAL'] === '1';
+
+/**
  * Configuration Playwright des tests e2e. Deux projets Chromium, un par application :
  * `playground` (vanilla, sans framework) et `demo` (Angular), plus `playground-firefox` et
  * `playground-webkit` (session 4) qui rejouent les specs de fidélité et de sections sur le
@@ -63,7 +72,14 @@ export default defineConfig({
   workers: process.env['CI'] ? 1 : undefined,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   timeout: 30_000,
-  expect: { timeout: 7_000 },
+  expect: {
+    timeout: 7_000,
+    // Même image Docker des deux côtés : le rendu est déterministe, la tolérance ne couvre
+    // que l'anticrénelage (0,2 % des pixels au plus).
+    toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide' },
+  },
+  // Une seule série de références (Linux, image Playwright) : pas de suffixe de plateforme.
+  snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -93,6 +109,20 @@ export default defineConfig({
       testMatch: CROSS_BROWSER_SPECS,
       use: { ...devices['Desktop Safari'], baseURL: PLAYGROUND_URL },
     },
+    ...(VISUAL
+      ? [
+          {
+            name: 'visual',
+            testMatch: /visual\.spec\.ts$/,
+            use: {
+              ...devices['Desktop Chrome'],
+              baseURL: PLAYGROUND_URL,
+              viewport: { width: 1280, height: 900 },
+              deviceScaleFactor: 1,
+            },
+          },
+        ]
+      : []),
     {
       name: 'demo',
       // `fidelity.spec.ts` et `sections.spec.ts` contiennent aussi un scénario de la page
@@ -109,12 +139,16 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 60_000,
     },
-    {
-      command: 'npx ng serve demo --port 4200',
-      url: `${DEMO_URL}/`,
-      cwd: REPO_ROOT,
-      reuseExistingServer: true,
-      timeout: 120_000,
-    },
+    ...(VISUAL
+      ? []
+      : [
+          {
+            command: 'npx ng serve demo --port 4200',
+            url: `${DEMO_URL}/`,
+            cwd: REPO_ROOT,
+            reuseExistingServer: true,
+            timeout: 120_000,
+          },
+        ]),
   ],
 });

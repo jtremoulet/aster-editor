@@ -63,3 +63,45 @@ jobs:
           name: playwright-report
           path: e2e/playwright-report
           retention-days: 7
+
+  visual:
+    name: Tests visuels
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: check
+    # Même image que `npm run e2e:visual` (scripts/visual-tests.mjs) : les captures de
+    # référence de e2e/__screenshots__/ ne sont comparables que dans cette image. La version
+    # doit suivre celle de @playwright/test dans package-lock.json (vérifiée ci-dessous).
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --ipc=host
+    env:
+      ASTER_E2E_VISUAL: '1'
+      ASTER_E2E_FIREFOX: '0'
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Image alignée sur @playwright/test
+        run: |
+          installed="$(node -p "require('@playwright/test/package.json').version")"
+          if [ "$installed" != "1.64.0" ]; then
+            echo "::error::@playwright/test est en $installed : mets à jour l'image du job visual dans ci.yml."
+            exit 1
+          fi
+
+      - name: Tests visuels
+        run: npx playwright test -c e2e/playwright.config.ts --project=visual
+
+      - name: Écarts visuels
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+          retention-days: 7

@@ -450,6 +450,7 @@ Le panneau En-tête / Pied de la page « Modèle » de la démo reste un banc d'
 - Les sauts de page explicites (`<hr data-page-break>`, ou un nœud `pageBreak` d'intégrateur) forcent une coupure.
 - Un tableau ou une liste **n'est jamais coupé** : il passe entier à la page suivante. Un bloc plus haut qu'une page occupe la sienne et déborde.
 - Les en-têtes et pieds sont rendus sur chaque page (feuille et chaque coupure, variante `first` / `even` / `default` de la page) depuis la 0.7 ; le pied de la feuille reçoit `data-page-count` et suit la dernière page que la pagination lui déclare.
+- Un en-tête ou un pied **plus haut que sa marge pousse le corps**, comme dans Word (0.8.1) : la vue page mesure sa hauteur et agrandit les marges haute et basse affichées, sans toucher à `getLayout()` ni à l'export. Une section prend la plus haute de ses variantes sur toutes ses pages.
 - **Aucune exactitude avec Word** : polices de substitution, césure, interlignes « au moins », veuves et orphelines, `keepWithNext`, tableaux coupés par Word ne sont pas simulés. Le nombre de pages affiché est un ordre de grandeur, pas celui que Word imprimera. Rien de ce que la pagination calcule n'entre dans le `.docx`.
 - Désactivable par `pagination: false` dans `PageViewOptions` ; hors vue page, le plugin est inerte.
 

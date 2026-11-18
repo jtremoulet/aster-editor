@@ -166,6 +166,16 @@ npm run fidelity -- fixtures/docx/16-sections.docx --no-template --threshold 0.7
 
 Le script sort en 1 sous le seuil (0,98 par défaut) : utilisable en CI sur un document de référence. Les scores courants et ce qui manque pour chaque fixture sont tenus à jour dans `fixtures/docx/README.md` ; `compare-fixtures.spec.ts` les fige en cible ou en plancher.
 
+## 📸 Tests visuels
+
+Projet Playwright `visual` (`e2e/visual.spec.ts`) : des captures d'éléments comparées aux références de `e2e/__screenshots__/`. Né des retours utilisateurs sur la 0.7 (bandeau de recherche de 700 px, icônes baveuses, en-tête sur le texte) : trois défauts que les tests fonctionnels laissaient passer.
+
+- **Une seule série de références, produite sous Linux dans l'image Docker de Playwright.** Une capture dépend des polices et du moteur de rendu : celle d'un poste Windows ne correspond jamais à celle de la CI. `npm run e2e:visual` (`scripts/visual-tests.mjs`) lance donc les tests dans `mcr.microsoft.com/playwright:v<version>-noble`, la même image que le job `visual` de la CI. Le projet `visual` n'existe que si `ASTER_E2E_VISUAL=1` : un `npm run e2e` ordinaire ne le joue jamais.
+- **Changement d'affichage voulu** : `npm run e2e:visual:update`, relis les images modifiées (`git diff` les montre), commite-les avec le code. En cas d'écart, les images de diff sont dans `e2e/test-results/visual/` (en CI : artefact `visual-diff`).
+- **Montée de version de Playwright** : mettre à jour l'image du job `visual` dans `.github/workflows/ci.yml` (une étape du job échoue sinon) et régénérer les références.
+- **Écrire un scénario stable** : contenu posé par `setHtml`, capture d'un élément (`.aster`, la toolbar, un bouton) et jamais de la page, souris rangée avant la capture. Tolérance : 0,2 % des pixels.
+- Couvert aujourd'hui : toolbar et contenu riche (thèmes `light` et `night`), bandeau de recherche, bulle de tableau, puces de variables, icônes de listes, vue page avec en-tête et pied (une ligne, puis plus hauts que leur marge).
+
 ## 🏃 Commandes
 
 ```bash
@@ -175,6 +185,8 @@ npm run test:watch -w packages/core
 npm run test:coverage             # avec seuils
 npm run e2e                       # Playwright, les quatre projets (Firefox retiré s'il ne démarre pas)
 npm run e2e -- --project=playground
+npm run e2e:visual                # tests visuels dans l'image Docker de Playwright (Docker requis)
+npm run e2e:visual:update         # régénère les captures de référence, à relire puis commiter
 npm run e2e -- --project=playground-webkit
 npx playwright test --list -c e2e/playwright.config.ts   # compte les tests par projet sans les lancer
 npm run fidelity -- <fichier.docx>   # rapport de fidélité d'un document

@@ -13,6 +13,7 @@ import {
   pageDefaultsCssValues,
   type PageDefaultsCssValues,
 } from './page-view-defaults.js';
+import { createDomHeaderFooterMeasure, pushPageMetrics } from './page-view-push.js';
 import { FIRST_PAGE, headerFooterHtmlFor, type HeaderFooterPage } from './page-view-variants.js';
 
 // Défauts du document (L52) et variantes first / even des en-têtes : modules dédiés.
@@ -154,6 +155,38 @@ export function resolvePageMetrics(
     marginHeaderMm: nonNegativeOr(margins?.headerMm, DEFAULT_HEADER_FOOTER_MARGIN_MM),
     marginFooterMm: nonNegativeOr(margins?.footerMm, DEFAULT_HEADER_FOOTER_MARGIN_MM),
   };
+}
+
+/**
+ * Métriques **affichées** d'une section en vue page : celles du document
+ * (`resolvePageMetrics`), marges haute et basse agrandies quand l'en-tête ou le pied est
+ * plus haut que sa marge (il pousse le corps, comme dans Word : voir `page-view-push.ts`).
+ * Sans hôte, sans en-têtes affichés ou si la mesure échoue : les métriques du document.
+ * `onInvalidate` est appelé quand une image d'en-tête finit de charger et change la mesure.
+ */
+export function displayedPageMetrics(
+  host: HTMLElement | null,
+  section: SectionLayout,
+  options: PageViewOptions | null | undefined,
+  onInvalidate?: () => void,
+): PageMetrics {
+  const metrics = resolvePageMetrics(section);
+  if (!host || options?.showHeadersFooters === false) {
+    return metrics;
+  }
+  try {
+    return pushPageMetrics(
+      metrics,
+      section,
+      createDomHeaderFooterMeasure(
+        host,
+        { headers: PAGE_HEADER_CLASS, footers: PAGE_FOOTER_CLASS },
+        onInvalidate,
+      ),
+    );
+  } catch {
+    return metrics;
+  }
 }
 
 /** Vrai si la valeur est un tableau de sections (type garde, sans présumer des entrées). */
@@ -447,6 +480,24 @@ export function applyPageView(
   // Défauts de paragraphe et police du document (L52), appliqués en repli par `page.css`.
   applyPageDefaults(host, defaults);
 
+  // En-tête ou pied plus haut que sa marge : il pousse le corps (retour utilisateurs 0.7).
+  // Mesuré une fois la classe et les polices posées, et de nouveau quand une image
+  // d'en-tête finit de charger. Une mesure qui échoue laisse les marges du document.
+  let removed = false;
+  const applyDisplayedMargins = (): void => {
+    const shown = pageViewCssValues(
+      displayedPageMetrics(host, first, options, () => {
+        if (removed) return;
+        applyDisplayedMargins();
+        notifyPageViewChange(contentElement);
+      }),
+    );
+    PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
+      host.style.setProperty(name, shown[index] ?? '');
+    });
+  };
+  applyDisplayedMargins();
+
   let header: HTMLElement | null = null;
   let footer: HTMLElement | null = null;
   if (showHeadersFooters) {
@@ -478,7 +529,6 @@ export function applyPageView(
   ACTIVE_PAGE_VIEWS.set(contentElement, options);
   notifyPageViewChange(contentElement);
 
-  let removed = false;
   return {
     options,
     layout,
