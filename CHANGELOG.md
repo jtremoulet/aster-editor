@@ -6,6 +6,12 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-20
+
+### Fixed
+
+- **ci** : le job « E2E Playwright » échouait depuis la 0.7.1 : il n'installait que Chromium alors que les specs de fidélité et de sections tournent aussi sur WebKit. Il installe désormais Chromium, Firefox et WebKit, et exige Firefox (`ASTER_E2E_FIREFOX=1`) au lieu de retirer son projet en silence.
+
 ## [0.9.1] - 2026-11-19
 
 La démo se construit en image Docker, pour la faire tourner ailleurs que sur un poste de développement.

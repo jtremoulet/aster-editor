@@ -50,11 +50,17 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      # Les trois moteurs : la config joue les specs de fidélité et de sections sur Firefox
+      # et WebKit en plus de Chromium (e2e/playwright.config.ts).
+      - name: Install navigateurs
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: E2E
         run: npm run e2e
+        env:
+          # Firefox exigé : sans cette variable, un Firefox absent retire son projet en
+          # silence au lieu de faire échouer le job.
+          ASTER_E2E_FIREFOX: '1'
 
       - name: Rapport Playwright
         if: failure()
