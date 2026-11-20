@@ -64,6 +64,31 @@ jobs:
           path: e2e/playwright-report
           retention-days: 7
 
+  demo-image:
+    name: Image Docker de la démo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: check
+    # Rien n'est publié ni déployé ici : ce job vérifie seulement que l'image se construit
+    # et qu'elle sert la démo.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -t aster-demo:ci .
+
+      - name: La démo répond
+        run: |
+          docker run -d --rm --name aster-demo -p 8080:80 aster-demo:ci
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            curl -fsS http://localhost:8080/ -o index.html && break
+            sleep 1
+          done
+          grep -q '<app-root>' index.html
+          # Une route Angular rechargée retombe sur index.html.
+          curl -fsS http://localhost:8080/form | grep -q '<app-root>'
+          docker stop aster-demo
+
   visual:
     name: Tests visuels
     runs-on: ubuntu-latest

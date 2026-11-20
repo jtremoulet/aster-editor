@@ -6,6 +6,15 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-19
+
+La démo se construit en image Docker, pour la faire tourner ailleurs que sur un poste de développement.
+
+### Added
+
+- **démo** : image Docker de la démo Angular (`Dockerfile` racine, `apps/demo/nginx.conf`, `.dockerignore`) : build `ng build demo` depuis les sources des paquets, servi par nginx avec repli SPA sur `index.html`, 404 sur un fichier absent, cache long des fichiers hashés et `X-Robots-Tag: noindex`.
+- **ci** : job « Image Docker de la démo » qui construit l'image et vérifie qu'elle répond, y compris sur une route Angular rechargée.
+
 ## [0.9.0] - 2026-11-18
 
 Retours utilisateurs sur la 0.7.0, « axe plus loin » : des variables dans les en-têtes et pieds de page.

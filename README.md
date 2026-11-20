@@ -156,6 +156,7 @@ npm run check          # lint + typecheck + tests, à lancer avant tout commit
 npm run build          # build de tous les paquets (tsc puis ng-packagr)
 npm run demo           # app démo Angular sur http://localhost:4200
 npm run demo:build     # build de prod de la démo
+docker build -t aster-demo . && docker run --rm -p 8088:80 aster-demo   # la démo dans nginx, http://localhost:8088
 npm run playground     # playground vanilla (esbuild) sur http://localhost:4300
 npm run e2e            # tests Playwright (lance playground et démo si besoin)
 npm run e2e:ui         # idem en mode UI
