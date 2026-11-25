@@ -43,6 +43,11 @@ export { createLinkDialog, isAcceptableUrl } from './components/link-dialog.js';
 export { createImageDialog } from './components/image-dialog.js';
 export type { TableContextMenu } from './components/table-context-menu.js';
 export { createTableContextMenu } from './components/table-context-menu.js';
+export {
+  TABLE_BUBBLE_ACTIONS,
+  createTableBubble,
+  currentTablePos,
+} from './components/table-bubble.js';
 export type { SearchPanelState } from './components/search-panel.js';
 export { createSearchPanel, readSearchState } from './components/search-panel.js';
 export type { SourceView } from './components/source-view.js';

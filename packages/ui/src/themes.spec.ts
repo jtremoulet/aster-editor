@@ -16,10 +16,12 @@ const AA_RATIO = 4.5;
 
 /**
  * Variables posées à chaud par les widgets ou par le core (vue page : dimensions et marges
- * calculées depuis `DocumentLayout`), jamais déclarées par un thème.
+ * calculées depuis `DocumentLayout`) ou laissées à l'application hôte avec un repli dans la
+ * feuille (`--aster-search-sticky-top`), jamais déclarées par un thème.
  */
 const RUNTIME_VARIABLES: ReadonlySet<string> = new Set([
   '--aster-swatch',
+  '--aster-search-sticky-top',
   '--aster-table-grid-cols',
   '--aster-page-width',
   '--aster-page-height',
@@ -176,12 +178,15 @@ describe('thèmes CSS', () => {
     expect(label).toContain('align-items: center');
   });
 
-  it('L52 (retour n° 5a) : le bandeau de recherche est dans le flux, jamais en position absolue, masqué à l’impression', () => {
+  it('L52 (retour n° 5a) : le bandeau de recherche est dans le flux (collant, jamais absolu ni fixe), sur une ligne, masqué à l’impression', () => {
     const search = readFileSync(join(THEMES_DIR, 'search-source.css'), 'utf8');
     const band = /\.aster-search-panel \{([^}]*)\}/.exec(search)?.[1] ?? '';
     expect(band).toContain('display: flex');
     expect(band).toContain('border-bottom: 1px solid var(--aster-border)');
-    expect(band).not.toContain('position:');
+    expect(band).toContain('position: sticky');
+    expect(band).not.toMatch(/position: (absolute|fixed)/);
+    // `.aster-dialog` est en colonne : sans cette ligne, les `flex-basis` deviennent des hauteurs.
+    expect(band).toContain('flex-direction: row');
     expect(search).toContain('.aster-search-panel[hidden] {\n  display: none;\n}');
     expect(readFileSync(join(THEMES_DIR, 'print.css'), 'utf8')).toContain('.aster-search-panel,');
   });
@@ -402,8 +407,9 @@ describe('thèmes CSS', () => {
       ).toContain(
         'max-height: max( calc(var(--aster-page-margin-bottom, 25.4mm) - var(--aster-page-margin-footer, 12.7mm)), 1.4em )',
       );
-      // Le corps n'est pas poussé (approximation documentée dans la feuille).
-      expect(page).toContain('Pousser le corps demanderait de mesurer');
+      // Depuis la 0.8.1 le core pousse le corps (marges affichées agrandies) : la feuille le
+      // documente, le plancher ne sert plus que sans mesure possible.
+      expect(page).toContain('ils poussent le corps');
     });
 
     it('L52 (retour n° 2) : défauts du document appliqués en repli, en vue page seulement', () => {

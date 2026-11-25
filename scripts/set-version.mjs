@@ -40,4 +40,18 @@ for (const name of PACKAGES) {
   });
 }
 
+// Constante `VERSION` exportée par le core : seule ligne du fichier à changer, le reste
+// (commentaire) est conservé. `version.spec.ts` échoue si elle dérive du package.json.
+const versionFile = `${ROOT}packages/core/src/version.ts`;
+const source = readFileSync(versionFile, 'utf8');
+const updated = source.replace(
+  /export const VERSION = '[^']*';/,
+  `export const VERSION = '${version}';`,
+);
+if (!updated.includes(`'${version}'`)) {
+  console.error(`✖ ${versionFile} : ligne « export const VERSION » introuvable.`);
+  process.exit(1);
+}
+writeFileSync(versionFile, updated);
+
 console.log(`Version ${version} appliquée à la racine et à ${PACKAGES.length} paquets.`);

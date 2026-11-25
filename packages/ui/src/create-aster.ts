@@ -1,8 +1,9 @@
-import { createEditor } from '@aster-editor/core';
+import { VERSION, createEditor } from '@aster-editor/core';
 import type { AsterTheme, Unsubscribe } from '@aster-editor/core';
 import { getFullscreen } from './components/fullscreen.js';
 import { createImageBubble } from './components/image-bubble.js';
 import { createLinkBubble } from './components/link-bubble.js';
+import { createTableBubble } from './components/table-bubble.js';
 import { createSlashMenu, type SlashWidgetName } from './components/slash-menu.js';
 import { releaseSourceView, retainSourceView } from './components/source-view.js';
 import { createTableContextMenu } from './components/table-context-menu.js';
@@ -53,11 +54,17 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
     variableSuggestion = true,
     linkBubble = true,
     imageBubble = true,
+    tableBubble = true,
     slashMenu = true,
     ...editorOptions
   } = options;
 
-  const root = el('div', { className: 'aster', attrs: { 'data-theme': theme } });
+  // `data-aster-version` : la version qui tourne se lit dans l'inspecteur, sans rien
+  // afficher (support, retours utilisateurs).
+  const root = el('div', {
+    className: 'aster',
+    attrs: { 'data-theme': theme, 'data-aster-version': VERSION },
+  });
   const toolbarContainer = el('div', { className: 'aster__toolbar' });
   const contentContainer = el('div', { className: 'aster__content' });
   root.append(toolbarContainer, contentContainer);
@@ -93,7 +100,7 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
   const suggestion = hasVariables && variableSuggestion ? createVariableSuggestion(editor) : null;
   if (variableDialog)
     subscriptions.push(editor.on('readOnlyChange', () => variableDialog.update()));
-  // Bulles contextuelles (lien, image) et menu `/` : chacune s'abonne elle-même aux
+  // Bulles contextuelles (lien, image, tableau) et menu `/` : chacune s'abonne elle-même aux
   // événements de l'éditeur et se retire avec l'instance. Le menu `/` ouvre les dialogues
   // image et lien de la toolbar quand elle existe.
   const bubbles = [
@@ -101,6 +108,7 @@ export function createAster(host: HTMLElement, options: AsterUiOptions = {}): As
     ...(imageBubble && editor.commands.has('image.setAttributes')
       ? [createImageBubble(editor)]
       : []),
+    ...(tableBubble && editor.commands.has('table.delete') ? [createTableBubble(editor)] : []),
   ];
   const mountedToolbar = toolbar;
   const slash = slashMenu

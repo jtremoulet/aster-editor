@@ -6,6 +6,82 @@ Une seule version pour tout le monorepo.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-20
+
+### Fixed
+
+- **ci** : le job « E2E Playwright » échouait depuis la 0.7.1 : il n'installait que Chromium alors que les specs de fidélité et de sections tournent aussi sur WebKit. Il installe désormais Chromium, Firefox et WebKit, et exige Firefox (`ASTER_E2E_FIREFOX=1`) au lieu de retirer son projet en silence.
+
+## [0.9.1] - 2026-11-19
+
+La démo se construit en image Docker, pour la faire tourner ailleurs que sur un poste de développement.
+
+### Added
+
+- **démo** : image Docker de la démo Angular (`Dockerfile` racine, `apps/demo/nginx.conf`, `.dockerignore`) : build `ng build demo` depuis les sources des paquets, servi par nginx avec repli SPA sur `index.html`, 404 sur un fichier absent, cache long des fichiers hashés et `X-Robots-Tag: noindex`.
+- **ci** : job « Image Docker de la démo » qui construit l'image et vérifie qu'elle répond, y compris sur une route Angular rechargée.
+
+## [0.9.0] - 2026-11-18
+
+Retours utilisateurs sur la 0.7.0, « axe plus loin » : des variables dans les en-têtes et pieds de page.
+
+### Added
+
+- **core** : en vue page, les **variables des en-têtes et pieds** s'affichent comme celles du corps, sur la première page, la dernière et chaque coupure : la valeur si elle est connue, sinon le libellé de la puce, le libellé déclaré, puis le nom. Un `{{nom}}` resté en texte (champ de fusion d'un en-tête importé de Word) est affiché de la même façon. L'affichage suit `variables.setValues`, `variables.define` et le changement de langue sans rappeler `setPageView`, et la hauteur mesurée pour pousser le corps est celle du texte affiché. La mise en page (`getLayout()`, export) garde les puces figées, inchangées. Nouveau module `header-footer-variables.ts` : `displayHeaderFooterHtml`, `hasHeaderFooterVariables`, `registerHeaderFooterVariables`, `headerFooterVariablesOf`.
+- **ui** : dialogue « Mise en page », champs d'en-tête et de pied : liste **« Insérer une variable… »** (variables déclarées ou présentes dans le document) qui pose une puce au curseur du dernier champ visité ; les puces y sont des blocs insécables qui affichent leur libellé ; un `{{nom}}` tapé devient une puce à l'application quand l'éditeur accepte la variable. Clés i18n `ui.pageLayout.insertVariable` et `ui.pageLayout.insertVariableLabel`.
+- **ui** : les puces des en-têtes et pieds de la vue page reprennent le style de celles du corps (`themes/variables.css`).
+- **e2e** : scénario « variables dans les en-têtes et pieds » (insertion au dialogue, affichage sur chaque page, suivi des valeurs, export `.docx` résolu) et deux captures de référence (14 au total).
+
+### Changed
+
+- **ui** : la valeur d'un champ d'en-tête ou de pied **modifié** ramène chaque puce à son texte figé `{{nom}}` ; un champ intact reste rendu tel quel.
+
+## [0.8.1] - 2026-11-18
+
+Fin du premier tour des retours utilisateurs sur la 0.7.0 : l'en-tête et le pied ne recouvrent plus le texte, et des tests visuels verrouillent l'affichage.
+
+### Fixed
+
+- **core** : en vue page, un en-tête ou un pied **plus haut que sa marge** recouvrait le texte ou était rogné. Il pousse désormais le corps, comme dans Word : sa hauteur est mesurée dans le DOM et les marges haute et basse **affichées** (`--aster-page-margin-top` / `-bottom`, sur l'hôte et sur chaque saut de section) passent à `distance du bord + hauteur`, ce qui déplace le corps et réduit d'autant le nombre de lignes par page dans la pagination. La mise en page du document (`getLayout()`, export `.docx`) n'est pas modifiée. Une section prend la plus haute de ses variantes (`default`, `first`, `even`) ; la marge poussée est bornée à 40 % de la hauteur de page ; la mesure est refaite quand une image d'en-tête finit de charger.
+
+### Added
+
+- **core** : `displayedPageMetrics`, `pushPageMetrics` et `createDomHeaderFooterMeasure` (`page-view-push.ts`).
+- **e2e** : **tests visuels** (projet Playwright `visual`, `e2e/visual.spec.ts`, 12 captures de référence dans `e2e/__screenshots__/`), joués dans l'image Docker de Playwright par `npm run e2e:visual` (`scripts/visual-tests.mjs`, `--update` pour régénérer) et par le nouveau job `visual` de la CI ; scénario « en-tête et pied plus hauts que leur marge » dans `headers-dialog.spec.ts`.
+
+## [0.8.0] - 2026-11-18
+
+Suite des retours utilisateurs sur la 0.7.0 : supprimer ou vider un tableau sans chercher, et savoir quelle version tourne.
+
+### Added
+
+- **core** : commande `table.clear` (« Vider le tableau ») : vide toutes les cellules du tableau courant en une étape d'historique, grille, fusions et largeurs conservées, curseur gardé dans sa cellule ; refusée hors tableau, en lecture seule et sur un tableau déjà vide. `STANDARD_COMMAND_IDS` passe à 53.
+- **core** : constante `VERSION` (version du monorepo), écrite par `scripts/set-version.mjs` et vérifiée contre le `package.json` par un test.
+- **ui** : **bulle de tableau** (`createTableBubble`, option `tableBubble` de `createAster`, vraie par défaut) : dès que le curseur est dans un tableau, une barre au-dessus de son coin droit propose ajouter une ligne, ajouter une colonne, **Vider** et **Supprimer**. « Vider le tableau » rejoint aussi le menu de la toolbar et le clic droit (`TABLE_ACTIONS`). Icône `table-clear`, clés i18n `ui.table.clear` et `ui.table.delete`.
+- **ui** : `createAster` pose `data-aster-version` sur `.aster` : la version se lit dans l'inspecteur du navigateur.
+- **démo** : numéro de version affiché à côté du nom dans l'en-tête.
+- **e2e** : scénario « bulle de tableau » (apparition, Vider, Supprimer).
+
+### Fixed
+
+- **ui** : les bulles contextuelles (lien, image, tableau) sont masquées à l'impression.
+
+## [0.7.1] - 2026-11-18
+
+Premiers correctifs des retours utilisateurs sur la 0.7.0.
+
+### Fixed
+
+- **ui** : le bandeau « rechercher / remplacer » faisait 700 px de haut, champs empilés et centrés : il héritait de `flex-direction: column` de `.aster-dialog`, si bien que les `flex-basis` de ses groupes étaient lus comme des hauteurs. `flex-direction: row` explicite, une seule ligne sur un écran large.
+- **core** : une puce sans libellé propre (champ de fusion importé de Word) affiche le libellé **déclaré dans le magasin** (`variables.variables`, `define`) au lieu du nom technique ; le libellé porté par la puce garde la priorité, et la puce se rafraîchit sur `define`.
+- **ui** : icônes de listes (puces, numérotée, tâches) redessinées au trait, sans `<text>` : les chiffres en police système de 4,6 px bavaient et variaient d'un poste à l'autre.
+
+### Changed
+
+- **ui** : bandeau de recherche compact et **collant** en haut de ce qui défile (`--aster-search-sticky-top`, `0px` par défaut, pour le décaler sous un en-tête fixe de l'application) ; « Fermer » devient une croix (`aria-label` et `title` traduits, classe `.aster-search-panel__close` conservée) ; la case « Respecter la casse » et la croix sont des enfants directs du bandeau (plus de `.aster-dialog__field` ni `.aster-dialog__actions`).
+- **core** : `AsterVariableStore.getDefinition(name)` et `declaredVariableLabel(store, name)` (additifs, hors contrat `VariableStore`).
+- **e2e** : `search.spec.ts` vérifie la hauteur du bandeau.
+
 ## [0.7.0] - 2026-10-21
 
 Réponse aux huit retours de l'intégrateur qui a mis la 0.6.0 en essai à la place de CKEditor : l'aperçu à l'écran se rapproche du document (en-têtes et pieds sur chaque page, défauts de paragraphe et police du document appliqués), les en-têtes et pieds s'éditent dans le dialogue « Mise en page », la recherche défile et ne recouvre plus le texte, les paquets s'importent en Node pur, et un contrôle de contenu lié aux propriétés du document n'est plus pris pour une variable. Session 5 : 4 lots, 2 revues adverses (15 findings, 0 bloquant, 5 majeurs, 14 corrigés avec test, 1 en attente du document du retour n° 1), 2 lots de correctifs.

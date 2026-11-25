@@ -130,7 +130,8 @@ Les `.docx` sont générés avec la lib `docx` par `scripts/generate-fixtures.ts
 - `create-aster.spec` : montage conditionnel des extras et destruction idempotente ; `fullscreen.spec` : Échap ferme d'abord un panneau ouvert (`OPEN_PANEL_SELECTORS`, suggestion `{{` et dialogue de puce compris).
 - Mise en page (`line-spacing.spec`, `paragraph-spacing-dialog.spec`, `paragraph-indent.spec`, `paragraph-borders-dialog.spec`, `caps.spec`, `underline-style.spec`, `page-layout-dialog.spec`, `paragraph-layout.spec`, `image-dialog.spec`) : état lu depuis le bloc ou la marque, commandes appelées avec les bons arguments, `null` et non `0` pour effacer, bornes et messages `role="alert"`, retrait délégué à la liste et bouton désactivé si la liste refuse (R26), bordure `between` conservée, dialogue de mise en page désactivé sans `setPageView`, marges bornées à la moitié de la page, dimensions libres conservées, verrou de proportions de l'image, regex non quadratiques, formulaire non reconstruit à chaque `update` ; session 4 : « Section n sur N » depuis la tête de sélection, sélection à cheval signalée (R44-06), seule la section du curseur modifiée, `sections` jamais tronqué (R44-02), dernière section recopiée au premier niveau, `sections[0]` éditée quand le corps n'a plus de saut (R44-03) ; session 5 (`rich-field.spec`, `page-layout-headers.spec`, cas ajoutés dans `page-layout-dialog.spec`) : champs présents selon la section, `<script>` et `onclick` assainis, vide → type retiré, `first` activé → `titlePage`, recopie au premier niveau, section intermédiaire non recopiée, normalisation en point fixe sur dix formes (`<div><div>`, `<td>` nu, `<li>` nu… : `read → set → read` stable et égal à `sanitizeHeaderFooterHtml`, R52-01), filet, `<hr>` et paragraphe vide entre deux blocs comptés comme contenu (R52-02), « Appliquer » sans édition rend la **même référence** (R52-02), `first` masqué conservé sans `titlePage` (R52-03), `even` retiré seulement si la case était cochée à l'ouverture, déclarations `inherit` retirées et `<span>` sans attribut déballés (R52-04), `class` et `style="position: …"` étrangers retirés ; `themes.spec` (scénarios « L52 ») : bandes d'en-tête et de pied à une ligne au moins sur l'hôte et les coupures, règle `.aster-image-dialog__radios` alignée sur `.aster-dialog__radios`, bandeau de recherche dans le flux jamais en position absolue et masqué à l'impression, défauts du document appliqués en repli en vue page seulement, libellé et numéro posés au-dessus de l'en-tête dans toute coupure. La largeur du dialogue (`min(520px, 90vw)`, R52-07) n'a été vérifiée qu'en Chromium par le relecteur (spec Playwright jetable).
 - `themes.spec` vérifie aussi que `page.css` ne consomme que des variables définies par les deux thèmes, règles de section et de tabulation comprises.
-- `icons/index.spec` : chaque nom a un SVG, test géométrique de l'icône `ordered-list` redessinée.
+- `table-bubble.spec` : bulle de tableau (apparition, Vider, Supprimer, commandes absentes ou grisées, lecture seule, désabonnement) ; `commands.tables.spec` du core couvre `table.clear` (grille et fusions conservées, une étape d'historique, refus).
+- `icons/index.spec` : chaque nom a un SVG, icônes de listes au trait, sans `<text>` (rendu indépendant des polices du poste).
 
 **angular**
 
@@ -165,6 +166,16 @@ npm run fidelity -- fixtures/docx/16-sections.docx --no-template --threshold 0.7
 
 Le script sort en 1 sous le seuil (0,98 par défaut) : utilisable en CI sur un document de référence. Les scores courants et ce qui manque pour chaque fixture sont tenus à jour dans `fixtures/docx/README.md` ; `compare-fixtures.spec.ts` les fige en cible ou en plancher.
 
+## 📸 Tests visuels
+
+Projet Playwright `visual` (`e2e/visual.spec.ts`) : des captures d'éléments comparées aux références de `e2e/__screenshots__/`. Né des retours utilisateurs sur la 0.7 (bandeau de recherche de 700 px, icônes baveuses, en-tête sur le texte) : trois défauts que les tests fonctionnels laissaient passer.
+
+- **Une seule série de références, produite sous Linux dans l'image Docker de Playwright.** Une capture dépend des polices et du moteur de rendu : celle d'un poste Windows ne correspond jamais à celle de la CI. `npm run e2e:visual` (`scripts/visual-tests.mjs`) lance donc les tests dans `mcr.microsoft.com/playwright:v<version>-noble`, la même image que le job `visual` de la CI. Le projet `visual` n'existe que si `ASTER_E2E_VISUAL=1` : un `npm run e2e` ordinaire ne le joue jamais.
+- **Changement d'affichage voulu** : `npm run e2e:visual:update`, relis les images modifiées (`git diff` les montre), commite-les avec le code. En cas d'écart, les images de diff sont dans `e2e/test-results/visual/` (en CI : artefact `visual-diff`).
+- **Montée de version de Playwright** : mettre à jour l'image du job `visual` dans `.github/workflows/ci.yml` (une étape du job échoue sinon) et régénérer les références.
+- **Écrire un scénario stable** : contenu posé par `setHtml`, capture d'un élément (`.aster`, la toolbar, un bouton) et jamais de la page, souris rangée avant la capture. Tolérance : 0,2 % des pixels.
+- Couvert aujourd'hui : toolbar et contenu riche (thèmes `light` et `night`), bandeau de recherche, bulle de tableau, puces de variables, icônes de listes, vue page avec en-tête et pied (une ligne, puis plus hauts que leur marge).
+
 ## 🏃 Commandes
 
 ```bash
@@ -174,6 +185,8 @@ npm run test:watch -w packages/core
 npm run test:coverage             # avec seuils
 npm run e2e                       # Playwright, les quatre projets (Firefox retiré s'il ne démarre pas)
 npm run e2e -- --project=playground
+npm run e2e:visual                # tests visuels dans l'image Docker de Playwright (Docker requis)
+npm run e2e:visual:update         # régénère les captures de référence, à relire puis commiter
 npm run e2e -- --project=playground-webkit
 npx playwright test --list -c e2e/playwright.config.ts   # compte les tests par projet sans les lancer
 npm run fidelity -- <fichier.docx>   # rapport de fidélité d'un document

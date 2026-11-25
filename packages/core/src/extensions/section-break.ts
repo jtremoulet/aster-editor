@@ -10,11 +10,12 @@ import type { NodeView } from '@tiptap/pm/view';
 import type { AsterEditor, DocumentLayout, SectionBreakAttrs } from '../api/index.js';
 import {
   PAGE_VIEW_CHANGE_EVENT,
+  PAGE_VIEW_CLASS,
   PAGE_VIEW_CSS_VARIABLES,
   SECTION_BREAKS_CHANGE_EVENT,
   getActivePageView,
   pageViewCssValues,
-  resolvePageMetrics,
+  displayedPageMetrics,
   resolveSectionLayout,
   sectionOpenedByBreak,
 } from './page-view.js';
@@ -291,7 +292,11 @@ export class SectionBreakNodeView implements NodeView {
       return;
     }
     const next = resolveSectionLayout(layout, this.openedSection());
-    const values = pageViewCssValues(resolvePageMetrics(next));
+    // Marges affichées : un en-tête ou un pied plus haut que sa marge pousse le corps.
+    const host = this.props.view.dom.closest<HTMLElement>(`.${PAGE_VIEW_CLASS}`);
+    const values = pageViewCssValues(
+      displayedPageMetrics(host, next, getActivePageView(this.props.view.dom), () => this.render()),
+    );
     PAGE_VIEW_CSS_VARIABLES.forEach((name, index) => {
       this.dom.style.setProperty(name, values[index] ?? '');
     });

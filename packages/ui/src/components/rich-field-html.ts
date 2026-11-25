@@ -1,4 +1,5 @@
 import { sanitizeHeaderFooterHtml } from '@aster-editor/core';
+import { canonicalizeFieldChips } from './rich-field-variables.js';
 
 /**
  * Normalisation du HTML d'un champ riche minimal (`rich-field.ts`, session 5, L54 ;
@@ -228,7 +229,8 @@ function cleanAttributes(element: Element): void {
 /**
  * Une passe de normalisation structurelle : `<b>` / `<i>` renommés ; `<div>` déballé s'il
  * contient un bloc, renommé `<p>` sinon ; balise de structure hors de son parent déballée ;
- * attributs nettoyés ; `<span>` sans attribut déballé ; inline de premier niveau enveloppé.
+ * attributs nettoyés ; `<span>` sans attribut déballé ; puces de variables ramenées à leur
+ * forme figée ; inline de premier niveau enveloppé.
  */
 function normalizeTree(root: DocumentFragment): void {
   for (const [from, to] of Object.entries(RENAMED_TAGS)) {
@@ -254,6 +256,8 @@ function normalizeTree(root: DocumentFragment): void {
   for (const span of Array.from(root.querySelectorAll('span'))) {
     if (span.attributes.length === 0) unwrapElement(span);
   }
+  // Puces de variables : texte figé `{{nom}}`, quel que soit le libellé affiché à la saisie.
+  canonicalizeFieldChips(root);
   wrapInlineRuns(root);
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "aster-editor",
-  "version": "0.7.0",
+  "version": "0.9.2",
   "private": true,
   "description": "Éditeur de texte riche MIT, framework-agnostic, avec wrapper Angular et import Word",
   "license": "MIT",
@@ -29,6 +29,8 @@
     "fixtures": "node scripts/generate-fixtures.ts && node scripts/generate-fixtures-extra.ts && node scripts/generate-fixtures-variables.ts && node scripts/generate-fixtures-layout.ts && node scripts/generate-fixtures-sections.ts && node scripts/generate-fixtures-fields.ts",
     "playground": "node scripts/vanilla-playground.mjs",
     "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:visual": "node scripts/visual-tests.mjs",
+    "e2e:visual:update": "node scripts/visual-tests.mjs --update",
     "e2e:ui": "playwright test -c e2e/playwright.config.ts --ui",
     "version:set": "node scripts/set-version.mjs",
     "smoke:install": "node scripts/smoke-install.mjs",

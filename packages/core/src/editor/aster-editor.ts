@@ -22,6 +22,7 @@ import type {
 import { createCommandRegistry } from '../commands/registry.js';
 import { createStandardCommands } from '../commands/standard.js';
 import { createAsterExtensions } from '../extensions/aster-extensions.js';
+import { registerHeaderFooterVariables } from '../extensions/header-footer-variables.js';
 import { createImageUploadProps } from '../extensions/image-upload.js';
 import { resolveLinkPolicy } from '../extensions/link-safety.js';
 import {
@@ -156,6 +157,11 @@ export class AsterEditorImpl implements AsterEditor {
       onBlur: ({ event }) => this.emit('blur', { editor: this, event }),
     });
     this.contentElement = this.tiptap.view.dom;
+    // Variables dans les en-têtes et pieds : la vue page lit valeurs et libellés par l'hôte,
+    // et se réaffiche quand ils changent (ou que la langue change, pour les infobulles).
+    registerHeaderFooterVariables(this.element, this);
+    this.on('variablesChange', () => this.pageView?.refresh());
+    this.on('localeChange', () => this.pageView?.refresh());
     if (options.pageView) {
       // Une mise en page hostile (en-tête importé d'un .docx) ne doit jamais laisser un
       // éditeur à moitié construit : la vue page est ignorée, l'éditeur reste utilisable.
@@ -457,6 +463,7 @@ export class AsterEditorImpl implements AsterEditor {
     this.emitter.clear();
     this.pageView?.remove();
     this.pageView = null;
+    registerHeaderFooterVariables(this.element, null);
     this.tiptap.destroy();
     this.container.remove();
     this.cachedDoc = null;

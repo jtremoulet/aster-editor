@@ -24,11 +24,25 @@
  * le contenu (session 5, L52, retour POC n° 5a) : il **pousse** le document au lieu de le
  * recouvrir, et reste ouvert quand on clique dans le texte. Posé par `createSearchPanel`
  * juste avant l'hôte de l'éditeur (`.aster__content`), hors de la feuille.
+ *
+ * Une seule ligne compacte sur un écran large (recherche, remplacement, fermer), qui se
+ * replie par groupes sur un écran étroit. `flex-direction: row` est explicite : le bandeau
+ * porte aussi `.aster-dialog`, qui est en colonne, et les `flex-basis` des groupes
+ * devenaient alors des hauteurs (retour utilisateurs 0.7 : bandeau de 700 px de haut).
+ *
+ * Collant en haut de ce qui défile, pour garder le compteur et « suivant » sous la main
+ * dans un long document ; `--aster-search-sticky-top` le décale sous un en-tête fixe de
+ * l'application hôte.
  */
 .aster-search-panel {
+  position: sticky;
+  top: var(--aster-search-sticky-top, 0px);
+  z-index: 5;
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
   gap: var(--aster-space-2) var(--aster-space-3);
   padding: var(--aster-space-2) var(--aster-space-3);
   border-bottom: 1px solid var(--aster-border);
@@ -44,7 +58,9 @@
 
 .aster-search-panel__row {
   display: flex;
-  flex: 1 1 320px;
+  flex: 1 1 300px;
+  /* Hôte très étroit : les boutons passent sous le champ au lieu de déborder. */
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--aster-space-2);
   min-width: 0;
@@ -52,6 +68,7 @@
 
 .aster-search-panel__row .aster-dialog__input {
   flex: 1 1 auto;
+  width: 0;
   min-width: 8em;
 }
 
@@ -60,9 +77,11 @@
   white-space: nowrap;
 }
 
-.aster-search-panel .aster-dialog__actions {
+/* Fermer : croix discrète, poussée au bout de la dernière ligne. */
+.aster-search-panel__close {
   flex: 0 0 auto;
   margin-left: auto;
+  border-color: transparent;
 }
 
 .aster-search-panel__count {

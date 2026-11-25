@@ -124,9 +124,10 @@ describe('createTableGridPicker', () => {
     const actions = picker.panel.querySelectorAll<HTMLButtonElement>(
       '.aster-table-picker__actions [role="menuitem"]',
     );
-    expect(actions.length).toBe(10);
+    expect(actions.length).toBe(11);
     const labels = Array.from(actions).map((a) => a.textContent);
     expect(labels).toContain('Delete table');
+    expect(labels).toContain('Clear table');
     expect(labels).not.toContain('Merge cells');
     Array.from(actions)
       .find((a) => a.textContent === 'Delete row')

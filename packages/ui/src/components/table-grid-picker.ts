@@ -23,6 +23,7 @@ export const TABLE_ACTIONS: readonly TableAction[] = [
   'table.splitCell',
   'table.toggleHeaderRow',
   'table.toggleHeaderColumn',
+  'table.clear',
   'table.delete',
 ];
 

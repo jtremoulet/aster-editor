@@ -155,7 +155,7 @@ describe('normalizeFieldHtml (F52)', () => {
       normalizeFieldHtml(
         '<p><span data-aster-variable="a" style="position: fixed; top: 0; z-index: 9; color: red">v</span></p>',
       ),
-    ).toBe('<p><span data-aster-variable="a" style="color: red">v</span></p>');
+    ).toBe('<p><span data-aster-variable="a" style="color: red">{{a}}</span></p>');
     expect(normalizeFieldHtml('<p style="display: none; transform: scale(9)">x</p>')).toBe(
       '<p>x</p>',
     );
@@ -286,5 +286,92 @@ describe('createRichField (L54)', () => {
     const pasted = mount('<p>a</p>');
     paste(pasted.field, 'b');
     expect(pasted.isModified()).toBe(true);
+  });
+});
+
+describe('variables dans un champ riche', () => {
+  const variables = {
+    accepts: (name: string): boolean => name !== 'interdite',
+    labelOf: (name: string): string | null => (name === 'conseiller' ? 'Nom du conseiller' : null),
+  };
+  let rich: RichField;
+  const mount = (html: string): RichField => {
+    rich = createRichField({ id: 'v', label: 'En-tête', html, variables });
+    document.body.append(rich.wrapper);
+    return rich;
+  };
+
+  afterEach(() => {
+    rich.wrapper.remove();
+    document.getSelection()?.removeAllRanges();
+  });
+
+  it('une puce reçue affiche son libellé, insécable, et la valeur lue garde la puce figée', () => {
+    const html =
+      '<p>Suivi par <span data-aster-variable="conseiller">{{conseiller}}</span> et <span data-aster-variable="client" data-label="Client">{{client}}</span></p>';
+    const { field } = mount(html);
+    const chips = Array.from(field.querySelectorAll('span[data-aster-variable]'));
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Nom du conseiller', 'Client']);
+    expect(chips.every((chip) => chip.getAttribute('contenteditable') === 'false')).toBe(true);
+    expect(chips[0]?.getAttribute('title')).toBe('{{conseiller}}');
+    expect(rich.isModified()).toBe(false);
+    // Point fixe : la valeur est exactement le HTML reçu, sans l'habillage de saisie.
+    expect(rich.getHtml()).toBe(html);
+    expect(normalizeFieldHtml(rich.getHtml())).toBe(html);
+  });
+
+  it('insertVariable pose une puce à la dernière position du curseur, même le focus parti', () => {
+    const { field } = mount('<p>Dossier  du jour</p>');
+    const text = field.querySelector('p')?.firstChild;
+    if (!(text instanceof Text)) throw new Error('texte attendu');
+    caretAt(text, 8);
+    field.dispatchEvent(new Event('keyup', { bubbles: true }));
+    // Le curseur quitte le champ (ouverture de la liste des variables).
+    document.getSelection()?.removeAllRanges();
+    rich.insertVariable('reference');
+    expect(rich.isModified()).toBe(true);
+    expect(document.activeElement).toBe(field);
+    expect(rich.getHtml()).toBe(
+      '<p>Dossier <span data-aster-variable="reference">{{reference}}</span> du jour</p>',
+    );
+    // Deux insertions de suite : la seconde suit la première.
+    rich.insertVariable('conseiller');
+    expect(rich.getHtml()).toBe(
+      '<p>Dossier <span data-aster-variable="reference">{{reference}}</span><span data-aster-variable="conseiller">{{conseiller}}</span> du jour</p>',
+    );
+    expect(field.querySelectorAll('span[data-aster-variable]')[1]?.textContent).toBe(
+      'Nom du conseiller',
+    );
+  });
+
+  it('insertVariable dans un champ vide, sans curseur : la puce devient son premier paragraphe', () => {
+    mount('');
+    rich.insertVariable('ville');
+    expect(rich.getHtml()).toBe('<p><span data-aster-variable="ville">{{ville}}</span></p>');
+  });
+
+  it('un {{nom}} tapé devient une puce dans la valeur ; un nom refusé ou invalide reste du texte', () => {
+    const { field } = mount('');
+    field.innerHTML = '<p>Réf. {{reference}} — {{interdite}} — {{a b}} — {{x}}{{y}}</p>';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(rich.getHtml()).toBe(
+      '<p>Réf. <span data-aster-variable="reference">{{reference}}</span> — {{interdite}} — {{a b}} — ' +
+        '<span data-aster-variable="x">{{x}}</span><span data-aster-variable="y">{{y}}</span></p>',
+    );
+  });
+
+  it('le texte d’une puce existante n’est jamais converti une seconde fois', () => {
+    mount('<p><span data-aster-variable="reference">{{reference}}</span></p>');
+    rich.field.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(rich.getHtml()).toBe(
+      '<p><span data-aster-variable="reference">{{reference}}</span></p>',
+    );
+  });
+
+  it('sans variables en option : {{nom}} reste du texte (comportement d’avant)', () => {
+    rich = createRichField({ id: 'w', label: 'Pied', html: '' });
+    document.body.append(rich.wrapper);
+    rich.field.innerHTML = '<p>{{reference}}</p>';
+    expect(rich.getHtml()).toBe('<p>{{reference}}</p>');
   });
 });

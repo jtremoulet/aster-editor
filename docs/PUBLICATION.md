@@ -128,4 +128,4 @@ Dossier de sortie : `--out <dossier>` (défaut : `aster-smoke` dans le temporair
 ## 📎 Ce qui est délibérément hors champ
 
 - GitHub Packages : chaque client devrait mettre un token GitHub dans son `.npmrc`, pénible en mission.
-- Registre privé Verdaccio sur Sirius : à reconsidérer seulement si une version non MIT doit exister un jour.
+- Registre npm privé auto-hébergé : à reconsidérer seulement si une version non MIT doit exister un jour.

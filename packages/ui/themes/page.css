@@ -97,9 +97,10 @@
  * Bande d'en-tête et de pied (retour POC n° 4, L52) : la hauteur disponible est la marge
  * moins la distance du bord à l'en-tête, mais quand les deux sont proches (Word : marge
  * haute 12,7 mm, en-tête à 12,49 mm) elle tombe à zéro et la bande disparaissait. Plancher
- * d'une ligne de texte (`1.4em`) : l'en-tête peut alors empiéter sur le corps, comme dans
- * Word qui, lui, pousse le corps. Pousser le corps demanderait de mesurer l'en-tête en JS
- * (le `padding-top` de la feuille ne connaît pas sa hauteur) : approximation documentée.
+ * d'une ligne de texte (`1.4em`). Depuis la 0.8.1 le core mesure l'en-tête et le pied et
+ * agrandit `--aster-page-margin-top` / `-bottom` quand ils dépassent (ils poussent le corps,
+ * comme dans Word) : la bande a alors la hauteur de son contenu, et le plancher ne sert plus
+ * que sans mesure possible.
  */
 .aster--page-view .aster-page-header {
   top: calc(var(--aster-page-desk-padding, 24px) + var(--aster-page-margin-header, 12.7mm));
@@ -667,9 +668,20 @@
   height: auto;
 }
 
-/* Les puces de variables d'un en-tête importé restent lisibles dans le champ. */
+/* Puces de variables dans le champ : un bloc insécable qui affiche le libellé. */
 .aster-page-layout__rich span[data-aster-variable] {
-  padding: 0 0.2em;
+  padding: 0 0.35em;
+  border: 1px dashed var(--aster-border);
   border-radius: var(--aster-radius);
-  background: var(--aster-surface-3);
+  background: var(--aster-accent-soft);
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Liste « Insérer une variable » sous les champs d'en-tête et de pied. */
+.aster-page-layout__variable {
+  align-self: flex-start;
+  width: auto;
+  max-width: 100%;
+  margin-top: var(--aster-space-2);
 }

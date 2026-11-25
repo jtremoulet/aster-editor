@@ -31,13 +31,16 @@ function glyph(text: string, x: number, y: number, size: number, extra = ''): st
 }
 
 /**
- * Chiffre de liste numérotée : petit, gras, en sans-serif (les chiffres Georgia ont des
- * descendantes qui se chevauchent à cette taille). Baselines à 4,5 d'écart pour trois
- * lignes de `LIST_LINES` centrées à 5,5 / 10 / 14,5 : chaque chiffre (≈ 3,3 de haut) reste
- * centré sur sa ligne et le dernier ne dépasse pas sous la grille.
+ * Marqueurs des icônes de listes (chiffres, coche, case) : tracés au trait plus fin que les
+ * lignes, jamais en `<text>`. Trois chiffres en police système de 4,6 px bavaient à
+ * l'écran et changeaient d'un poste à l'autre (retour utilisateurs 0.7) ; deux chiffres
+ * dessinés, plus grands, restent lisibles à 20 px.
  */
-function listDigit(text: string, y: number): string {
-  return `<text x="4.5" y="${y}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="4.6" font-weight="bold">${text}</text>`;
+const LIST_MARKER_STROKE = 'stroke-width="1.3"';
+
+/** Puce pleine d'une liste, centrée sur la ligne `cy`. */
+function listDot(cy: number): string {
+  return `<circle cx="4" cy="${cy}" r="1.2" fill="currentColor" stroke="none"/>`;
 }
 
 /** Trois lignes horizontales de départ `xs` et largeurs `ws`, pour l'alignement. */
@@ -52,7 +55,7 @@ function lines(
 
 const TABLE_FRAME = '<rect x="3" y="4" width="14" height="12" rx="1.5"/>';
 const TABLE_GRID = '<path d="M3 8.5h14M3 12.5h14M8 8.5V16M12.5 8.5V16"/>';
-const LIST_LINES = '<path d="M8 4.7h9v1.6H8zM8 9.2h9v1.6H8zM8 13.7h9v1.6H8z"/>';
+const LIST_LINES = '<path d="M8.5 5H17M8.5 10H17M8.5 15H17"/>';
 /** Paire d'accolades ouvrante / fermante, base des icônes de variables. */
 const BRACES =
   '<path d="M7 3H6.5A2 2 0 0 0 4.5 5v3a2 2 0 0 1-2 2 2 2 0 0 1 2 2v3a2 2 0 0 0 2 2H7"/>' +
@@ -80,15 +83,16 @@ const ICONS: Readonly<Record<string, string>> = {
   'code-block': stroke(TABLE_FRAME + '<path d="M8 8l-2 2 2 2M12 8l2 2-2 2"/>'),
   'horizontal-rule': stroke('<path d="M6 5h8M6 15h8" stroke-opacity="0.4"/><path d="M3 10h14"/>'),
   'hard-break': stroke('<path d="M4 6h10a2 2 0 0 1 0 4H6M8 8l-2 2 2 2M4 15h12"/>'),
-  'bullet-list': fill(
-    '<circle cx="4.5" cy="5.5" r="1.5"/><circle cx="4.5" cy="10" r="1.5"/><circle cx="4.5" cy="14.5" r="1.5"/>' +
-      LIST_LINES,
-  ),
-  'ordered-list': fill(
-    listDigit('1', 7.1) + listDigit('2', 11.6) + listDigit('3', 16.1) + LIST_LINES,
+  'bullet-list': stroke(listDot(5) + listDot(10) + listDot(15) + LIST_LINES),
+  'ordered-list': stroke(
+    LIST_LINES +
+      `<path d="M3.2 4.2l1.5-1V8" ${LIST_MARKER_STROKE}/>` +
+      `<path d="M2.9 13c0-1.6 2.9-1.6 2.9 0 0 1.4-2.9 2-2.9 3.7h3" ${LIST_MARKER_STROKE}/>`,
   ),
   'task-list': stroke(
-    '<rect x="3" y="4" width="5" height="5" rx="1"/><path d="M4.2 6.5l1.3 1.3 2-2.3M11 6.5h6M11 13.5h6"/><rect x="3" y="11" width="5" height="5" rx="1"/>',
+    '<path d="M10.5 5.5H17M10.5 14H17"/>' +
+      `<path d="M2.8 5.6l1.6 1.6 3-3.5" ${LIST_MARKER_STROKE}/>` +
+      `<rect x="2.9" y="11.6" width="4.8" height="4.8" rx="1.2" ${LIST_MARKER_STROKE}/>`,
   ),
   indent: stroke('<path d="M3 5h14M9 10h8M9 15h8M3 8.5l2.5 1.5L3 11.5"/>'),
   outdent: stroke('<path d="M3 5h14M9 10h8M9 15h8M6 8.5L3.5 10 6 11.5"/>'),
@@ -110,6 +114,10 @@ const ICONS: Readonly<Record<string, string>> = {
   'table-insert': stroke(TABLE_FRAME + TABLE_GRID),
   'table-delete': stroke(
     '<path d="M3 10V5.5A1.5 1.5 0 0 1 4.5 4H17v6M3 8.5h14M8 8.5V12"/><path d="M11 12l5 5M16 12l-5 5"/>',
+  ),
+  // Grille conservée, contenu effacé : le cadre et un trait de gomme en travers.
+  'table-clear': stroke(
+    TABLE_FRAME + '<path d="M3 8.5h14" stroke-opacity="0.4"/><path d="M6.5 14.5l7-4.5"/>',
   ),
   'table-add-row-before': stroke(
     '<rect x="3" y="9" width="14" height="7" rx="1"/><path d="M3 12.5h14M8 9v7M12.5 9v7M10 2v5M7.5 4.5h5"/>',

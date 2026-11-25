@@ -41,6 +41,7 @@ describe('commandes de table', () => {
   it('les commandes de table sont impossibles hors d’une table', () => {
     for (const id of [
       'table.delete',
+      'table.clear',
       'table.addRowBefore',
       'table.addRowAfter',
       'table.deleteRow',
@@ -79,6 +80,68 @@ describe('commandes de table', () => {
     expect(count(/<th>/g)).toBeGreaterThan(3);
     expect(mounted.editor.commands.run('table.delete')).toBe(true);
     expect(mounted.editor.getHTML()).not.toContain('<table');
+  });
+
+  describe('table.clear', () => {
+    const TABLE =
+      '<p>Avant</p><table><tbody>' +
+      '<tr><th colspan="2"><p>Titre <strong>fusionné</strong></p></th></tr>' +
+      '<tr><td><p>A2</p><ul><li><p>puce</p></li></ul></td><td><p>B2</p></td></tr>' +
+      '</tbody></table><p>Après</p>';
+
+    /** Place le curseur dans le texte donné. */
+    const cursorIn = (text: string): void => {
+      let target = -1;
+      mounted.editor.tiptap.state.doc.descendants((node, pos) => {
+        if (target < 0 && node.isText && node.text?.includes(text)) target = pos + 1;
+        return target < 0;
+      });
+      expect(target, `texte « ${text} » introuvable`).toBeGreaterThan(0);
+      mounted.editor.tiptap.commands.setTextSelection(target);
+    };
+
+    it('vide toutes les cellules en gardant la grille, les fusions et le reste du document', () => {
+      mounted.editor.setHTML(TABLE);
+      cursorIn('B2');
+      expect(mounted.editor.commands.canRun('table.clear')).toBe(true);
+      expect(mounted.editor.commands.run('table.clear')).toBe(true);
+      const html = mounted.editor.getHTML();
+      expect(html).toContain('<p>Avant</p>');
+      expect(html).toContain('<p>Après</p>');
+      expect(html).toContain('colspan="2"');
+      expect((html.match(/<tr>/g) ?? []).length).toBe(2);
+      expect((html.match(/<td/g) ?? []).length).toBe(2);
+      for (const gone of ['Titre', 'fusionné', 'A2', 'puce', 'B2', '<ul>']) {
+        expect(html, gone).not.toContain(gone);
+      }
+      // Le curseur est resté dans le tableau : on peut enchaîner.
+      expect(mounted.editor.tiptap.isActive('table')).toBe(true);
+    });
+
+    it('est une seule étape d’historique', () => {
+      mounted.editor.setHTML(TABLE);
+      cursorIn('A2');
+      mounted.editor.commands.run('table.clear');
+      expect(mounted.editor.commands.run('undo')).toBe(true);
+      const html = mounted.editor.getHTML();
+      for (const back of ['Titre', 'A2', 'puce', 'B2']) expect(html, back).toContain(back);
+    });
+
+    it('est grisée sur un tableau déjà vide, hors tableau et en lecture seule', () => {
+      mounted.editor.setHTML(TABLE);
+      cursorIn('Avant');
+      expect(mounted.editor.commands.canRun('table.clear')).toBe(false);
+      expect(mounted.editor.commands.run('table.clear')).toBe(false);
+      cursorIn('B2');
+      mounted.editor.setReadOnly(true);
+      expect(mounted.editor.commands.canRun('table.clear')).toBe(false);
+      expect(mounted.editor.commands.run('table.clear')).toBe(false);
+      expect(mounted.editor.getHTML()).toContain('B2');
+      mounted.editor.setReadOnly(false);
+      expect(mounted.editor.commands.run('table.clear')).toBe(true);
+      expect(mounted.editor.commands.canRun('table.clear')).toBe(false);
+      expect(mounted.editor.commands.run('table.clear')).toBe(false);
+    });
   });
 
   it('fusionne puis scinde des cellules', () => {

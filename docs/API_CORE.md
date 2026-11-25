@@ -124,7 +124,7 @@ Entrées au contrat en session 4 après proposition en session 3, en méthodes *
 
 ### `STANDARD_COMMAND_IDS` et `StandardCommandId`
 
-Tuple `as const` des 52 identifiants standard, dans l'ordre : `bold`, `italic`, `underline`, `strike`, `subscript`, `superscript`, `code`, `highlight`, `clearFormatting`, `paragraph`, `heading`, `blockquote`, `codeBlock`, `horizontalRule`, `hardBreak`, `bulletList`, `orderedList`, `taskList`, `indent`, `outdent`, `alignLeft`, `alignCenter`, `alignRight`, `alignJustify`, `link.set`, `link.unset`, `image.insert`, `image.upload`, `image.setAttributes`, `table.insert`, `table.delete`, `table.addRowBefore`, `table.addRowAfter`, `table.deleteRow`, `table.addColumnBefore`, `table.addColumnAfter`, `table.deleteColumn`, `table.mergeCells`, `table.splitCell`, `table.toggleHeaderRow`, `table.toggleHeaderColumn`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `variable.insert`, `variable.remove`, `paragraph.setLayout`, `paragraph.unsetLayout`, `undo`, `redo`, `selectAll`.
+Tuple `as const` des 53 identifiants standard, dans l'ordre : `bold`, `italic`, `underline`, `strike`, `subscript`, `superscript`, `code`, `highlight`, `clearFormatting`, `paragraph`, `heading`, `blockquote`, `codeBlock`, `horizontalRule`, `hardBreak`, `bulletList`, `orderedList`, `taskList`, `indent`, `outdent`, `alignLeft`, `alignCenter`, `alignRight`, `alignJustify`, `link.set`, `link.unset`, `image.insert`, `image.upload`, `image.setAttributes`, `table.insert`, `table.delete`, `table.clear`, `table.addRowBefore`, `table.addRowAfter`, `table.deleteRow`, `table.addColumnBefore`, `table.addColumnAfter`, `table.deleteColumn`, `table.mergeCells`, `table.splitCell`, `table.toggleHeaderRow`, `table.toggleHeaderColumn`, `textColor`, `backgroundColor`, `fontFamily`, `fontSize`, `variable.insert`, `variable.remove`, `paragraph.setLayout`, `paragraph.unsetLayout`, `undo`, `redo`, `selectAll`.
 
 `StandardCommandId = (typeof STANDARD_COMMAND_IDS)[number]`. Un identifiant pointé indique un domaine (`table.insert`).
 
@@ -252,7 +252,7 @@ Types de `variables.ts`. Une variable est une puce inline atomique du document (
 | Champ         | Type     | Obligatoire | Description                                                                                                              |
 | ------------- | -------- | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `name`        | `string` | oui         | Identifiant stable : lettres, chiffres, `_`, `.`, `-` (premier caractère : lettre, chiffre ou `_`). Sensible à la casse. |
-| `label`       | `string` | non         | Libellé humain affiché dans la puce et les menus. Par défaut `name`.                                                     |
+| `label`       | `string` | non         | Libellé humain affiché dans la puce et les menus. Une puce sans libellé propre prend celui déclaré ici, sinon `name`.    |
 | `value`       | `string` | non         | Valeur courante. Absente → la puce affiche le libellé.                                                                   |
 | `description` | `string` | non         | Aide affichée dans le menu d'insertion.                                                                                  |
 

@@ -87,7 +87,7 @@ describe('createSearchPanel', () => {
     expect(button('.aster-search-panel__nav').disabled).toBe(true);
     expect(button('.aster-search-panel__replace').disabled).toBe(true);
     expect(button('.aster-search-panel__replace-all').disabled).toBe(true);
-    expect(button('.aster-search-panel__close').textContent).toBe('Close');
+    expect(button('.aster-search-panel__close').getAttribute('aria-label')).toBe('Close');
   });
 
   it('la saisie lance search.open avec la requête et la casse, vide → search.clear', () => {
@@ -218,7 +218,7 @@ describe('createSearchPanel', () => {
     widget.update();
     expect(trigger().getAttribute('aria-label')).toBe('Rechercher et remplacer');
     trigger().click();
-    expect(button('.aster-search-panel__close').textContent).toBe('Fermer');
+    expect(button('.aster-search-panel__close').getAttribute('aria-label')).toBe('Fermer');
     expect(query().getAttribute('placeholder')).toBe('Rechercher');
   });
 

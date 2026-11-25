@@ -3,6 +3,7 @@ import type { DocumentLayout, SectionLayout } from '@aster-editor/core';
 import { withSectionLayout } from './page-layout-dialog.js';
 import { createHeaderFooterSection } from './page-layout-headers.js';
 import type { RichField } from './rich-field.js';
+import { createMockEditor } from '../testing/mock-editor.js';
 
 const t = (key: string): string => key.replace('ui.pageLayout.', '');
 
@@ -252,5 +253,69 @@ describe('withSectionLayout (L54)', () => {
     expect(applied.headers).toBe(section.headers);
     expect(applied.sections?.[0]?.headers).toBe(section.headers);
     expect(applied.titlePage).toBeUndefined();
+  });
+});
+
+describe('createHeaderFooterSection : variables', () => {
+  const VARIABLES = [{ name: 'reference' }, { name: 'conseiller', label: 'Nom du conseiller' }];
+  const chip = (name: string): string =>
+    `<p><span data-aster-variable="${name}">{{${name}}}</span></p>`;
+  const choose = (picker: HTMLSelectElement | null, name: string): void => {
+    if (!picker) throw new Error('liste des variables attendue');
+    picker.value = name;
+    picker.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  it('la liste propose les variables de l’éditeur et insère dans le dernier champ visité', () => {
+    const editor = createMockEditor({ variables: VARIABLES });
+    const section = createHeaderFooterSection({ section: {}, suffix: 'v', t, editor });
+    document.body.append(section.element);
+    const picker = section.variablePicker;
+    expect(picker?.getAttribute('aria-label')).toBe('insertVariableLabel');
+    expect(Array.from(picker?.options ?? []).map((option) => option.textContent)).toEqual([
+      'insertVariable',
+      'reference',
+      'Nom du conseiller ({{conseiller}})',
+    ]);
+    // Sans champ visité : l'en-tête courant.
+    choose(picker, 'reference');
+    expect(picker?.selectedIndex).toBe(0);
+    // Le pied a été visité : c'est lui qui reçoit la suivante.
+    section.fields.footers.default.field.dispatchEvent(new Event('focusin', { bubbles: true }));
+    choose(picker, 'conseiller');
+    expect(section.read()).toEqual({
+      headers: { default: { html: chip('reference') } },
+      footers: { default: { html: chip('conseiller') } },
+    });
+    // L'option vide ne fait rien.
+    choose(picker, '');
+    expect(section.read().headers?.default?.html).toBe(chip('reference'));
+    section.element.remove();
+  });
+
+  it('un champ masqué depuis ne reçoit rien : la variable va dans l’en-tête courant', () => {
+    const editor = createMockEditor({ variables: VARIABLES });
+    const section = createHeaderFooterSection({
+      section: { titlePage: true },
+      suffix: 'm',
+      t,
+      editor,
+    });
+    document.body.append(section.element);
+    section.fields.headers.first.field.dispatchEvent(new Event('focusin', { bubbles: true }));
+    section.titlePage.click();
+    choose(section.variablePicker, 'reference');
+    expect(section.fields.headers.first.isModified()).toBe(false);
+    expect(section.read().headers?.default?.html).toBe(chip('reference'));
+    section.element.remove();
+  });
+
+  it('pas de liste sans éditeur ni sans variable ; un {{nom}} tapé devient quand même une puce', () => {
+    expect(createHeaderFooterSection({ section: {}, suffix: 'a', t }).variablePicker).toBeNull();
+    const editor = createMockEditor({ variables: [] });
+    const section = createHeaderFooterSection({ section: {}, suffix: 'b', t, editor });
+    expect(section.variablePicker).toBeNull();
+    edit(section.fields.headers.default, '<p>{{libre}}</p>');
+    expect(section.read().headers?.default?.html).toBe(chip('libre'));
   });
 });

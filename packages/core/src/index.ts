@@ -7,6 +7,7 @@
  */
 export * from './api/index.js';
 export { createEditor } from './editor/create-editor.js';
+export { VERSION } from './version.js';
 export { fr } from './i18n/fr.js';
 export { en } from './i18n/en.js';
 export { createI18n, interpolate, FALLBACK_LOCALE } from './i18n/create-i18n.js';
@@ -275,6 +276,7 @@ export {
   applyPageView,
   bodySectionCount,
   maxSectionWidthMm,
+  displayedPageMetrics,
   pageViewCssValues,
   resolvePageMetrics,
   resolveSectionLayout,
@@ -283,6 +285,17 @@ export {
   type PageMetrics,
   type PageViewHandle,
 } from './extensions/page-view.js';
+export {
+  displayHeaderFooterHtml,
+  hasHeaderFooterVariables,
+  headerFooterVariablesOf,
+  registerHeaderFooterVariables,
+} from './extensions/header-footer-variables.js';
+export {
+  createDomHeaderFooterMeasure,
+  pushPageMetrics,
+  type HeaderFooterMeasure,
+} from './extensions/page-view-push.js';
 // --- Pagination approximative de la vue page (session 3, L30) -------------
 export { PAGE_VIEW_CHANGE_EVENT, getActivePageView } from './extensions/page-view.js';
 export {
@@ -381,6 +394,7 @@ export {
   VARIABLE_NODE_NAME,
   canInsertVariable,
   createVariableStore,
+  declaredVariableLabel,
   isAsterVariableStore,
   isValidVariableName,
   variableLabel,
